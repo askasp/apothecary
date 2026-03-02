@@ -1602,7 +1602,7 @@ defmodule ApothecaryWeb.DashboardLive do
           <% else %>
             <div class="mx-auto px-2">
               <%!-- Primary input — centered, narrower --%>
-              <div class="max-w-2xl mx-auto pt-6 sm:pt-16 pb-4 px-1 sm:px-0">
+              <div class="max-w-2xl mx-auto pt-3 sm:pt-6 pb-2 px-1 sm:px-0">
                 <div class="text-base-content/30 text-xs tracking-wider uppercase mb-1 font-apothecary">
                   {@project_name}
                 </div>
