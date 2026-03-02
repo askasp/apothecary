@@ -200,7 +200,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       </.link>
 
       <%!-- Inline add task --%>
-      <div class="px-3 pb-1 pt-1">
+      <div class="px-3 pb-2 pt-1">
         <.form
           for={%{}}
           phx-submit="create-card-task"
@@ -216,7 +216,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             autocomplete="off"
             phx-hook="InlineSubmit"
             id={"card-input-#{@worktree.id}"}
-            class="bg-transparent border-b border-base-content/10 focus:border-primary outline-none px-1 py-1 text-sm flex-1 min-w-0"
+            class="bg-transparent border border-base-content/10 focus:border-primary outline-none px-2 py-1.5 text-sm flex-1 min-w-0 rounded"
           />
         </.form>
       </div>
