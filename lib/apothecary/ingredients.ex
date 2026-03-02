@@ -220,7 +220,12 @@ defmodule Apothecary.Ingredients do
 
     case result do
       {:atomic, record} ->
-        schedule_broadcast()
+        if Map.has_key?(changes, :status) do
+          broadcast_immediately()
+        else
+          schedule_broadcast()
+        end
+
         {:ok, Apothecary.Concoction.from_record(record)}
 
       {:aborted, :not_found} ->
@@ -262,7 +267,7 @@ defmodule Apothecary.Ingredients do
 
     case result do
       {:atomic, record} ->
-        schedule_broadcast()
+        broadcast_immediately()
         {:ok, Apothecary.Concoction.from_record(record)}
 
       {:aborted, reason} ->
@@ -404,7 +409,12 @@ defmodule Apothecary.Ingredients do
 
     case result do
       {:atomic, record} ->
-        schedule_broadcast()
+        if Map.has_key?(changes, :status) do
+          broadcast_immediately()
+        else
+          schedule_broadcast()
+        end
+
         {:ok, Apothecary.Ingredient.from_record(record)}
 
       {:aborted, :not_found} ->
@@ -446,7 +456,10 @@ defmodule Apothecary.Ingredients do
 
     case result do
       {:atomic, record} ->
-        schedule_broadcast()
+        # Broadcast immediately so the dashboard reflects completion in real-time,
+        # rather than waiting for the debounced broadcast which can batch multiple
+        # completions into a single update.
+        broadcast_immediately()
         {:ok, Apothecary.Ingredient.from_record(record)}
 
       {:aborted, :not_found} ->
@@ -676,13 +689,25 @@ defmodule Apothecary.Ingredients do
     GenServer.cast(__MODULE__, :broadcast)
   end
 
+  # Bypass debounce — broadcast state immediately from the calling process.
+  # Used for status changes (e.g. ingredient completion) so the dashboard
+  # reflects progress in real-time instead of batching updates.
+  defp broadcast_immediately do
+    task_state = get_state()
+    Phoenix.PubSub.broadcast(@pubsub, @topic, {:ingredients_update, task_state})
+  end
+
+  # Leading-edge debounce: fires on the FIRST change in a window, then ignores
+  # subsequent changes until the timer fires. This prevents the trailing-edge
+  # problem where rapid changes keep pushing the broadcast further into the future.
   defp schedule_broadcast_timer(state) do
     if state.broadcast_timer do
-      Process.cancel_timer(state.broadcast_timer)
+      # Timer already pending — don't reset it (leading-edge behavior)
+      state
+    else
+      timer = Process.send_after(self(), :do_broadcast, @broadcast_debounce_ms)
+      %{state | broadcast_timer: timer}
     end
-
-    timer = Process.send_after(self(), :do_broadcast, @broadcast_debounce_ms)
-    %{state | broadcast_timer: timer}
   end
 
   # --- Private: ID Generation ---
