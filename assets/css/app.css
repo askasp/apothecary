@@ -214,3 +214,25 @@
 .cauldron-steam-1 { animation-delay: 0s; }
 .cauldron-steam-2 { animation-delay: 1s; }
 .cauldron-steam-3 { animation-delay: 2s; }
+
+/* --- File autocomplete dropdown --- */
+.file-ac-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  border-bottom: 1px solid oklch(50% 0.02 150 / 0.1);
+}
+.file-ac-item:last-child { border-bottom: none; }
+.file-ac-item:hover, .file-ac-selected {
+  background: oklch(50% 0.02 150 / 0.15);
+}
+.file-ac-name {
+  font-weight: 500;
+  color: oklch(80% 0.12 155);
+}
+.file-ac-dir {
+  font-size: 0.75rem;
+  color: oklch(60% 0.02 150);
+}

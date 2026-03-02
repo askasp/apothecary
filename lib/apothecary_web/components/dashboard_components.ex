@@ -235,6 +235,12 @@ defmodule ApothecaryWeb.DashboardComponents do
         autocomplete="off"
         class="bg-transparent border border-base-content/20 focus:border-primary outline-none px-3 py-2 pr-12 text-sm w-full resize-none rounded-lg"
       ></textarea>
+      <div
+        id="file-autocomplete-dropdown"
+        phx-update="ignore"
+        class="hidden absolute left-0 right-0 bottom-full mb-1 max-h-48 overflow-y-auto rounded-lg border border-base-content/20 bg-base-200 shadow-lg z-50 text-sm"
+      >
+      </div>
       <button
         id="primary-input-send"
         phx-hook=".TextareaSend"
