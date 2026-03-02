@@ -163,6 +163,11 @@
 /* Card sizing for horizontal scroll */
 .scroll-card { min-width: min(280px, 85vw); max-width: 340px; flex-shrink: 0; }
 
+/* Mobile: stack cards vertically */
+@media (max-width: 640px) {
+  .scroll-card { min-width: 100%; max-width: 100%; }
+}
+
 /* --- Cauldron SVG animation --- */
 .cauldron-svg { display: inline-block; }
 

@@ -16,42 +16,42 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   def concoct_controls(assigns) do
     ~H"""
-    <div class="flex items-center gap-3 mb-3 text-xs">
+    <div class="flex items-center gap-3 mb-3 text-xs flex-wrap">
       <%= if @swarm_status == :running do %>
         <button
           phx-click="stop-swarm"
-          class="flex items-center gap-2 border border-base-content/20 hover:border-base-content/40 text-base-content/70 hover:text-base-content px-3 py-1.5 rounded cursor-pointer font-apothecary text-sm transition-colors"
+          class="flex items-center gap-2 border border-base-content/20 hover:border-base-content/40 text-base-content/70 hover:text-base-content px-3 py-2 rounded cursor-pointer font-apothecary text-sm transition-colors"
           title="Click to stop concocting (s)"
         >
           <.cauldron_icon animating={true} size={32} />
           <span class="text-base">Concocting</span>
-          <span class="text-base-content/30 text-xs ml-1">[s]</span>
+          <span class="text-base-content/30 text-xs ml-1 hidden sm:inline">[s]</span>
         </button>
       <% else %>
         <button
           phx-click="start-swarm"
-          class="flex items-center gap-2 border border-base-content/15 hover:border-base-content/30 text-base-content/40 hover:text-base-content/70 px-3 py-1.5 rounded cursor-pointer font-apothecary text-sm transition-colors"
+          class="flex items-center gap-2 border border-base-content/15 hover:border-base-content/30 text-base-content/40 hover:text-base-content/70 px-3 py-2 rounded cursor-pointer font-apothecary text-sm transition-colors"
           title="Click to start concocting (s)"
         >
           <.cauldron_icon animating={false} size={32} />
           <span class="text-base">Concoct</span>
-          <span class="text-base-content/30 text-xs ml-1">[s]</span>
+          <span class="text-base-content/30 text-xs ml-1 hidden sm:inline">[s]</span>
         </button>
       <% end %>
 
-      <span class="text-base-content/20">│</span>
+      <span class="text-base-content/20 hidden sm:inline">│</span>
 
       <div class="flex items-center gap-1">
         <button
           phx-click="dec-agents"
-          class="text-base-content/50 hover:text-base-content cursor-pointer px-1"
+          class="text-base-content/50 hover:text-base-content cursor-pointer px-2 py-1"
         >
           -
         </button>
         <span class="text-base-content/50">{@target_count} alchemists</span>
         <button
           phx-click="inc-agents"
-          class="text-base-content/50 hover:text-base-content cursor-pointer px-1"
+          class="text-base-content/50 hover:text-base-content cursor-pointer px-2 py-1"
         >
           +
         </button>
@@ -598,20 +598,20 @@ defmodule ApothecaryWeb.DashboardComponents do
       </div>
 
       <%!-- Actions --%>
-      <div class="flex items-center gap-3 text-xs pt-1">
-        <button phx-click="claim" class="text-cyan-400 hover:text-cyan-300 cursor-pointer">
+      <div class="flex items-center gap-2 sm:gap-3 text-xs pt-1 flex-wrap">
+        <button phx-click="claim" class="text-cyan-400 hover:text-cyan-300 cursor-pointer py-1 px-1">
           [claim]
         </button>
-        <button phx-click="requeue" class="text-yellow-400 hover:text-yellow-300 cursor-pointer">
+        <button phx-click="requeue" class="text-yellow-400 hover:text-yellow-300 cursor-pointer py-1 px-1">
           [q:requeue]
         </button>
-        <button phx-click="close" class="text-red-400 hover:text-red-300 cursor-pointer">
+        <button phx-click="close" class="text-red-400 hover:text-red-300 cursor-pointer py-1 px-1">
           [x:close]
         </button>
         <button
           :if={@task.status == "pr_open"}
           phx-click="merge-pr"
-          class="text-green-400 hover:text-green-300 cursor-pointer font-bold"
+          class="text-green-400 hover:text-green-300 cursor-pointer font-bold py-1 px-1"
         >
           [m:merge]
         </button>
@@ -1082,11 +1082,13 @@ defmodule ApothecaryWeb.DashboardComponents do
           </div>
 
           <div class="space-y-1">
-            <div class="text-emerald-400 mb-1">lanes</div>
+            <div class="text-emerald-400 mb-1">lanes & tabs</div>
             <.hk key="1" desc="jump to stockroom" />
             <.hk key="2" desc="jump to concocting" />
             <.hk key="3" desc="jump to assaying" />
             <.hk key="4" desc="jump to bottled" />
+            <.hk key="w" desc="workbench tab" />
+            <.hk key="e" desc="recurring concoctions" />
           </div>
 
           <div class="space-y-1">

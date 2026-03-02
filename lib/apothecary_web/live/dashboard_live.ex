@@ -946,6 +946,10 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:collapsed_done, false)
   end
 
+  # Tab switching: w=workbench, e=recipes
+  defp handle_hotkey("w", socket), do: assign(socket, :active_tab, :workbench)
+  defp handle_hotkey("e", socket), do: assign(socket, :active_tab, :recipes)
+
   defp handle_hotkey(_key, socket), do: socket
 
   # --- Diff overlay hotkeys ---
@@ -1494,12 +1498,12 @@ defmodule ApothecaryWeb.DashboardLive do
         class="flex flex-col h-screen outline-none"
       >
         <%!-- Top bar: branding + tabs on one line --%>
-        <div class="flex items-center gap-3 px-2 py-2 text-xs">
-          <span class="font-apothecary text-sm font-bold tracking-wide text-base-content/80">
+        <div class="flex items-center gap-2 sm:gap-3 px-2 py-2 text-xs">
+          <span class="font-apothecary text-sm font-bold tracking-wide text-base-content/80 shrink-0">
             Apothecary
           </span>
           <.tab_navigation active_tab={@active_tab} />
-          <span class="ml-auto text-base-content/30 cursor-pointer" phx-click="toggle-help">?</span>
+          <span class="ml-auto text-base-content/30 cursor-pointer shrink-0 p-1" phx-click="toggle-help">?</span>
         </div>
 
         <div class="border-b border-base-content/10" />
@@ -1518,7 +1522,7 @@ defmodule ApothecaryWeb.DashboardLive do
           <% else %>
             <div class="mx-auto px-2">
               <%!-- Primary input — centered, narrower --%>
-              <div class="max-w-2xl mx-auto pt-16 pb-4">
+              <div class="max-w-2xl mx-auto pt-6 sm:pt-16 pb-4 px-1 sm:px-0">
                 <div class="text-base-content/30 text-xs tracking-wider uppercase mb-1 font-apothecary">
                   {@project_name}
                 </div>
@@ -1668,8 +1672,9 @@ defmodule ApothecaryWeb.DashboardLive do
 
         <%!-- Footer --%>
         <div class="border-t border-base-content/10 px-2 py-1 text-xs flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <span class="text-base-content/30">j/k:nav  1-4:lanes  enter:inspect</span>
+          <div class="flex items-center gap-3 text-base-content/30">
+            <span class="hidden sm:inline">j/k:nav  1-4:lanes  enter:inspect  w/e:tabs  s:concoct</span>
+            <span class="sm:hidden">tap card to inspect</span>
             <button
               :if={@orphan_count > 0}
               phx-click="requeue-orphans"
