@@ -189,6 +189,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
         <div class="flex items-center gap-2 text-xs text-base-content/40 mt-0.5">
           <span>{@worktree.id}</span>
+          <span :if={@worktree.git_branch} class="truncate">⎇ {@worktree.git_branch}</span>
           <span
             :if={@group}
             class={[
@@ -198,10 +199,9 @@ defmodule ApothecaryWeb.DashboardComponents do
           >
             {group_badge_label(@group)}
           </span>
-          <span :if={@agent} class="text-cyan-400">
+          <span :if={@agent} class="text-cyan-400 shrink-0">
             {agent_dot(@agent.status)}B{@agent.id}
           </span>
-          <span :if={@worktree.git_branch} class="truncate ml-auto">⎇ {@worktree.git_branch}</span>
         </div>
       </.link>
 
@@ -235,27 +235,23 @@ defmodule ApothecaryWeb.DashboardComponents do
           phx-mounted={Phoenix.LiveView.JS.transition("ingredient-new")}
           class="flex items-center gap-1.5 py-0.5"
         >
-          <span class={
-            cond do
-              task.status in ["done", "closed"] -> "text-green-400"
-              task.status == "in_progress" -> "text-amber-400 animate-pulse"
-              true -> "text-base-content/30"
-            end
-          }>
-            {cond do
-              task.status in ["done", "closed"] -> "✓"
-              task.status == "in_progress" -> "◐"
-              true -> "□"
-            end}
-          </span>
+          <%= cond do %>
+            <% task.status in ["done", "closed"] -> %>
+              <span class="text-green-400">✓</span>
+            <% task.status == "in_progress" -> %>
+              <span class="text-amber-400 cauldron-stir">&#x2697;</span>
+            <% true -> %>
+              <span class="text-base-content/30">□</span>
+          <% end %>
           <.link
             patch={~p"/?task=#{task.id}"}
             class={[
               "truncate hover:text-primary cursor-pointer",
-              if(task.status in ["done", "closed"],
-                do: "text-base-content/30 line-through",
-                else: "text-base-content/70"
-              )
+              cond do
+                task.status in ["done", "closed"] -> "text-base-content/30 line-through"
+                task.status == "in_progress" -> "text-amber-400"
+                true -> "text-base-content/70"
+              end
             ]}
           >
             {task.title}
@@ -279,8 +275,8 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </div>
 
-      <%!-- Dev server indicator --%>
-      <.dev_server_indicator worktree_id={@worktree.id} dev_server={@dev_server} />
+      <%!-- Preview indicator (only visible when active) --%>
+      <.preview_indicator worktree_id={@worktree.id} dev_server={@dev_server} />
 
       <%!-- Large flask overlay for actively brewing cards --%>
       <span
@@ -293,38 +289,24 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
-  # --- Dev Server Indicator (on worktree card) ---
+  # --- Preview Indicator (on worktree card, only shown when active) ---
 
   attr :worktree_id, :string, required: true
   attr :dev_server, :map, default: nil
 
-  def dev_server_indicator(%{dev_server: nil} = assigns) do
-    ~H"""
-    <div class="px-3 py-1">
-      <button
-        phx-click="start-dev"
-        phx-value-id={@worktree_id}
-        class="text-base-content/30 hover:text-cyan-400 text-xs cursor-pointer"
-      >
-        ▶ dev
-      </button>
-    </div>
-    """
-  end
-
-  def dev_server_indicator(%{dev_server: %{status: :starting}} = assigns) do
+  def preview_indicator(%{dev_server: %{status: :starting}} = assigns) do
     ~H"""
     <div class="px-3 py-1 flex items-center gap-2 text-xs">
-      <span class="text-cyan-400">DEV</span>
+      <span class="text-cyan-400">PREVIEW</span>
       <span class="text-cyan-400 animate-pulse">◐ starting...</span>
     </div>
     """
   end
 
-  def dev_server_indicator(%{dev_server: %{status: :running}} = assigns) do
+  def preview_indicator(%{dev_server: %{status: :running}} = assigns) do
     ~H"""
     <div class="px-3 py-1 flex items-center gap-2 text-xs flex-wrap">
-      <span class="text-green-400">DEV ●</span>
+      <span class="text-green-400">PREVIEW ●</span>
       <span :for={p <- @dev_server.ports} class="shrink-0">
         <a
           href={"http://localhost:#{p.port}"}
@@ -345,10 +327,10 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
-  def dev_server_indicator(%{dev_server: %{status: :error}} = assigns) do
+  def preview_indicator(%{dev_server: %{status: :error}} = assigns) do
     ~H"""
     <div class="px-3 py-1 flex items-center gap-2 text-xs">
-      <span class="text-red-400">DEV ✕</span>
+      <span class="text-red-400">PREVIEW ✕</span>
       <span class="text-red-400/70 truncate">{@dev_server.error || "error"}</span>
       <button
         phx-click="start-dev"
@@ -361,17 +343,8 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
-  def dev_server_indicator(assigns) do
+  def preview_indicator(assigns) do
     ~H"""
-    <div class="px-3 py-1">
-      <button
-        phx-click="start-dev"
-        phx-value-id={@worktree_id}
-        class="text-base-content/30 hover:text-cyan-400 text-xs cursor-pointer"
-      >
-        ▶ dev
-      </button>
-    </div>
     """
   end
 
@@ -611,10 +584,15 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </div>
 
-      <%!-- Dev server section --%>
+      <%!-- Preview & shortcuts section --%>
       <div :if={String.starts_with?(to_string(@task.id), "wt-")} class="space-y-1">
-        <.section label="dev server" />
+        <.section label="preview" />
         <.dev_server_detail task_id={@task.id} dev_server={@dev_server} />
+        <div class="flex items-center gap-3 px-3 text-xs text-base-content/30">
+          <span>
+            <span class="text-amber-400">d</span> view diff
+          </span>
+        </div>
       </div>
 
       <%!-- Agent output --%>
@@ -683,7 +661,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
-  # --- Dev Server Detail (in detail panel) ---
+  # --- Preview Detail (in detail panel) ---
 
   attr :task_id, :string, required: true
   attr :dev_server, :map, default: nil
@@ -697,7 +675,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         phx-value-id={@task_id}
         class="text-cyan-400 hover:text-cyan-300 cursor-pointer"
       >
-        [D:start]
+        [D: start preview]
       </button>
     </div>
     """
@@ -723,7 +701,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           phx-value-id={@task_id}
           class="text-red-400 hover:text-red-300 cursor-pointer"
         >
-          [D:stop]
+          [D: stop preview]
         </button>
       </div>
       <div class="flex items-center gap-3 text-xs flex-wrap">
@@ -790,7 +768,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         phx-value-id={@task_id}
         class="text-cyan-400 hover:text-cyan-300 cursor-pointer"
       >
-        [D:start]
+        [D: start preview]
       </button>
     </div>
     """
@@ -983,7 +961,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <.hk key="r" desc="refresh" />
             <.hk key="R" desc="requeue orphans" />
             <.hk key="d" desc="view diff" />
-            <.hk key="D" desc="toggle dev server" />
+            <.hk key="D" desc="toggle preview" />
             <.hk key="?" desc="toggle this help" />
           </div>
 

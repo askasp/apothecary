@@ -21,9 +21,28 @@ defmodule Apothecary.MCP.Server do
 
   require Logger
 
+  @doc """
+  Extract concoction_id from the per-request transport query params.
+
+  Uses frame.transport[:query_params] which is populated fresh on each HTTP
+  request, avoiding the shared-frame bug where frame.assigns gets overwritten
+  when multiple brewers connect to the same MCP server.
+  """
+  def concoction_id(frame) do
+    query_params = frame.transport[:query_params] || %{}
+    query_params["concoction_id"]
+  end
+
+  @doc "Extract brewer_id from per-request transport query params."
+  def brewer_id(frame) do
+    query_params = frame.transport[:query_params] || %{}
+    query_params["brewer_id"]
+  end
+
   @impl true
   def init(_client_info, frame) do
-    # Extract brewer context from HTTP query params
+    # Query params are read per-request via concoction_id/1 and brewer_id/1.
+    # We no longer store them in frame.assigns since that's shared across sessions.
     query_params = frame.transport[:query_params] || %{}
     brewer_id = query_params["brewer_id"]
     concoction_id = query_params["concoction_id"]
@@ -35,9 +54,6 @@ defmodule Apothecary.MCP.Server do
       )
     end
 
-    {:ok,
-     frame
-     |> assign(:brewer_id, brewer_id)
-     |> assign(:concoction_id, concoction_id)}
+    {:ok, frame}
   end
 end

@@ -327,28 +327,28 @@ defmodule ApothecaryWeb.DashboardLive do
     {:noreply, put_flash(socket, :info, "Requeued #{count} orphaned task(s)")}
   end
 
-  # Dev server controls
+  # Preview controls
   @impl true
   def handle_event("start-dev", %{"id" => wt_id}, socket) do
     case DevServer.start_server(wt_id) do
       {:ok, _base_port} ->
-        {:noreply, put_flash(socket, :info, "Dev server starting for #{wt_id}")}
+        {:noreply, put_flash(socket, :info, "Preview starting for #{wt_id}")}
 
       {:error, :no_dev_config} ->
         {:noreply, put_flash(socket, :error, "No .apothecary/dev.yaml found in worktree")}
 
       {:error, :already_running} ->
-        {:noreply, put_flash(socket, :info, "Dev server already running")}
+        {:noreply, put_flash(socket, :info, "Preview already running")}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to start dev: #{inspect(reason)}")}
+        {:noreply, put_flash(socket, :error, "Failed to start preview: #{inspect(reason)}")}
     end
   end
 
   @impl true
   def handle_event("stop-dev", %{"id" => wt_id}, socket) do
     DevServer.stop_server(wt_id)
-    {:noreply, put_flash(socket, :info, "Dev server stopped for #{wt_id}")}
+    {:noreply, put_flash(socket, :info, "Preview stopped for #{wt_id}")}
   end
 
   # Card inline task creation
@@ -701,12 +701,12 @@ defmodule ApothecaryWeb.DashboardLive do
 
         if dev && dev.status in [:starting, :running] do
           DevServer.stop_server(wt.id)
-          put_flash(socket, :info, "Stopping dev server for #{wt.id}")
+          put_flash(socket, :info, "Stopping preview for #{wt.id}")
         else
           case DevServer.start_server(wt.id) do
-            {:ok, _} -> put_flash(socket, :info, "Starting dev server for #{wt.id}")
+            {:ok, _} -> put_flash(socket, :info, "Starting preview for #{wt.id}")
             {:error, :no_dev_config} -> put_flash(socket, :error, "No .apothecary/dev.yaml")
-            {:error, reason} -> put_flash(socket, :error, "Dev error: #{inspect(reason)}")
+            {:error, reason} -> put_flash(socket, :error, "Preview error: #{inspect(reason)}")
           end
         end
     end
@@ -1213,7 +1213,7 @@ defmodule ApothecaryWeb.DashboardLive do
         <div class="flex-1 overflow-y-auto">
           <div class="mx-auto px-2">
             <%!-- Primary input — centered, narrower --%>
-            <div class="max-w-2xl mx-auto pt-40 pb-4">
+            <div class="max-w-2xl mx-auto pt-16 pb-4">
               <h2 class="text-base-content/50 text-lg font-semibold mb-4 font-apothecary">
                 What shall we concoct?
               </h2>

@@ -73,7 +73,7 @@ defmodule Apothecary.Brewer do
     broadcast_state(agent)
 
     agent = %{agent | status: :working, output: []}
-    tasks = Apothecary.Ingredients.list_ingredients(worktree_id: worktree.id)
+    tasks = Apothecary.Ingredients.list_ingredients(concoction_id: worktree.id)
 
     # Write MCP config so Claude can communicate with the orchestrator
     write_mcp_config(worktree_path, agent.id, worktree.id)

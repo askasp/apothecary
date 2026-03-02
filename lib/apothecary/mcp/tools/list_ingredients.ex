@@ -10,7 +10,7 @@ defmodule Apothecary.MCP.Tools.ListIngredients do
 
   @impl true
   def execute(params, frame) do
-    concoction_id = frame.assigns[:concoction_id]
+    concoction_id = Apothecary.MCP.Server.concoction_id(frame)
 
     unless concoction_id do
       response = Response.tool() |> Response.text("Error: no concoction_id in session")
