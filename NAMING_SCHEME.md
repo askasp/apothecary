@@ -40,7 +40,7 @@ Concoction = recipe + ingredients + isolated workspace
 Worktree   = title  + tasks       + git worktree
 ```
 
-- ID prefix: `wt-` (or consider `cx-` for concoction)
+- ID prefix: `wt-` (kept — short, familiar, already in use)
 - Statuses: `open` / `in_progress` / `blocked` / `done`
 - A concoction is "done" when all its ingredients have been combined and the result is committed.
 
@@ -53,7 +53,7 @@ Ingredient = one step in the recipe
 Task       = one step in the worktree
 ```
 
-- ID prefix: `t-` (or consider `ig-` for ingredient)
+- ID prefix: `t-` (kept — short, already in use)
 - Ordered by priority and dependencies
 - Created by brewers when they decompose complex concoctions
 
@@ -108,7 +108,7 @@ Modules that stay as they are:
 | Module | Why |
 |---|---|
 | `Apothecary.Store` | GenServer managing Mnesia — standard pattern |
-| `Apothecary.TaskManager` | GenServer for CRUD — could become `Apothecary.RecipeBook` but not required |
+| `Apothecary.TaskManager` | GenServer for CRUD — standard OTP pattern |
 | `Apothecary.Dispatcher` | GenServer for dispatch — standard pattern |
 | `Apothecary.AgentSupervisor` | DynamicSupervisor — standard OTP |
 | `Apothecary.CLI` | Utility module — no domain concept |
