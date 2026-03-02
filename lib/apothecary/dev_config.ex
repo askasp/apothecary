@@ -1,6 +1,6 @@
 defmodule Apothecary.DevConfig do
   @moduledoc """
-  Parses `.apothecary/dev.yaml` from a worktree path.
+  Parses `.apothecary/preview.yml` from a worktree path.
 
   Provides the configuration needed for DevServer to manage
   dev environment processes (setup, command, shutdown, port allocation).
@@ -20,7 +20,7 @@ defmodule Apothecary.DevConfig do
 
   defstruct [:command, :shutdown, :setup, :base_port, :port_count, ports: [], env: %{}]
 
-  @config_path ".apothecary/dev.yaml"
+  @config_path ".apothecary/preview.yml"
 
   @doc """
   Load dev config from a worktree path.
@@ -47,10 +47,10 @@ defmodule Apothecary.DevConfig do
 
     cond do
       is_nil(command) or command == "" ->
-        {:error, "command is required in dev.yaml"}
+        {:error, "command is required in preview.yml"}
 
       is_nil(port_count) or not is_integer(port_count) or port_count < 1 ->
-        {:error, "port_count must be a positive integer in dev.yaml"}
+        {:error, "port_count must be a positive integer in preview.yml"}
 
       true ->
         base_port = yaml["base_port"] || 4200
@@ -76,8 +76,8 @@ defmodule Apothecary.DevConfig do
     end
   end
 
-  defp parse(nil), do: {:error, "dev.yaml is empty"}
-  defp parse(_), do: {:error, "dev.yaml must be a YAML map"}
+  defp parse(nil), do: {:error, "preview.yml is empty"}
+  defp parse(_), do: {:error, "preview.yml must be a YAML map"}
 
   defp parse_ports(nil, port_count) do
     Enum.map(0..(port_count - 1), fn i ->

@@ -138,21 +138,81 @@ defmodule ApothecaryWeb.DashboardComponents do
         <%!-- Stirring ladle --%>
         <g class="cauldron-ladle">
           <%!-- Ladle handle (diagonal stick) --%>
-          <line x1="32" y1="28" x2="46" y2="8" stroke="#8B6914" stroke-width="2" stroke-linecap="round" />
+          <line
+            x1="32"
+            y1="28"
+            x2="46"
+            y2="8"
+            stroke="#8B6914"
+            stroke-width="2"
+            stroke-linecap="round"
+          />
           <%!-- Ladle bowl --%>
           <ellipse cx="32" cy="30" rx="4" ry="2" fill="#6B5210" stroke="#8B6914" stroke-width="0.8" />
         </g>
 
         <%!-- Bubbles --%>
-        <circle class="cauldron-bubble cauldron-bubble-1" cx="26" cy="28" r="1.5" fill="#4ade80" opacity="0.7" />
-        <circle class="cauldron-bubble cauldron-bubble-2" cx="36" cy="27" r="2" fill="#34d399" opacity="0.6" />
-        <circle class="cauldron-bubble cauldron-bubble-3" cx="30" cy="29" r="1" fill="#6ee7b7" opacity="0.8" />
-        <circle class="cauldron-bubble cauldron-bubble-4" cx="38" cy="28" r="1.3" fill="#4ade80" opacity="0.5" />
+        <circle
+          class="cauldron-bubble cauldron-bubble-1"
+          cx="26"
+          cy="28"
+          r="1.5"
+          fill="#4ade80"
+          opacity="0.7"
+        />
+        <circle
+          class="cauldron-bubble cauldron-bubble-2"
+          cx="36"
+          cy="27"
+          r="2"
+          fill="#34d399"
+          opacity="0.6"
+        />
+        <circle
+          class="cauldron-bubble cauldron-bubble-3"
+          cx="30"
+          cy="29"
+          r="1"
+          fill="#6ee7b7"
+          opacity="0.8"
+        />
+        <circle
+          class="cauldron-bubble cauldron-bubble-4"
+          cx="38"
+          cy="28"
+          r="1.3"
+          fill="#4ade80"
+          opacity="0.5"
+        />
 
         <%!-- Steam wisps --%>
-        <path class="cauldron-steam cauldron-steam-1" d="M24 24 C22 18, 26 14, 24 8" stroke="#4ade80" stroke-width="1" fill="none" opacity="0.3" stroke-linecap="round" />
-        <path class="cauldron-steam cauldron-steam-2" d="M32 22 C34 16, 30 12, 32 6" stroke="#34d399" stroke-width="1.2" fill="none" opacity="0.25" stroke-linecap="round" />
-        <path class="cauldron-steam cauldron-steam-3" d="M40 24 C42 18, 38 14, 40 8" stroke="#6ee7b7" stroke-width="0.8" fill="none" opacity="0.2" stroke-linecap="round" />
+        <path
+          class="cauldron-steam cauldron-steam-1"
+          d="M24 24 C22 18, 26 14, 24 8"
+          stroke="#4ade80"
+          stroke-width="1"
+          fill="none"
+          opacity="0.3"
+          stroke-linecap="round"
+        />
+        <path
+          class="cauldron-steam cauldron-steam-2"
+          d="M32 22 C34 16, 30 12, 32 6"
+          stroke="#34d399"
+          stroke-width="1.2"
+          fill="none"
+          opacity="0.25"
+          stroke-linecap="round"
+        />
+        <path
+          class="cauldron-steam cauldron-steam-3"
+          d="M40 24 C42 18, 38 14, 40 8"
+          stroke="#6ee7b7"
+          stroke-width="0.8"
+          fill="none"
+          opacity="0.2"
+          stroke-linecap="round"
+        />
       <% end %>
     </svg>
     """
@@ -415,14 +475,6 @@ defmodule ApothecaryWeb.DashboardComponents do
 
       <%!-- Preview indicator (only visible when active) --%>
       <.preview_indicator worktree_id={@worktree.id} dev_server={@dev_server} />
-
-      <%!-- Large flask overlay for actively concocting cards --%>
-      <span
-        :if={@agent && @agent.status == :working}
-        class="absolute bottom-1 right-2 text-5xl text-amber-400/20 brew-icon pointer-events-none select-none"
-      >
-        &#x2697;
-      </span>
     </div>
     """
   end
@@ -494,6 +546,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :working_agent, :map, default: nil
   attr :agent_output, :list, default: []
   attr :dev_server, :map, default: nil
+  attr :has_preview_config, :boolean, default: false
   attr :pending_action, :any, default: nil
 
   def task_detail_drawer(assigns) do
@@ -825,7 +878,11 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%!-- Preview & shortcuts section --%>
       <div :if={String.starts_with?(to_string(@task.id), "wt-")} class="space-y-2">
         <.section label="preview" />
-        <.dev_server_detail task_id={@task.id} dev_server={@dev_server} />
+        <.dev_server_detail
+          task_id={@task.id}
+          dev_server={@dev_server}
+          has_preview_config={@has_preview_config}
+        />
         <div class="flex items-center gap-3 px-3 text-xs text-base-content/30">
           <span>
             <span class="text-amber-400">d</span> view diff
@@ -905,8 +962,9 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   attr :task_id, :string, required: true
   attr :dev_server, :map, default: nil
+  attr :has_preview_config, :boolean, default: false
 
-  defp dev_server_detail(%{dev_server: nil} = assigns) do
+  defp dev_server_detail(%{dev_server: nil, has_preview_config: true} = assigns) do
     ~H"""
     <div class="flex items-center gap-2 px-3 text-xs">
       <span class="text-base-content/30">not running</span>
@@ -917,6 +975,18 @@ defmodule ApothecaryWeb.DashboardComponents do
       >
         [D: start preview]
       </button>
+    </div>
+    """
+  end
+
+  defp dev_server_detail(%{dev_server: nil, has_preview_config: false} = assigns) do
+    ~H"""
+    <div class="px-3 text-xs space-y-1">
+      <span class="text-base-content/30">no config found</span>
+      <p class="text-base-content/40">
+        Add <code class="text-amber-400/70">.apothecary/preview.yml</code>
+        to your project root to enable preview.
+      </p>
     </div>
     """
   end
@@ -999,7 +1069,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
-  defp dev_server_detail(assigns) do
+  defp dev_server_detail(%{has_preview_config: true} = assigns) do
     ~H"""
     <div class="flex items-center gap-2 px-3 text-xs">
       <span class="text-base-content/30">not running</span>
@@ -1010,6 +1080,18 @@ defmodule ApothecaryWeb.DashboardComponents do
       >
         [D: start preview]
       </button>
+    </div>
+    """
+  end
+
+  defp dev_server_detail(assigns) do
+    ~H"""
+    <div class="px-3 text-xs space-y-1">
+      <span class="text-base-content/30">no config found</span>
+      <p class="text-base-content/40">
+        Add <code class="text-amber-400/70">.apothecary/preview.yml</code>
+        to your project root to enable preview.
+      </p>
     </div>
     """
   end
