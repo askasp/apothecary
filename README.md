@@ -27,9 +27,9 @@ Create a batch of concoctions before bed — refactors, bug fixes, feature stubs
 
 The dashboard lets you set anywhere from 1 to 10 parallel agents. Running on a beefy machine? Crank it up. Want to keep things calm? Run one at a time. You can change the count while agents are already working — new ones spin up, extras wind down gracefully.
 
-### Talk to your agents while they work
+### Talk to agents while they work
 
-When an alchemist is actively working on a concoction, you can type instructions directly into the input bar and they go straight to the agent's stdin. Noticed it's going down the wrong path? Just tell it. It's like pair programming, except your pair doesn't get annoyed when you backseat drive.
+Select a concoction that's being worked on and type into the input bar — it goes straight to the agent's stdin.
 
 ### Preview what agents built before merging
 
