@@ -109,7 +109,10 @@ defmodule Apothecary.Git do
 
   @doc "Merge a PR on GitHub. Returns :ok or {:error, reason}."
   def merge_pr(pr_url) do
-    case CLI.run("gh", ["pr", "merge", pr_url, "--merge", "--delete-branch"],
+    # Don't use --delete-branch: the branch is checked out in a worktree,
+    # so local branch deletion fails and causes gh to report an error even
+    # though the merge succeeded. We handle cleanup via WorktreeManager.release.
+    case CLI.run("gh", ["pr", "merge", pr_url, "--merge"],
            cd: project_dir(),
            timeout: 60_000
          ) do
@@ -172,25 +175,39 @@ defmodule Apothecary.Git do
   end
 
   @doc """
+  Get the configured merge mode setting: :auto, :github, or :local.
+  """
+  def merge_mode_setting do
+    Application.get_env(:apothecary, :merge_mode, :auto)
+  end
+
+  @doc """
   Get the effective merge mode: :github or :local.
   When set to :auto, detects based on `gh` CLI availability.
   """
   def merge_mode do
-    case Application.get_env(:apothecary, :merge_mode, :auto) do
+    case merge_mode_setting() do
       :github -> :github
       :local -> :local
       :auto -> if gh_available?(), do: :github, else: :local
     end
   end
 
-  @doc "Merge a worktree branch into main locally and clean up."
+  @doc """
+  Set the merge mode at runtime. Accepts :auto, :github, or :local.
+  """
+  def set_merge_mode(mode) when mode in [:auto, :github, :local] do
+    Application.put_env(:apothecary, :merge_mode, mode)
+    :ok
+  end
+
+  @doc "Merge a worktree branch into main locally. Does NOT delete the branch — cleanup happens via WorktreeManager.release."
   def local_merge(worktree_path) do
     base = main_branch()
 
     with {:ok, branch} <- current_branch(worktree_path),
          {:ok, _} <- CLI.run("git", ["checkout", base], cd: project_dir()),
-         {:ok, _} <- CLI.run("git", ["merge", branch, "--no-edit"], cd: project_dir()),
-         {:ok, _} <- CLI.run("git", ["branch", "-d", branch], cd: project_dir()) do
+         {:ok, _} <- CLI.run("git", ["merge", branch, "--no-edit"], cd: project_dir()) do
       :ok
     else
       {:error, reason} ->
@@ -198,6 +215,11 @@ defmodule Apothecary.Git do
         CLI.run("git", ["checkout", base], cd: project_dir())
         {:error, reason}
     end
+  end
+
+  @doc "Delete a local branch. Uses -D (force) since the branch may already be merged."
+  def delete_branch(branch) do
+    CLI.run("git", ["branch", "-D", branch], cd: project_dir())
   end
 
   defp parse_worktrees(output) do

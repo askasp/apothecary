@@ -13,6 +13,9 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :target_count, :integer, default: 3
   attr :active_count, :integer, default: 0
   attr :working_count, :integer, default: 0
+  attr :merge_mode_setting, :atom, default: :auto
+  attr :merge_mode_effective, :atom, default: :local
+  attr :gh_available, :boolean, default: false
 
   def concoct_controls(assigns) do
     ~H"""
@@ -56,6 +59,78 @@ defmodule ApothecaryWeb.DashboardComponents do
           +
         </button>
       </div>
+
+      <span class="text-base-content/20 hidden sm:inline">│</span>
+
+      <.merge_mode_toggle
+        merge_mode_setting={@merge_mode_setting}
+        merge_mode_effective={@merge_mode_effective}
+        gh_available={@gh_available}
+      />
+    </div>
+    """
+  end
+
+  # --- Merge Mode Toggle ---
+
+  attr :merge_mode_setting, :atom, default: :auto
+  attr :merge_mode_effective, :atom, default: :local
+  attr :gh_available, :boolean, default: false
+
+  def merge_mode_toggle(assigns) do
+    ~H"""
+    <div class="flex items-center gap-1.5">
+      <button
+        phx-click="set-merge-mode"
+        phx-value-mode="auto"
+        class={[
+          "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
+          if(@merge_mode_setting == :auto,
+            do: "bg-base-content/15 text-base-content/80 font-medium",
+            else: "text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5"
+          )
+        ]}
+        title={"Auto-detect merge strategy (currently: #{@merge_mode_effective})"}
+      >
+        auto
+      </button>
+      <button
+        phx-click="set-merge-mode"
+        phx-value-mode="github"
+        class={[
+          "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
+          if(@merge_mode_setting == :github,
+            do: "bg-base-content/15 text-base-content/80 font-medium",
+            else: "text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5"
+          ),
+          if(!@gh_available && @merge_mode_setting != :github,
+            do: "opacity-50",
+            else: ""
+          )
+        ]}
+        title={if(@gh_available, do: "Use GitHub PRs for merge", else: "gh CLI not found — install to use GitHub PRs")}
+      >
+        github
+      </button>
+      <button
+        phx-click="set-merge-mode"
+        phx-value-mode="local"
+        class={[
+          "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
+          if(@merge_mode_setting == :local,
+            do: "bg-base-content/15 text-base-content/80 font-medium",
+            else: "text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5"
+          )
+        ]}
+        title="Merge branches locally (no PRs)"
+      >
+        local
+      </button>
+      <%= if !@gh_available do %>
+        <span class="text-amber-400/50 text-[10px] hidden sm:inline" title="gh CLI not installed">
+          no gh
+        </span>
+      <% end %>
     </div>
     """
   end

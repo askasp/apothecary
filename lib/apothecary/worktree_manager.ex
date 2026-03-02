@@ -102,9 +102,34 @@ defmodule Apothecary.WorktreeManager do
       {nil, _} ->
         {:noreply, state}
 
-      {%{path: path}, new_worktrees} ->
+      {%{path: path, branch: branch}, new_worktrees} ->
         Logger.info("Releasing worktree for #{worktree_id}: #{path}")
-        Apothecary.Git.remove_worktree(path)
+
+        case Apothecary.Git.remove_worktree(path) do
+          {:ok, _} ->
+            Logger.info("Successfully removed worktree #{worktree_id} at #{path}")
+
+          {:error, reason} ->
+            Logger.warning(
+              "Failed to remove worktree #{worktree_id} at #{path}: #{inspect(reason)}. " <>
+                "You may need to manually run: git worktree remove --force #{path}"
+            )
+        end
+
+        # Clean up the local branch now that the worktree is removed
+        if branch do
+          case Apothecary.Git.delete_branch(branch) do
+            {:ok, _} ->
+              Logger.info("Deleted branch #{branch} for worktree #{worktree_id}")
+
+            {:error, reason} ->
+              Logger.warning(
+                "Failed to delete branch #{branch} for worktree #{worktree_id}: #{inspect(reason)}"
+              )
+          end
+        end
+
+        # Remove from state regardless — the worktree is logically released
         {:noreply, %{state | worktrees: new_worktrees}}
     end
   end

@@ -77,6 +77,10 @@ defmodule ApothecaryWeb.DashboardLive do
       )
       |> assign(:editing_recipe_id, nil)
       |> assign(:project_files, load_project_files())
+      # Merge mode
+      |> assign(:merge_mode_setting, Git.merge_mode_setting())
+      |> assign(:merge_mode_effective, Git.merge_mode())
+      |> assign(:gh_available, Git.gh_available?())
 
     {:ok, socket}
   end
@@ -349,6 +353,24 @@ defmodule ApothecaryWeb.DashboardLive do
       end
 
     {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("set-merge-mode", %{"mode" => mode}, socket) do
+    mode_atom =
+      case mode do
+        "auto" -> :auto
+        "github" -> :github
+        "local" -> :local
+        _ -> :auto
+      end
+
+    Git.set_merge_mode(mode_atom)
+
+    {:noreply,
+     socket
+     |> assign(:merge_mode_setting, mode_atom)
+     |> assign(:merge_mode_effective, Git.merge_mode())}
   end
 
   @impl true
@@ -1593,6 +1615,9 @@ defmodule ApothecaryWeb.DashboardLive do
                   target_count={@target_count}
                   active_count={@active_count}
                   working_count={Enum.count(@agents, &(&1.status == :working))}
+                  merge_mode_setting={@merge_mode_setting}
+                  merge_mode_effective={@merge_mode_effective}
+                  gh_available={@gh_available}
                 />
                 <.primary_input input_focused={@input_focused} />
                 <.activity_ticker agents={@agents} />
