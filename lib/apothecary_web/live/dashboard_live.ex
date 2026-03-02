@@ -206,12 +206,12 @@ defmodule ApothecaryWeb.DashboardLive do
               active_count={@active_count}
             />
 
-            <.create_task_form />
-
             <div :if={@agents != []} class="space-y-3">
               <h3 class="font-semibold">Active Brewers</h3>
               <.agent_card :for={agent <- @agents} agent={agent} />
             </div>
+
+            <.create_task_form />
 
             <div :if={@ready_tasks != []} class="bg-base-200 rounded-box p-5 space-y-2">
               <h3 class="font-semibold text-sm">Ready Queue</h3>
