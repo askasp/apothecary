@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Apothecary Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a;
+    color: #f0f0f0;
+    font-family: -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    cursor: none;
+  }
+  .slide {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    text-align: center;
+    padding: 40px;
+  }
+  .slide.active { display: flex; }
+  .title {
+    font-size: 64px;
+    font-weight: 700;
+    letter-spacing: -1px;
+    line-height: 1.1;
+  }
+  .subtitle {
+    font-size: 24px;
+    font-weight: 400;
+    color: #888;
+    letter-spacing: 0.5px;
+  }
+  .hint {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    font-size: 13px;
+    color: #333;
+    font-family: monospace;
+    transition: opacity 0.3s;
+  }
+  body:hover .hint { opacity: 1; }
+  body:not(:hover) .hint { opacity: 0; }
+  .counter {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    font-size: 13px;
+    color: #333;
+    font-family: monospace;
+    transition: opacity 0.3s;
+  }
+  body:hover .counter { opacity: 1; }
+  body:not(:hover) .counter { opacity: 0; }
+</style>
+</head>
+<body>
+
+<div class="slide active">
+  <div class="title">Apothecary</div>
+  <div class="subtitle">A BEAM-orchestrated swarm of Claude Code agents</div>
+</div>
+
+<div class="slide">
+  <div class="title">Create concoctions</div>
+</div>
+
+<div class="slide">
+  <div class="title">Start the swarm</div>
+</div>
+
+<div class="slide">
+  <div class="title">Inspect the diff</div>
+</div>
+
+<div class="slide">
+  <div class="title">Preview changes live</div>
+</div>
+
+<div class="slide">
+  <div class="title">Merge</div>
+</div>
+
+<div class="slide">
+  <div class="title">Recipes</div>
+  <div class="subtitle">Recurring scheduled work</div>
+</div>
+
+<div class="slide">
+  <div class="title">Apothecary</div>
+  <div class="subtitle">github.com/nomadkaraoke/apothecary</div>
+</div>
+
+<div class="hint">&larr; &rarr; to navigate &middot; f for fullscreen</div>
+<div class="counter"></div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const counter = document.querySelector('.counter');
+  let current = 0;
+
+  function show(i) {
+    slides[current].classList.remove('active');
+    current = Math.max(0, Math.min(i, slides.length - 1));
+    slides[current].classList.add('active');
+    counter.textContent = (current + 1) + '/' + slides.length;
+  }
+
+  show(0);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); show(current + 1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); show(current - 1); }
+    if (e.key === 'Home') show(0);
+    if (e.key === 'End') show(slides.length - 1);
+    if (e.key === 'f') document.documentElement.requestFullscreen();
+    if (e.key === 'Escape' && document.fullscreenElement) document.exitFullscreen();
+  });
+</script>
+</body>
+</html>
