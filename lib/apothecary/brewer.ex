@@ -472,8 +472,11 @@ defmodule Apothecary.Brewer do
       try do
         script_exe = System.find_executable("script")
 
+        mcp_config_path = Path.join(agent.worktree_path, ".mcp.json")
+
         cmd =
           "'#{claude_exe}' -p \"$APOTHECARY_PROMPT\" " <>
+            "--mcp-config '#{mcp_config_path}' " <>
             "--dangerously-skip-permissions --verbose --output-format stream-json"
 
         {executable, args} =
