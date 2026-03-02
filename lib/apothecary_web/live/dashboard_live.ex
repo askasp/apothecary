@@ -56,6 +56,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:working_agent, nil)
       |> assign(:agent_output, [])
       |> assign(:diff_view, nil)
+      |> assign(:known_ingredient_ids, extract_ingredient_ids(task_state.tasks))
 
     {:ok, socket}
   end
@@ -77,6 +78,19 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @impl true
   def handle_info({:ingredients_update, state}, socket) do
+    new_ids = extract_ingredient_ids(state.tasks)
+    old_ids = socket.assigns.known_ingredient_ids
+    created = MapSet.difference(new_ids, old_ids)
+
+    socket =
+      if MapSet.size(created) > 0 do
+        new_ingredients = Enum.filter(state.tasks, &MapSet.member?(created, &1.id))
+        names = Enum.map_join(new_ingredients, ", ", & &1.title)
+        put_flash(socket, :info, "Ingredient discovered: #{names}")
+      else
+        socket
+      end
+
     agents = socket.assigns.agents
     active_task_ids = active_task_ids_from_agents(agents)
     worktrees_by_status = build_worktree_groups(state.tasks, agents, socket.assigns.dev_servers)
@@ -91,6 +105,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:orphan_count, compute_orphan_count(state.tasks, active_task_ids))
       |> assign(:worktrees_by_status, worktrees_by_status)
       |> assign(:card_ids, build_card_ids(worktrees_by_status))
+      |> assign(:known_ingredient_ids, new_ids)
       |> clamp_card_index()
 
     socket =
@@ -1099,6 +1114,12 @@ defmodule ApothecaryWeb.DashboardLive do
     max_idx = max(length(socket.assigns.card_ids) - 1, 0)
     idx = min(socket.assigns.selected_card, max_idx)
     assign(socket, :selected_card, idx)
+  end
+
+  defp extract_ingredient_ids(tasks) do
+    tasks
+    |> Enum.filter(&String.starts_with?(to_string(&1.id), "t-"))
+    |> MapSet.new(& &1.id)
   end
 
   defp compute_orphan_count(tasks, active_task_ids) do
