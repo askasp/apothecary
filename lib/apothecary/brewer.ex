@@ -647,6 +647,9 @@ defmodule Apothecary.Brewer do
 
     git_context = build_git_context(worktree_path)
 
+    # Generate project structure digest so brewers don't need to explore from scratch
+    project_digest = Apothecary.ProjectDigest.generate()
+
     """
     You are an autonomous coding agent working in: #{worktree_path}
 
@@ -654,6 +657,9 @@ defmodule Apothecary.Brewer do
     Concoction ID: #{worktree.id}
     Title: #{worktree.title}
     Description: #{worktree.description || worktree.title}
+
+    ## Project Structure
+    #{project_digest}
 
     #{notes_section}
     #{git_context}
@@ -719,10 +725,28 @@ defmodule Apothecary.Brewer do
   end
 
   defp build_git_context(worktree_path) do
+    # Use log with stats so brewers see which files each commit touched
     log_section =
-      case Apothecary.Git.worktree_log(worktree_path) do
+      case Apothecary.Git.worktree_log_with_stats(worktree_path, 10) do
         {:ok, log} when log != "" ->
-          "### Commits on this branch\n```\n#{log}\n```"
+          "### Commits on this branch (with files changed)\n```\n#{log}\n```"
+
+        _ ->
+          # Fallback to plain log
+          case Apothecary.Git.worktree_log(worktree_path) do
+            {:ok, log} when log != "" ->
+              "### Commits on this branch\n```\n#{log}\n```"
+
+            _ ->
+              nil
+          end
+      end
+
+    # Overall branch diff stat (total files changed, insertions, deletions)
+    diff_stat_section =
+      case Apothecary.Git.worktree_diff_stat(worktree_path) do
+        {:ok, stat} when stat != "" ->
+          "### Branch diff summary (vs main)\n```\n#{stat}\n```"
 
         _ ->
           nil
@@ -737,7 +761,7 @@ defmodule Apothecary.Brewer do
           nil
       end
 
-    sections = Enum.reject([log_section, uncommitted_section], &is_nil/1)
+    sections = Enum.reject([log_section, diff_stat_section, uncommitted_section], &is_nil/1)
 
     if sections == [] do
       ""

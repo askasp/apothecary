@@ -161,6 +161,23 @@ defmodule Apothecary.Git do
     CLI.run("git", ["log", "--oneline", "#{base}..HEAD", "-#{count}"], cd: worktree_path)
   end
 
+  @doc "Get a compact commit log with per-commit file change stats. Returns {:ok, log} or {:error, reason}."
+  def worktree_log_with_stats(worktree_path, count \\ 20) do
+    base = main_branch()
+
+    CLI.run(
+      "git",
+      ["log", "--oneline", "--stat", "--no-color", "#{base}..HEAD", "-#{count}"],
+      cd: worktree_path
+    )
+  end
+
+  @doc "Get the overall diff stat (files changed, insertions, deletions) for the branch vs main."
+  def worktree_diff_stat(worktree_path) do
+    base = main_branch()
+    CLI.run("git", ["diff", "--stat", "#{base}...HEAD"], cd: worktree_path)
+  end
+
   @doc "Get a summary of uncommitted changes in a worktree. Returns {:ok, diff_stat} or {:error, reason}."
   def worktree_status(worktree_path) do
     CLI.run("git", ["diff", "--stat", "HEAD"], cd: worktree_path)
