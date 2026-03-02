@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "apothecary": {
+      "url": "http://localhost:4000/mcp?brewer_id=3&concoction_id=wt-d013f0"
+    }
+  }
+}

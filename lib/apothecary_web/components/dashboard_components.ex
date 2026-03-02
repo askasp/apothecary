@@ -21,7 +21,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     ~H"""
     <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
       <div class="bg-base-200 rounded-box p-4">
-        <div class="text-xs text-base-content/50">Total Tasks</div>
+        <div class="text-xs text-base-content/50">Ingredients</div>
         <div class="text-2xl font-bold">{@task_count}</div>
       </div>
       <div class="bg-base-200 rounded-box p-4">
@@ -29,17 +29,17 @@ defmodule ApothecaryWeb.DashboardComponents do
         <div class="text-2xl font-bold text-info">{@ready_count}</div>
       </div>
       <div class="bg-base-200 rounded-box p-4">
-        <div class="text-xs text-base-content/50">In Progress</div>
+        <div class="text-xs text-base-content/50">Simmering</div>
         <div class="text-2xl font-bold text-warning">{@stats["in_progress"] || 0}</div>
       </div>
       <div class="bg-base-200 rounded-box p-4">
-        <div class="text-xs text-base-content/50">Completed</div>
+        <div class="text-xs text-base-content/50">Brewed</div>
         <div class="text-2xl font-bold text-success">
           {@stats["completed"] || @stats["closed"] || 0}
         </div>
       </div>
       <div class="bg-base-200 rounded-box p-4">
-        <div class="text-xs text-base-content/50">Agents</div>
+        <div class="text-xs text-base-content/50">Brewers</div>
         <div class="text-2xl font-bold text-primary">{@agent_count}</div>
       </div>
     </div>
@@ -52,18 +52,36 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   def task_card(assigns) do
     ~H"""
-    <div class="bg-base-200 rounded-box p-4 hover:bg-base-300 transition-colors">
-      <div class="flex items-start justify-between gap-2">
-        <div class="space-y-1 min-w-0">
+    <div class={[
+      "bg-base-200 rounded-box p-5 hover:bg-base-300 transition-colors",
+      @task.status == "in_progress" && "concoction-simmering border border-warning/20"
+    ]}>
+      <div class="flex items-start justify-between gap-3">
+        <div class="space-y-2 min-w-0 flex-1">
           <div class="flex items-center gap-2 flex-wrap">
             <.status_badge status={@task.status} />
             <.priority_badge priority={@task.priority} />
             <span :if={@task.type} class="text-xs text-base-content/50">{@task.type}</span>
+            <span
+              :if={@task.status == "in_progress"}
+              class="flex items-center gap-1 text-xs text-warning"
+            >
+              <span class="stir-icon">~</span>
+              stirring
+              <span class="flex gap-0.5">
+                <span class="bubble-dot inline-block w-1 h-1 rounded-full bg-warning"></span>
+                <span class="bubble-dot inline-block w-1 h-1 rounded-full bg-warning"></span>
+                <span class="bubble-dot inline-block w-1 h-1 rounded-full bg-warning"></span>
+              </span>
+            </span>
           </div>
-          <.link navigate={~p"/tasks/#{@task.id}"} class="font-medium hover:underline block truncate">
-            <span class="text-base-content/50 text-sm">{@task.id}</span>
-            <span class="ml-1">{@task.title}</span>
+          <.link navigate={~p"/tasks/#{@task.id}"} class="font-medium hover:underline block">
+            <span class="text-base-content/40 text-sm font-mono">{@task.id}</span>
+            <span class="ml-1.5 text-base">{@task.title}</span>
           </.link>
+          <p :if={@task.description} class="text-sm text-base-content/60 line-clamp-2 mt-1">
+            {@task.description}
+          </p>
         </div>
         <div :if={@task.assigned_to} class="badge badge-sm badge-info shrink-0">
           {@task.assigned_to}
@@ -79,21 +97,28 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   def agent_card(assigns) do
     ~H"""
-    <div class="bg-base-200 rounded-box p-4 space-y-2">
+    <div class={[
+      "bg-base-200 rounded-box p-5 space-y-3",
+      @agent.status == :working && "border border-success/20"
+    ]}>
       <div class="flex items-center justify-between">
-        <span class="font-medium text-sm">Agent {@agent.id}</span>
+        <span class="font-semibold">Brewer {@agent.id}</span>
         <.agent_status_badge status={@agent.status} />
       </div>
-      <div :if={@agent.branch} class="text-xs text-base-content/50">
-        <.icon name="hero-code-bracket" class="size-3 inline" /> {@agent.branch}
+      <div :if={@agent.branch} class="text-sm text-base-content/50 font-mono truncate">
+        <.icon name="hero-code-bracket" class="size-3.5 inline" /> {@agent.branch}
       </div>
-      <div :if={@agent.current_task} class="text-xs">
-        Working on:
-        <.link navigate={~p"/tasks/#{@agent.current_task.id}"} class="link">
+      <div :if={@agent.current_task} class="text-sm">
+        <span class="text-base-content/60">Brewing:</span>
+        <.link navigate={~p"/tasks/#{@agent.current_task.id}"} class="link font-medium">
           {@agent.current_task.id}
         </.link>
+        <span :if={@agent.status == :working} class="ml-1 stir-icon text-warning">~</span>
       </div>
-      <div :if={@agent.output != []} class="text-xs text-base-content/50 truncate">
+      <div
+        :if={@agent.output != []}
+        class="text-xs text-base-content/50 font-mono bg-base-300 rounded p-2 truncate"
+      >
         {List.last(@agent.output)}
       </div>
     </div>
@@ -146,16 +171,22 @@ defmodule ApothecaryWeb.DashboardComponents do
   def agent_status_badge(assigns) do
     ~H"""
     <span class={["badge badge-sm", agent_status_class(@status)]}>
-      {Atom.to_string(@status)}
+      {agent_status_label(@status)}
     </span>
     """
   end
 
   defp agent_status_class(:working), do: "badge-success"
-  defp agent_status_class(:idle), do: "badge-warning"
+  defp agent_status_class(:idle), do: "badge-ghost"
   defp agent_status_class(:starting), do: "badge-info"
   defp agent_status_class(:error), do: "badge-error"
   defp agent_status_class(_), do: "badge-ghost"
+
+  defp agent_status_label(:working), do: "brewing"
+  defp agent_status_label(:idle), do: "idle"
+  defp agent_status_label(:starting), do: "lighting fire"
+  defp agent_status_label(:error), do: "error"
+  defp agent_status_label(status), do: Atom.to_string(status)
 
   # Swarm control panel
 
@@ -167,7 +198,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     ~H"""
     <div class="bg-base-200 rounded-box p-4 space-y-3">
       <div class="flex items-center justify-between">
-        <h3 class="font-semibold">Swarm Control</h3>
+        <h3 class="font-semibold">Brew Control</h3>
         <span class={[
           "badge badge-sm",
           if(@swarm_status == :running, do: "badge-success", else: "badge-ghost")
@@ -177,7 +208,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       </div>
 
       <div class="flex items-center gap-3">
-        <label class="text-sm text-base-content/70">Agents:</label>
+        <label class="text-sm text-base-content/70">Brewers:</label>
         <input
           type="range"
           min="1"
@@ -193,11 +224,11 @@ defmodule ApothecaryWeb.DashboardComponents do
       <div class="flex gap-2">
         <%= if @swarm_status == :paused do %>
           <button phx-click="start-swarm" class="btn btn-sm btn-primary flex-1">
-            <.icon name="hero-play" class="size-4" /> Start Swarm
+            <.icon name="hero-play" class="size-4" /> Start Brewing
           </button>
         <% else %>
           <button phx-click="stop-swarm" class="btn btn-sm btn-error btn-soft flex-1">
-            <.icon name="hero-stop" class="size-4" /> Stop Swarm
+            <.icon name="hero-stop" class="size-4" /> Stop Brewing
           </button>
         <% end %>
       </div>
@@ -208,18 +239,34 @@ defmodule ApothecaryWeb.DashboardComponents do
   # Create task form
 
   attr :form, :any, default: nil
+  attr :show, :boolean, default: false
 
   def create_task_form(assigns) do
     ~H"""
-    <div class="bg-base-200 rounded-box p-4 space-y-3">
-      <h3 class="font-semibold">Create Task</h3>
-      <.form for={%{}} phx-submit="create-task" class="space-y-2">
+    <div class="bg-base-200 rounded-box p-5 space-y-3">
+      <button
+        phx-click="toggle-create-form"
+        class="flex items-center justify-between w-full font-semibold cursor-pointer"
+      >
+        <span>Add Ingredient</span>
+        <.icon
+          name={if(@show, do: "hero-chevron-up", else: "hero-chevron-down")}
+          class="size-4 text-base-content/50"
+        />
+      </button>
+      <.form
+        :if={@show}
+        for={%{}}
+        phx-submit="create-task"
+        id="create-task-form"
+        class="space-y-3"
+      >
         <input
           type="text"
           name="title"
-          placeholder="Task title..."
+          placeholder="What needs brewing..."
           required
-          class="input input-sm w-full"
+          class="input w-full"
         />
         <div class="flex gap-2">
           <select name="type" class="select select-sm flex-1">
@@ -237,12 +284,12 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
         <textarea
           name="description"
-          placeholder="Description (optional)"
-          rows="2"
-          class="textarea textarea-sm w-full"
+          placeholder="Describe the ingredient in detail (optional)"
+          rows="6"
+          class="textarea w-full text-sm leading-relaxed"
         />
         <button type="submit" class="btn btn-sm btn-primary w-full">
-          <.icon name="hero-plus" class="size-4" /> Create
+          <.icon name="hero-plus" class="size-4" /> Add to Cauldron
         </button>
       </.form>
     </div>

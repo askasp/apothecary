@@ -27,6 +27,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:target_count, max(dispatcher_status.target_count, 3))
       |> assign(:active_count, dispatcher_status.active_count)
       |> assign(:agents, Map.values(dispatcher_status.agents))
+      |> assign(:show_create_form, false)
       |> stream(:tasks, poller_state.tasks)
 
     {:ok, socket}
@@ -105,6 +106,11 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("toggle-create-form", _params, socket) do
+    {:noreply, assign(socket, :show_create_form, !socket.assigns.show_create_form)}
+  end
+
+  @impl true
   def handle_event("create-task", params, socket) do
     attrs = %{
       title: params["title"],
@@ -116,7 +122,11 @@ defmodule ApothecaryWeb.DashboardLive do
     case Apothecary.Beads.create(attrs) do
       {:ok, _} ->
         Poller.force_refresh()
-        {:noreply, put_flash(socket, :info, "Task created")}
+
+        {:noreply,
+         socket
+         |> assign(:show_create_form, false)
+         |> put_flash(:info, "Task created")}
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed to create task: #{inspect(reason)}")}
@@ -138,7 +148,7 @@ defmodule ApothecaryWeb.DashboardLive do
         <%!-- Header --%>
         <div class="flex items-center justify-between">
           <div>
-            <h1 class="text-xl font-bold">Apothecary</h1>
+            <h1 class="text-2xl font-bold tracking-tight">Apothecary</h1>
             <p :if={@project_dir} class="text-sm text-base-content/50 truncate max-w-lg">
               {@project_dir}
             </p>
@@ -164,29 +174,37 @@ defmodule ApothecaryWeb.DashboardLive do
         />
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <%!-- Task Board (2/3) --%>
+          <%!-- Concoction Board (2/3) --%>
           <div class="lg:col-span-2 space-y-4">
             <div class="flex items-center justify-between">
-              <h2 class="text-lg font-semibold">Task Board</h2>
+              <h2 class="text-lg font-semibold">Concoctions</h2>
               <div class="flex gap-1 flex-wrap">
                 <button
-                  :for={f <- ["all", "ready", "in_progress", "done", "blocked"]}
+                  :for={
+                    {label, f} <- [
+                      {"All", "all"},
+                      {"Ready", "ready"},
+                      {"Simmering", "in_progress"},
+                      {"Brewed", "done"},
+                      {"Blocked", "blocked"}
+                    ]
+                  }
                   phx-click="filter"
                   phx-value-filter={f}
                   class={["btn btn-xs", if(@filter == f, do: "btn-primary", else: "btn-ghost")]}
                 >
-                  {f |> String.replace("_", " ") |> String.capitalize()}
+                  {label}
                 </button>
               </div>
             </div>
 
-            <div id="tasks" phx-update="stream" class="space-y-2">
+            <div id="tasks" phx-update="stream" class="space-y-3">
+              <div id="tasks-empty" class="hidden only:block text-base-content/50 text-center py-12">
+                The cauldron is empty. Add an ingredient to start brewing.
+              </div>
               <div :for={{id, task} <- @streams.tasks} id={id}>
                 <.task_card task={task} />
               </div>
-            </div>
-            <div :if={@task_count == 0} class="text-base-content/50 text-center py-12">
-              No tasks found. Create one from the sidebar or use <code class="font-mono">bd create</code>.
             </div>
           </div>
 
@@ -198,18 +216,19 @@ defmodule ApothecaryWeb.DashboardLive do
               active_count={@active_count}
             />
 
-            <div :if={@agents != []} class="space-y-2">
-              <h3 class="font-semibold">Active Agents</h3>
+            <div :if={@agents != []} class="space-y-3">
+              <h3 class="font-semibold">Active Brewers</h3>
               <.agent_card :for={agent <- @agents} agent={agent} />
             </div>
 
-            <.create_task_form />
+            <.create_task_form show={@show_create_form} />
 
-            <div :if={@ready_tasks != []} class="bg-base-200 rounded-box p-4 space-y-2">
+            <div :if={@ready_tasks != []} class="bg-base-200 rounded-box p-5 space-y-2">
               <h3 class="font-semibold text-sm">Ready Queue</h3>
-              <div :for={task <- Enum.take(@ready_tasks, 10)} class="text-sm">
+              <div :for={task <- Enum.take(@ready_tasks, 10)} class="text-sm py-0.5">
                 <.link navigate={~p"/tasks/#{task.id}"} class="hover:underline truncate block">
-                  <span class="text-base-content/50">{task.id}</span> {task.title}
+                  <span class="text-base-content/40 font-mono">{task.id}</span>
+                  <span class="ml-1">{task.title}</span>
                 </.link>
               </div>
             </div>
