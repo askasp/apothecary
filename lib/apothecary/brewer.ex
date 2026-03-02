@@ -469,35 +469,20 @@ defmodule Apothecary.Brewer do
     # Do NOT release the git worktree — keep it alive for PR lifecycle
   end
 
-  defp finalize_local(worktree_id, agent) do
-    worktree_path = agent.worktree_path
+  defp finalize_local(worktree_id, _agent) do
+    # In local mode, set to pr_open so the user can review and manually merge
+    # from the dashboard instead of auto-merging into main
+    Logger.info("Concoction #{worktree_id} ready for manual merge (local mode)")
 
-    # In local mode, merge the branch directly into main and clean up
-    case Apothecary.Git.local_merge(worktree_path) do
-      :ok ->
-        Logger.info("Locally merged branch for concoction #{worktree_id}")
+    Apothecary.Ingredients.add_note(
+      worktree_id,
+      "Branch ready for manual merge into main (local mode). Use the dashboard Merge button."
+    )
 
-        Apothecary.Ingredients.add_note(
-          worktree_id,
-          "Branch merged into main locally"
-        )
-
-        Apothecary.Ingredients.cleanup_merged_concoction(worktree_id)
-
-      {:error, reason} ->
-        Logger.warning("Local merge failed for #{worktree_id}: #{inspect(reason)}")
-
-        Apothecary.Ingredients.add_note(
-          worktree_id,
-          "Local merge failed: #{inspect(reason)}. Branch preserved for manual merge."
-        )
-
-        # Mark as pr_open equivalent so user can see it needs attention
-        Apothecary.Ingredients.update_concoction(worktree_id, %{
-          status: "pr_open",
-          assigned_brewer_id: nil
-        })
-    end
+    Apothecary.Ingredients.update_concoction(worktree_id, %{
+      status: "pr_open",
+      assigned_brewer_id: nil
+    })
   end
 
   defp create_pr_with_retry(worktree_id, worktree_path, retries \\ 2) do
