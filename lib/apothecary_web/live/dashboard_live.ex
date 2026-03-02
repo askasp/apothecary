@@ -432,15 +432,25 @@ defmodule ApothecaryWeb.DashboardLive do
     task = socket.assigns.selected_task
     pr_url = task && Map.get(task, :pr_url)
 
-    cond do
-      is_nil(pr_url) ->
-        {:noreply, put_flash(socket, :error, "No PR URL on this worktree")}
+    case Git.merge_mode() do
+      :github ->
+        cond do
+          is_nil(pr_url) ->
+            {:noreply, put_flash(socket, :error, "No PR URL on this worktree")}
 
-      task.status != "pr_open" ->
-        {:noreply, put_flash(socket, :error, "Worktree is not in pr_open status")}
+          task.status != "pr_open" ->
+            {:noreply, put_flash(socket, :error, "Worktree is not in pr_open status")}
 
-      true ->
-        {:noreply, assign(socket, :pending_action, {:merge, task.id, pr_url})}
+          true ->
+            {:noreply, assign(socket, :pending_action, {:merge, task.id, pr_url})}
+        end
+
+      :local ->
+        if task.status == "pr_open" do
+          {:noreply, assign(socket, :pending_action, {:merge, task.id, nil})}
+        else
+          {:noreply, put_flash(socket, :error, "Worktree is not ready for merge")}
+        end
     end
   end
 
@@ -850,10 +860,18 @@ defmodule ApothecaryWeb.DashboardLive do
   defp handle_hotkey("m", socket) do
     task = socket.assigns.selected_task
 
-    if task && Map.get(task, :pr_url) && task.status == "pr_open" do
-      assign(socket, :pending_action, {:merge, task.id, task.pr_url})
-    else
-      socket
+    cond do
+      is_nil(task) || task.status != "pr_open" ->
+        socket
+
+      Git.merge_mode() == :github && Map.get(task, :pr_url) ->
+        assign(socket, :pending_action, {:merge, task.id, task.pr_url})
+
+      Git.merge_mode() == :local ->
+        assign(socket, :pending_action, {:merge, task.id, nil})
+
+      true ->
+        socket
     end
   end
 
@@ -981,14 +999,38 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp execute_merge(socket, task_id, pr_url) do
-    case Git.merge_pr(pr_url) do
-      :ok ->
-        Ingredients.add_note(task_id, "PR merged from dashboard: #{pr_url}")
-        Ingredients.cleanup_merged_concoction(task_id)
-        put_flash(socket, :info, "PR merged and worktree cleaned up")
+    case Git.merge_mode() do
+      :github ->
+        case Git.merge_pr(pr_url) do
+          :ok ->
+            Ingredients.add_note(task_id, "PR merged from dashboard: #{pr_url}")
+            Ingredients.cleanup_merged_concoction(task_id)
+            put_flash(socket, :info, "PR merged and worktree cleaned up")
 
-      {:error, reason} ->
-        put_flash(socket, :error, "Merge failed: #{inspect(reason)}")
+          {:error, reason} ->
+            put_flash(socket, :error, "Merge failed: #{inspect(reason)}")
+        end
+
+      :local ->
+        task = Ingredients.show(task_id)
+        git_path = case task do
+          {:ok, t} -> t.git_path
+          _ -> nil
+        end
+
+        if git_path do
+          case Git.local_merge(git_path) do
+            :ok ->
+              Ingredients.add_note(task_id, "Branch merged into main locally from dashboard")
+              Ingredients.cleanup_merged_concoction(task_id)
+              put_flash(socket, :info, "Merged into main locally and cleaned up")
+
+            {:error, reason} ->
+              put_flash(socket, :error, "Local merge failed: #{inspect(reason)}")
+          end
+        else
+          put_flash(socket, :error, "No git path found for this concoction")
+        end
     end
   end
 

@@ -437,7 +437,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
 
         <%!-- Merge confirmation bar --%>
-        <.merge_confirmation :if={@pending_action} task={@task} />
+        <.merge_confirmation :if={@pending_action} task={@task} merge_mode={Apothecary.Git.merge_mode()} />
 
         <%!-- Panel content --%>
         <.task_detail_panel
@@ -456,12 +456,15 @@ defmodule ApothecaryWeb.DashboardComponents do
   # --- Merge Confirmation Bar ---
 
   attr :task, :map, required: true
+  attr :merge_mode, :atom, default: :github
 
   def merge_confirmation(assigns) do
     ~H"""
     <div class="bg-amber-400/10 border-b border-amber-400/30 px-3 py-3">
       <div class="flex items-center gap-3">
-        <span class="text-amber-400 text-sm font-apothecary">Merge this PR?</span>
+        <span class="text-amber-400 text-sm font-apothecary">
+          {if(@merge_mode == :local, do: "Merge into main locally?", else: "Merge this PR?")}
+        </span>
         <span class="text-base-content/50 text-xs truncate flex-1">
           "{@task.title}"
         </span>
@@ -471,7 +474,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           phx-click="confirm-merge"
           class="bg-green-500/20 hover:bg-green-500/30 text-green-400 px-3 py-1 rounded text-xs cursor-pointer transition-colors font-bold"
         >
-          Merge
+          {if(@merge_mode == :local, do: "Merge Locally", else: "Merge PR")}
         </button>
         <button
           phx-click="cancel-merge"
@@ -606,7 +609,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           [x:close]
         </button>
         <button
-          :if={@task.status == "pr_open" && @pr_url}
+          :if={@task.status == "pr_open"}
           phx-click="merge-pr"
           class="text-green-400 hover:text-green-300 cursor-pointer font-bold"
         >

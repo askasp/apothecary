@@ -151,6 +151,43 @@ defmodule Apothecary.Git do
     CLI.run("git", ["pull", "--rebase", "origin", base], cd: project_dir())
   end
 
+  @doc "Check if the `gh` CLI is installed and available."
+  def gh_available? do
+    case System.find_executable("gh") do
+      nil -> false
+      _path -> true
+    end
+  end
+
+  @doc """
+  Get the effective merge mode: :github or :local.
+  When set to :auto, detects based on `gh` CLI availability.
+  """
+  def merge_mode do
+    case Application.get_env(:apothecary, :merge_mode, :auto) do
+      :github -> :github
+      :local -> :local
+      :auto -> if gh_available?(), do: :github, else: :local
+    end
+  end
+
+  @doc "Merge a worktree branch into main locally and clean up."
+  def local_merge(worktree_path) do
+    base = main_branch()
+
+    with {:ok, branch} <- current_branch(worktree_path),
+         {:ok, _} <- CLI.run("git", ["checkout", base], cd: project_dir()),
+         {:ok, _} <- CLI.run("git", ["merge", branch, "--no-edit"], cd: project_dir()),
+         {:ok, _} <- CLI.run("git", ["branch", "-d", branch], cd: project_dir()) do
+      :ok
+    else
+      {:error, reason} ->
+        # Try to go back to the base branch if merge fails
+        CLI.run("git", ["checkout", base], cd: project_dir())
+        {:error, reason}
+    end
+  end
+
   defp parse_worktrees(output) do
     output
     |> String.split("\n\n", trim: true)
