@@ -629,6 +629,209 @@ defmodule Apothecary.Ingredients do
     end
   end
 
+  # --- Recipe Operations ---
+
+  @recipe_topic "recipes:updates"
+
+  def subscribe_recipes do
+    Phoenix.PubSub.subscribe(@pubsub, @recipe_topic)
+  end
+
+  def create_recipe(attrs) do
+    id = generate_id("recipe")
+    now = DateTime.utc_now() |> DateTime.to_iso8601()
+
+    schedule = attrs[:schedule] || attrs["schedule"]
+
+    case Crontab.CronExpression.Parser.parse(schedule) do
+      {:ok, _cron} ->
+        record =
+          {:apothecary_recipes, id, attrs[:title], attrs[:description], schedule,
+           Map.get(attrs, :enabled, true), Map.get(attrs, :priority, 3),
+           %{
+             last_run_at: nil,
+             next_run_at: nil,
+             created_at: now,
+             updated_at: now,
+             notes: nil
+           }}
+
+        case :mnesia.transaction(fn -> :mnesia.write(record) end) do
+          {:atomic, :ok} ->
+            recipe = Apothecary.Recipe.from_record(record)
+            broadcast_recipe_change({:recipe_created, recipe})
+            {:ok, recipe}
+
+          {:aborted, reason} ->
+            {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, {:invalid_schedule, reason}}
+    end
+  end
+
+  def get_recipe(id) do
+    case :mnesia.dirty_read(:apothecary_recipes, id) do
+      [record] -> {:ok, Apothecary.Recipe.from_record(record)}
+      [] -> {:error, :not_found}
+    end
+  end
+
+  def list_recipes(filters \\ []) do
+    recipes =
+      :mnesia.dirty_match_object({:apothecary_recipes, :_, :_, :_, :_, :_, :_, :_})
+      |> Enum.map(&Apothecary.Recipe.from_record/1)
+
+    case filters[:enabled] do
+      nil -> recipes
+      val -> Enum.filter(recipes, &(&1.enabled == val))
+    end
+  end
+
+  def update_recipe(id, changes) do
+    result =
+      :mnesia.transaction(fn ->
+        case :mnesia.read(:apothecary_recipes, id) do
+          [record] ->
+            updated = apply_recipe_changes(record, changes)
+            :mnesia.write(updated)
+            updated
+
+          [] ->
+            :mnesia.abort(:not_found)
+        end
+      end)
+
+    case result do
+      {:atomic, record} ->
+        recipe = Apothecary.Recipe.from_record(record)
+        broadcast_recipe_change({:recipe_updated, recipe})
+        {:ok, recipe}
+
+      {:aborted, :not_found} ->
+        {:error, :not_found}
+
+      {:aborted, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def delete_recipe(id) do
+    result =
+      :mnesia.transaction(fn ->
+        case :mnesia.read(:apothecary_recipes, id) do
+          [record] ->
+            :mnesia.delete({:apothecary_recipes, id})
+            record
+
+          [] ->
+            :mnesia.abort(:not_found)
+        end
+      end)
+
+    case result do
+      {:atomic, record} ->
+        recipe = Apothecary.Recipe.from_record(record)
+        broadcast_recipe_change({:recipe_deleted, recipe})
+        {:ok, recipe}
+
+      {:aborted, :not_found} ->
+        {:error, :not_found}
+
+      {:aborted, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def toggle_recipe(id) do
+    result =
+      :mnesia.transaction(fn ->
+        case :mnesia.read(:apothecary_recipes, id) do
+          [record] ->
+            updated = put_elem(record, 5, !elem(record, 5))
+            now = DateTime.utc_now() |> DateTime.to_iso8601()
+            updated = update_record_data(updated, 7, fn data -> Map.put(data, :updated_at, now) end)
+            :mnesia.write(updated)
+            updated
+
+          [] ->
+            :mnesia.abort(:not_found)
+        end
+      end)
+
+    case result do
+      {:atomic, record} ->
+        recipe = Apothecary.Recipe.from_record(record)
+        broadcast_recipe_change({:recipe_toggled, recipe})
+        {:ok, recipe}
+
+      {:aborted, :not_found} ->
+        {:error, :not_found}
+
+      {:aborted, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc "Update last_run_at and next_run_at for a recipe (called by BrewScheduler)."
+  def mark_recipe_run(id, next_run_at) do
+    now = DateTime.utc_now() |> DateTime.to_iso8601()
+
+    result =
+      :mnesia.transaction(fn ->
+        case :mnesia.read(:apothecary_recipes, id) do
+          [record] ->
+            updated =
+              update_record_data(record, 7, fn data ->
+                data
+                |> Map.put(:last_run_at, now)
+                |> Map.put(:next_run_at, next_run_at)
+                |> Map.put(:updated_at, now)
+              end)
+
+            :mnesia.write(updated)
+            updated
+
+          [] ->
+            :mnesia.abort(:not_found)
+        end
+      end)
+
+    case result do
+      {:atomic, record} ->
+        recipe = Apothecary.Recipe.from_record(record)
+        broadcast_recipe_change({:recipe_updated, recipe})
+        {:ok, recipe}
+
+      {:aborted, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp apply_recipe_changes(record, changes) do
+    {table, id, title, description, schedule, enabled, priority, data} = record
+    now = DateTime.utc_now() |> DateTime.to_iso8601()
+
+    title = Map.get(changes, :title, title)
+    description = Map.get(changes, :description, description)
+    priority = Map.get(changes, :priority, priority)
+
+    enabled =
+      if Map.has_key?(changes, :enabled), do: changes.enabled, else: enabled
+
+    schedule =
+      if Map.has_key?(changes, :schedule), do: changes.schedule, else: schedule
+
+    data = Map.put(data, :updated_at, now)
+
+    {table, id, title, description, schedule, enabled, priority, data}
+  end
+
+  defp broadcast_recipe_change(message) do
+    Phoenix.PubSub.broadcast(@pubsub, @recipe_topic, message)
+  end
+
   def ready_ingredients(concoction_id) do
     ingredients = list_ingredients(concoction_id: concoction_id)
     ingredient_status_map = Map.new(ingredients, fn t -> {t.id, t.status} end)
