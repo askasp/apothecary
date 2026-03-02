@@ -45,3 +45,6 @@ npm-debug.log
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+
+# MCP config is generated per-worktree by brewers — never commit
+.mcp.json
