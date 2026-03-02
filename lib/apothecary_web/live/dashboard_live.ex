@@ -1213,7 +1213,7 @@ defmodule ApothecaryWeb.DashboardLive do
         <div class="flex-1 overflow-y-auto">
           <div class="mx-auto px-2">
             <%!-- Primary input — centered, narrower --%>
-            <div class="max-w-2xl mx-auto pt-40 pb-4">
+            <div class="max-w-2xl mx-auto pt-16 pb-4">
               <h2 class="text-base-content/50 text-lg font-semibold mb-4 font-apothecary">
                 What shall we concoct?
               </h2>
