@@ -782,7 +782,12 @@ defmodule ApothecaryWeb.DashboardLive do
       put_flash(socket, :info, "Concocting stopped")
     else
       Dispatcher.start_swarm(socket.assigns.target_count)
-      put_flash(socket, :info, "Concocting started with #{socket.assigns.target_count} alchemists")
+
+      put_flash(
+        socket,
+        :info,
+        "Concocting started with #{socket.assigns.target_count} alchemists"
+      )
     end
   end
 
@@ -1017,10 +1022,12 @@ defmodule ApothecaryWeb.DashboardLive do
 
       :local ->
         task = Ingredients.show(task_id)
-        git_path = case task do
-          {:ok, t} -> t.git_path
-          _ -> nil
-        end
+
+        git_path =
+          case task do
+            {:ok, t} -> t.git_path
+            _ -> nil
+          end
 
         if git_path do
           case Git.local_merge(git_path) do
@@ -1503,7 +1510,12 @@ defmodule ApothecaryWeb.DashboardLive do
             Apothecary
           </span>
           <.tab_navigation active_tab={@active_tab} />
-          <span class="ml-auto text-base-content/30 cursor-pointer shrink-0 p-1" phx-click="toggle-help">?</span>
+          <span
+            class="ml-auto text-base-content/30 cursor-pointer shrink-0 p-1"
+            phx-click="toggle-help"
+          >
+            ?
+          </span>
         </div>
 
         <div class="border-b border-base-content/10" />
@@ -1673,7 +1685,9 @@ defmodule ApothecaryWeb.DashboardLive do
         <%!-- Footer --%>
         <div class="border-t border-base-content/10 px-2 py-1 text-xs flex items-center justify-between">
           <div class="flex items-center gap-3 text-base-content/30">
-            <span class="hidden sm:inline">j/k:nav  1-4:lanes  enter:inspect  w/e:tabs  s:concoct</span>
+            <span class="hidden sm:inline">
+              j/k:nav  1-4:lanes  enter:inspect  w/e:tabs  s:concoct
+            </span>
             <span class="sm:hidden">tap card to inspect</span>
             <button
               :if={@orphan_count > 0}

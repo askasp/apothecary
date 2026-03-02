@@ -424,9 +424,7 @@ defmodule Apothecary.Brewer do
         Apothecary.Ingredients.cleanup_merged_concoction(worktree_id)
 
       {:error, reason} ->
-        Logger.warning(
-          "Local merge failed for #{worktree_id}: #{inspect(reason)}"
-        )
+        Logger.warning("Local merge failed for #{worktree_id}: #{inspect(reason)}")
 
         Apothecary.Ingredients.add_note(
           worktree_id,

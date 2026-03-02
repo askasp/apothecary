@@ -22,8 +22,7 @@ if System.get_env("PHX_SERVER") || config_env() == :prod do
   config :apothecary, ApothecaryWeb.Endpoint, server: true
 end
 
-config :apothecary, ApothecaryWeb.Endpoint,
-  http: [port: port]
+config :apothecary, ApothecaryWeb.Endpoint, http: [port: port]
 
 # Apothecary project configuration
 merge_mode =

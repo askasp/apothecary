@@ -107,14 +107,66 @@ defmodule ApothecaryWeb.DashboardComponents do
 
       <%!-- Bubbles (animated when brewing) --%>
       <%= if @animating do %>
-        <circle class="cauldron-bubble cauldron-bubble-1" cx="26" cy="35" r="1.5" fill="#4ade80" opacity="0.7" />
-        <circle class="cauldron-bubble cauldron-bubble-2" cx="34" cy="34" r="2" fill="#34d399" opacity="0.6" />
-        <circle class="cauldron-bubble cauldron-bubble-3" cx="30" cy="36" r="1" fill="#6ee7b7" opacity="0.8" />
-        <circle class="cauldron-bubble cauldron-bubble-4" cx="38" cy="35" r="1.3" fill="#4ade80" opacity="0.5" />
+        <circle
+          class="cauldron-bubble cauldron-bubble-1"
+          cx="26"
+          cy="35"
+          r="1.5"
+          fill="#4ade80"
+          opacity="0.7"
+        />
+        <circle
+          class="cauldron-bubble cauldron-bubble-2"
+          cx="34"
+          cy="34"
+          r="2"
+          fill="#34d399"
+          opacity="0.6"
+        />
+        <circle
+          class="cauldron-bubble cauldron-bubble-3"
+          cx="30"
+          cy="36"
+          r="1"
+          fill="#6ee7b7"
+          opacity="0.8"
+        />
+        <circle
+          class="cauldron-bubble cauldron-bubble-4"
+          cx="38"
+          cy="35"
+          r="1.3"
+          fill="#4ade80"
+          opacity="0.5"
+        />
         <%!-- Steam wisps --%>
-        <path class="cauldron-steam cauldron-steam-1" d="M26 30 C24 24, 28 20, 26 14" stroke="#4ade80" stroke-width="1" fill="none" opacity="0.3" stroke-linecap="round" />
-        <path class="cauldron-steam cauldron-steam-2" d="M32 28 C34 22, 30 18, 32 12" stroke="#34d399" stroke-width="1.2" fill="none" opacity="0.25" stroke-linecap="round" />
-        <path class="cauldron-steam cauldron-steam-3" d="M38 30 C40 24, 36 20, 38 14" stroke="#6ee7b7" stroke-width="0.8" fill="none" opacity="0.2" stroke-linecap="round" />
+        <path
+          class="cauldron-steam cauldron-steam-1"
+          d="M26 30 C24 24, 28 20, 26 14"
+          stroke="#4ade80"
+          stroke-width="1"
+          fill="none"
+          opacity="0.3"
+          stroke-linecap="round"
+        />
+        <path
+          class="cauldron-steam cauldron-steam-2"
+          d="M32 28 C34 22, 30 18, 32 12"
+          stroke="#34d399"
+          stroke-width="1.2"
+          fill="none"
+          opacity="0.25"
+          stroke-linecap="round"
+        />
+        <path
+          class="cauldron-steam cauldron-steam-3"
+          d="M38 30 C40 24, 36 20, 38 14"
+          stroke="#6ee7b7"
+          stroke-width="0.8"
+          fill="none"
+          opacity="0.2"
+          stroke-linecap="round"
+        />
       <% end %>
     </svg>
     """
@@ -437,7 +489,11 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
 
         <%!-- Merge confirmation bar --%>
-        <.merge_confirmation :if={@pending_action} task={@task} merge_mode={Apothecary.Git.merge_mode()} />
+        <.merge_confirmation
+          :if={@pending_action}
+          task={@task}
+          merge_mode={Apothecary.Git.merge_mode()}
+        />
 
         <%!-- Panel content --%>
         <.task_detail_panel
@@ -602,7 +658,10 @@ defmodule ApothecaryWeb.DashboardComponents do
         <button phx-click="claim" class="text-cyan-400 hover:text-cyan-300 cursor-pointer py-1 px-1">
           [claim]
         </button>
-        <button phx-click="requeue" class="text-yellow-400 hover:text-yellow-300 cursor-pointer py-1 px-1">
+        <button
+          phx-click="requeue"
+          class="text-yellow-400 hover:text-yellow-300 cursor-pointer py-1 px-1"
+        >
           [q:requeue]
         </button>
         <button phx-click="close" class="text-red-400 hover:text-red-300 cursor-pointer py-1 px-1">
@@ -902,7 +961,8 @@ defmodule ApothecaryWeb.DashboardComponents do
           "px-1.5 py-0.5 text-sm cursor-pointer rounded transition-colors",
           if((@priority || 3) <= 0,
             do: "text-base-content/15",
-            else: "text-base-content/40 hover:text-base-content hover:bg-base-content/10 active:bg-base-content/20"
+            else:
+              "text-base-content/40 hover:text-base-content hover:bg-base-content/10 active:bg-base-content/20"
           )
         ]}
         title="Higher priority (↑)"
@@ -920,7 +980,8 @@ defmodule ApothecaryWeb.DashboardComponents do
           "px-1.5 py-0.5 text-sm cursor-pointer rounded transition-colors",
           if((@priority || 3) >= 4,
             do: "text-base-content/15",
-            else: "text-base-content/40 hover:text-base-content hover:bg-base-content/10 active:bg-base-content/20"
+            else:
+              "text-base-content/40 hover:text-base-content hover:bg-base-content/10 active:bg-base-content/20"
           )
         ]}
         title="Lower priority (↓)"
