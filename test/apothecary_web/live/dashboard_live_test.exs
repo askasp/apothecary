@@ -17,8 +17,8 @@ defmodule ApothecaryWeb.DashboardLiveTest do
   test "renders dashboard with stockroom tab active by default", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/")
     assert html =~ "primary-input"
-    assert html =~ "Stockroom"
-    assert html =~ "Recurring Brews"
+    assert html =~ "Workbench"
+    assert html =~ "Recurring Concoctions"
   end
 
   test "switches to recurring brews tab", %{conn: conn} do
@@ -26,10 +26,10 @@ defmodule ApothecaryWeb.DashboardLiveTest do
 
     html =
       view
-      |> element("button", "Recurring Brews")
+      |> element("button", "Recurring Concoctions")
       |> render_click()
 
-    assert html =~ "Recurring Brews"
+    assert html =~ "Recurring Concoctions"
     assert html =~ "No recipes yet"
     assert html =~ "New Recipe"
   end
@@ -38,7 +38,7 @@ defmodule ApothecaryWeb.DashboardLiveTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     # Switch to recipes tab
-    view |> element("button", "Recurring Brews") |> render_click()
+    view |> element("button", "Recurring Concoctions") |> render_click()
 
     # Click new recipe button
     html = view |> element("button", "New Recipe") |> render_click()
@@ -52,7 +52,7 @@ defmodule ApothecaryWeb.DashboardLiveTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     # Switch to recipes tab
-    view |> element("button", "Recurring Brews") |> render_click()
+    view |> element("button", "Recurring Concoctions") |> render_click()
 
     # Show form
     view |> element("button", "New Recipe") |> render_click()
@@ -78,7 +78,7 @@ defmodule ApothecaryWeb.DashboardLiveTest do
   test "rejects invalid cron expression", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/")
 
-    view |> element("button", "Recurring Brews") |> render_click()
+    view |> element("button", "Recurring Concoctions") |> render_click()
     view |> element("button", "New Recipe") |> render_click()
 
     html =
@@ -99,7 +99,7 @@ defmodule ApothecaryWeb.DashboardLiveTest do
       Ingredients.create_recipe(%{title: "Toggle test", schedule: "0 0 * * *"})
 
     {:ok, view, _html} = live(conn, ~p"/")
-    view |> element("button", "Recurring Brews") |> render_click()
+    view |> element("button", "Recurring Concoctions") |> render_click()
 
     # Should show as active initially
     html = render(view)
@@ -119,7 +119,7 @@ defmodule ApothecaryWeb.DashboardLiveTest do
       Ingredients.create_recipe(%{title: "Delete me", schedule: "0 0 * * *"})
 
     {:ok, view, _html} = live(conn, ~p"/")
-    view |> element("button", "Recurring Brews") |> render_click()
+    view |> element("button", "Recurring Concoctions") |> render_click()
 
     # Verify recipe shows up
     html = render(view)
@@ -144,7 +144,7 @@ defmodule ApothecaryWeb.DashboardLiveTest do
       })
 
     {:ok, view, _html} = live(conn, ~p"/")
-    view |> element("button", "Recurring Brews") |> render_click()
+    view |> element("button", "Recurring Concoctions") |> render_click()
 
     # Click edit
     view
@@ -177,12 +177,12 @@ defmodule ApothecaryWeb.DashboardLiveTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     # Go to recipes
-    view |> element("button", "Recurring Brews") |> render_click()
+    view |> element("button", "Recurring Concoctions") |> render_click()
     html = render(view)
     refute html =~ "primary-input"
 
     # Go back to stockroom
-    html = view |> element("button", "Stockroom") |> render_click()
+    html = view |> element("button", "Workbench") |> render_click()
     assert html =~ "primary-input"
   end
 end
