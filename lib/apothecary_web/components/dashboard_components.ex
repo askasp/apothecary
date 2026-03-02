@@ -80,7 +80,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         phx-focus="input-focus"
         phx-blur="input-blur"
         autocomplete="off"
-        class="bg-transparent border border-base-content/20 focus:border-primary outline-none px-3 py-2 text-sm w-full resize-none"
+        class="bg-transparent border border-base-content/20 focus:border-primary outline-none px-3 py-2 text-sm w-full resize-none rounded-lg"
       ></textarea>
     </div>
     """
@@ -167,7 +167,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       data-card-id={@worktree.id}
       data-selected={@selected || nil}
       class={[
-        "border bg-base-200/30 flex flex-col relative overflow-hidden scroll-card",
+        "border bg-base-200/30 flex flex-col relative overflow-hidden scroll-card rounded-xl",
         if(@selected, do: "border-primary ring-1 ring-primary/50", else: "border-base-content/10 hover:border-base-content/20")
       ]}
     >
@@ -924,7 +924,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       phx-click="close-help"
     >
       <div
-        class="bg-base-300 border border-base-content/20 p-4 max-w-xl w-full mx-4 max-h-[80vh] overflow-y-auto"
+        class="bg-base-300 border border-base-content/20 p-4 max-w-xl w-full mx-4 max-h-[80vh] overflow-y-auto rounded-xl"
         phx-click={%Phoenix.LiveView.JS{}}
       >
         <div class="flex items-center justify-between mb-3 text-sm">
