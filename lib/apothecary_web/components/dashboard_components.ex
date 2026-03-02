@@ -474,36 +474,49 @@ defmodule ApothecaryWeb.DashboardComponents do
       />
 
       <%!-- Drawer panel --%>
-      <div class="absolute right-0 top-0 bottom-0 w-full sm:max-w-lg bg-base-100 border-l border-base-content/10 overflow-y-auto">
-        <%!-- Close button --%>
-        <div class="flex items-center justify-between px-3 py-2 border-b border-base-content/10">
-          <span class="text-base-content/50 text-xs uppercase tracking-wider font-apothecary">
-            {if(String.starts_with?(to_string(@task.id), "wt-"), do: "CONCOCTION", else: "INGREDIENT")} {@task.id}
-          </span>
+      <div class="absolute right-0 top-0 bottom-0 w-full sm:max-w-lg bg-base-100 border-l border-base-content/10 flex flex-col">
+        <%!-- Sticky header --%>
+        <div class="flex items-center justify-between px-4 py-3 border-b border-base-content/10 shrink-0">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class={[
+              "text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded",
+              if(String.starts_with?(to_string(@task.id), "wt-"),
+                do: "bg-primary/15 text-primary",
+                else: "bg-amber-400/15 text-amber-400"
+              )
+            ]}>
+              {if(String.starts_with?(to_string(@task.id), "wt-"), do: "concoction", else: "ingredient")}
+            </span>
+            <span class="text-base-content/40 text-xs truncate">{@task.id}</span>
+          </div>
           <button
             phx-click="deselect-task"
-            class="text-base-content/30 hover:text-base-content cursor-pointer text-sm"
+            class="text-base-content/40 hover:text-base-content cursor-pointer p-1.5 -mr-1 rounded hover:bg-base-content/10 transition-colors"
+            title="Close (Esc)"
           >
-            [esc]
+            <span class="text-lg leading-none">&times;</span>
           </button>
         </div>
 
-        <%!-- Merge confirmation bar --%>
-        <.merge_confirmation
-          :if={@pending_action}
-          task={@task}
-          merge_mode={Apothecary.Git.merge_mode()}
-        />
+        <%!-- Scrollable content --%>
+        <div class="flex-1 overflow-y-auto">
+          <%!-- Merge confirmation bar --%>
+          <.merge_confirmation
+            :if={@pending_action}
+            task={@task}
+            merge_mode={Apothecary.Git.merge_mode()}
+          />
 
-        <%!-- Panel content --%>
-        <.task_detail_panel
-          task={@task}
-          children={@children}
-          editing_field={@editing_field}
-          working_agent={@working_agent}
-          agent_output={@agent_output}
-          dev_server={@dev_server}
-        />
+          <%!-- Panel content --%>
+          <.task_detail_panel
+            task={@task}
+            children={@children}
+            editing_field={@editing_field}
+            working_agent={@working_agent}
+            agent_output={@agent_output}
+            dev_server={@dev_server}
+          />
+        </div>
       </div>
     </div>
     """
@@ -557,18 +570,10 @@ defmodule ApothecaryWeb.DashboardComponents do
     assigns = assign(assigns, :pr_url, Map.get(assigns.task, :pr_url))
 
     ~H"""
-    <div class="space-y-3 p-3">
-      <%!-- Status line --%>
-      <div class="flex items-center gap-3 flex-wrap">
-        <.status_badge status={@task.status} />
-        <.priority_controls priority={@task.priority} />
-        <span :if={@task.type} class="text-base-content/40">{@task.type}</span>
-        <span :if={@task.assigned_to} class="text-cyan-400">{@task.assigned_to}</span>
-      </div>
-
+    <div class="space-y-4 p-4">
       <%!-- Title (inline editable) --%>
       <%= if @editing_field == :title do %>
-        <.form for={%{}} phx-submit="save-edit" class="flex items-center gap-2">
+        <.form for={%{}} phx-submit="save-edit" class="space-y-2">
           <input type="hidden" name="field" value="title" />
           <input
             type="text"
@@ -577,32 +582,41 @@ defmodule ApothecaryWeb.DashboardComponents do
             autofocus
             phx-focus="input-focus"
             phx-blur="input-blur"
-            class="bg-transparent border-b border-primary outline-none px-1 py-0.5 text-base flex-1"
+            class="bg-transparent border border-primary/30 focus:border-primary outline-none px-3 py-2 text-base w-full rounded"
           />
-          <button type="submit" class="text-green-400 hover:text-green-300 text-xs cursor-pointer">
-            [save]
-          </button>
-          <button
-            type="button"
-            phx-click="cancel-edit"
-            class="text-base-content/30 hover:text-base-content/50 text-xs cursor-pointer"
-          >
-            [esc]
-          </button>
+          <div class="flex items-center gap-2">
+            <button type="submit" class="bg-green-500/15 text-green-400 hover:bg-green-500/25 px-3 py-1 rounded text-xs cursor-pointer transition-colors">
+              Save
+            </button>
+            <button
+              type="button"
+              phx-click="cancel-edit"
+              class="text-base-content/40 hover:text-base-content/60 text-xs cursor-pointer px-2 py-1"
+            >
+              Cancel
+            </button>
+          </div>
         </.form>
       <% else %>
         <div
           phx-click="start-edit"
           phx-value-field="title"
-          class="text-base cursor-pointer hover:bg-base-content/5 px-1 -mx-1"
+          class="text-base font-semibold cursor-pointer hover:bg-base-content/5 px-2 py-1 -mx-2 -mt-1 rounded transition-colors"
         >
           {@task.title}
         </div>
       <% end %>
 
+      <%!-- Status + priority row --%>
+      <div class="flex items-center gap-3 flex-wrap">
+        <.status_badge status={@task.status} />
+        <.priority_controls priority={@task.priority} />
+        <span :if={@task.assigned_to} class="text-cyan-400 text-xs">{@task.assigned_to}</span>
+      </div>
+
       <%!-- Description (inline editable) --%>
       <%= if @editing_field == :description do %>
-        <.form for={%{}} phx-submit="save-edit" class="space-y-1">
+        <.form for={%{}} phx-submit="save-edit" class="space-y-2">
           <input type="hidden" name="field" value="description" />
           <textarea
             name="value"
@@ -610,18 +624,18 @@ defmodule ApothecaryWeb.DashboardComponents do
             autofocus
             phx-focus="input-focus"
             phx-blur="input-blur"
-            class="bg-transparent border border-primary/30 outline-none px-2 py-1 text-xs w-full"
+            class="bg-transparent border border-primary/30 focus:border-primary outline-none px-3 py-2 text-sm w-full rounded resize-none"
           >{@task.description || ""}</textarea>
           <div class="flex items-center gap-2">
-            <button type="submit" class="text-green-400 hover:text-green-300 text-xs cursor-pointer">
-              [save]
+            <button type="submit" class="bg-green-500/15 text-green-400 hover:bg-green-500/25 px-3 py-1 rounded text-xs cursor-pointer transition-colors">
+              Save
             </button>
             <button
               type="button"
               phx-click="cancel-edit"
-              class="text-base-content/30 hover:text-base-content/50 text-xs cursor-pointer"
+              class="text-base-content/40 hover:text-base-content/60 text-xs cursor-pointer px-2 py-1"
             >
-              [esc]
+              Cancel
             </button>
           </div>
         </.form>
@@ -629,115 +643,137 @@ defmodule ApothecaryWeb.DashboardComponents do
         <div
           phx-click="start-edit"
           phx-value-field="description"
-          class="text-base-content/60 whitespace-pre-wrap text-xs border-l-2 border-base-content/10 pl-3 cursor-pointer hover:bg-base-content/5 min-h-6"
+          class={[
+            "text-sm border-l-2 pl-3 cursor-pointer hover:bg-base-content/5 rounded-r py-1 transition-colors",
+            if(@task.description && @task.description != "",
+              do: "text-base-content/60 whitespace-pre-wrap border-base-content/15",
+              else: "text-base-content/25 border-base-content/10 italic"
+            )
+          ]}
         >
           {if @task.description && @task.description != "",
             do: @task.description,
-            else: "(click to add description)"}
+            else: "Add description..."}
         </div>
       <% end %>
 
-      <%!-- Notes --%>
-      <div :if={@task.notes && @task.notes != ""} class="space-y-1">
-        <.section label="notes" />
-        <div class="text-base-content/50 whitespace-pre-wrap text-xs px-3">{@task.notes}</div>
-      </div>
-
       <%!-- PR info --%>
-      <div :if={@pr_url} class="space-y-1">
-        <.section label="pull request" />
-        <div class="flex items-center gap-2 px-3 text-xs">
-          <a href={@pr_url} target="_blank" class="text-purple-400 hover:text-purple-300 truncate">
-            {@pr_url}
-          </a>
-        </div>
+      <div :if={@pr_url} class="flex items-center gap-2 text-sm">
+        <span class="text-purple-400/60 shrink-0">PR</span>
+        <a href={@pr_url} target="_blank" class="text-purple-400 hover:text-purple-300 truncate text-xs">
+          {@pr_url}
+        </a>
       </div>
 
       <%!-- Actions --%>
-      <div class="flex items-center gap-2 sm:gap-3 text-xs pt-1 flex-wrap">
-        <button phx-click="claim" class="text-cyan-400 hover:text-cyan-300 cursor-pointer py-1 px-1">
-          [claim]
+      <div class="flex items-center gap-2 flex-wrap">
+        <button
+          phx-click="claim"
+          class="border border-cyan-400/30 text-cyan-400 hover:bg-cyan-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors"
+        >
+          Claim
         </button>
         <button
           phx-click="requeue"
-          class="text-yellow-400 hover:text-yellow-300 cursor-pointer py-1 px-1"
+          class="border border-yellow-400/30 text-yellow-400 hover:bg-yellow-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors"
         >
-          [q:requeue]
+          Requeue <span class="hidden sm:inline text-base-content/30 ml-1">q</span>
         </button>
-        <button phx-click="close" class="text-red-400 hover:text-red-300 cursor-pointer py-1 px-1">
-          [x:close]
+        <button
+          phx-click="close"
+          class="border border-red-400/30 text-red-400 hover:bg-red-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors"
+        >
+          Close <span class="hidden sm:inline text-base-content/30 ml-1">x</span>
         </button>
         <button
           :if={@task.status == "pr_open"}
           phx-click="merge-pr"
-          class="text-green-400 hover:text-green-300 cursor-pointer font-bold py-1 px-1"
+          class="border border-green-400/30 text-green-400 hover:bg-green-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors font-bold"
         >
-          [m:merge]
+          Merge <span class="hidden sm:inline text-base-content/30 ml-1">m</span>
         </button>
       </div>
 
-      <%!-- Children section --%>
-      <div class="space-y-1">
+      <%!-- Ingredients section --%>
+      <div class="space-y-2">
         <.section label="ingredients" />
-        <.child_task_row :for={child <- @children} task={child} />
-        <div :if={@children == []} class="text-base-content/30 px-4 text-xs">no ingredients</div>
-        <.form for={%{}} phx-submit="create-child" class="flex items-center gap-2 px-4 text-xs">
+        <div class="space-y-0.5">
+          <.child_task_row :for={child <- @children} task={child} />
+          <div :if={@children == []} class="text-base-content/25 px-3 py-1 text-xs italic">
+            No ingredients yet
+          </div>
+        </div>
+        <.form for={%{}} phx-submit="create-child" class="flex items-center gap-2 px-3" id="create-child-form">
           <input
             type="text"
             name="title"
             id="child-input"
-            placeholder="add ingredient..."
+            placeholder="Add ingredient..."
             phx-focus="input-focus"
             phx-blur="input-blur"
             autocomplete="off"
-            class="bg-transparent border-b border-base-content/20 focus:border-primary outline-none px-1 py-0.5 text-xs flex-1"
+            class="bg-transparent border border-base-content/15 focus:border-primary outline-none px-3 py-1.5 text-sm flex-1 min-w-0 rounded"
           />
-          <button type="submit" class="text-green-400 hover:text-green-300 cursor-pointer">
-            [enter]
+          <button
+            type="submit"
+            class="bg-base-content/5 hover:bg-base-content/10 text-base-content/50 hover:text-base-content/70 px-2.5 py-1.5 rounded text-xs cursor-pointer transition-colors shrink-0"
+          >
+            +
           </button>
         </.form>
       </div>
 
-      <%!-- Blocked by section --%>
-      <div class="space-y-1">
+      <%!-- Notes --%>
+      <div :if={@task.notes && @task.notes != ""} class="space-y-2">
+        <.section label="notes" />
+        <div class="text-base-content/50 whitespace-pre-wrap text-xs px-3 py-2 bg-base-content/3 rounded">
+          {@task.notes}
+        </div>
+      </div>
+
+      <%!-- Dependencies section --%>
+      <div class="space-y-2">
         <.section label="blocked by" />
-        <div :for={b <- @task.blockers} class="flex items-center gap-2 px-4 text-xs">
+        <div :for={b <- @task.blockers} class="flex items-center gap-2 px-3 text-sm">
           <.link patch={~p"/?task=#{b}"} class="text-red-400 hover:text-red-300">{b}</.link>
           <button
             phx-click="remove-dep"
             phx-value-blocker_id={b}
-            class="text-base-content/30 hover:text-red-400 cursor-pointer"
+            class="text-base-content/25 hover:text-red-400 cursor-pointer p-0.5"
           >
-            [x]
+            &times;
           </button>
         </div>
-        <div :if={@task.blockers == []} class="text-base-content/30 px-4 text-xs">none</div>
-        <.form for={%{}} phx-submit="add-dep" class="flex items-center gap-2 px-4 text-xs">
+        <div :if={@task.blockers == []} class="text-base-content/25 px-3 text-xs italic">None</div>
+        <.form for={%{}} phx-submit="add-dep" class="flex items-center gap-2 px-3" id="add-dep-form">
           <input
             type="text"
             name="dep_id"
-            placeholder="add dependency (ID)..."
+            placeholder="Add dependency ID..."
             phx-focus="input-focus"
             phx-blur="input-blur"
             autocomplete="off"
-            class="bg-transparent border-b border-base-content/20 focus:border-primary outline-none px-1 py-0.5 text-xs flex-1"
+            class="bg-transparent border border-base-content/15 focus:border-primary outline-none px-3 py-1.5 text-sm flex-1 min-w-0 rounded"
           />
-          <button type="submit" class="text-green-400 hover:text-green-300 cursor-pointer">
-            [enter]
+          <button
+            type="submit"
+            class="bg-base-content/5 hover:bg-base-content/10 text-base-content/50 hover:text-base-content/70 px-2.5 py-1.5 rounded text-xs cursor-pointer transition-colors shrink-0"
+          >
+            +
           </button>
         </.form>
       </div>
 
       <%!-- Blocks section --%>
-      <div :if={@task.dependents != []} class="space-y-1">
+      <div :if={@task.dependents != []} class="space-y-2">
         <.section label="blocks" />
-        <div :for={d <- @task.dependents} class="px-4 text-xs">
+        <div :for={d <- @task.dependents} class="px-3 text-sm">
           <.link patch={~p"/?task=#{d}"} class="text-cyan-400 hover:text-cyan-300">{d}</.link>
         </div>
       </div>
 
       <%!-- Preview & shortcuts section --%>
-      <div :if={String.starts_with?(to_string(@task.id), "wt-")} class="space-y-1">
+      <div :if={String.starts_with?(to_string(@task.id), "wt-")} class="space-y-2">
         <.section label="preview" />
         <.dev_server_detail task_id={@task.id} dev_server={@dev_server} />
         <div class="flex items-center gap-3 px-3 text-xs text-base-content/30">
@@ -753,6 +789,9 @@ defmodule ApothecaryWeb.DashboardComponents do
         working_agent={@working_agent}
         agent_output={@agent_output}
       />
+
+      <%!-- Bottom spacer for mobile scroll --%>
+      <div class="h-4 sm:h-0"></div>
     </div>
     """
   end
@@ -763,10 +802,9 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   def section(assigns) do
     ~H"""
-    <div class="flex items-center gap-2 text-base-content/40 text-xs uppercase tracking-widest select-none">
-      <span>──</span>
+    <div class="flex items-center gap-2 text-base-content/30 text-[11px] uppercase tracking-widest select-none font-apothecary">
       <span>{@label}</span>
-      <span class="flex-1 border-b border-base-content/10"></span>
+      <span class="flex-1 border-b border-base-content/8"></span>
     </div>
     """
   end
@@ -779,13 +817,13 @@ defmodule ApothecaryWeb.DashboardComponents do
     ~H"""
     <.link
       patch={~p"/?task=#{@task.id}"}
-      class="flex items-center gap-2 px-4 py-0.5 hover:bg-base-content/5 cursor-pointer"
+      class="flex items-center gap-2 px-3 py-1.5 hover:bg-base-content/5 cursor-pointer rounded transition-colors"
     >
-      <span class={["w-10 shrink-0 uppercase text-xs", status_color(@task.status)]}>
+      <span class={["w-10 shrink-0 uppercase text-xs font-bold", status_color(@task.status)]}>
         {status_abbrev(@task.status)}
       </span>
-      <span class="text-base-content/50 shrink-0">{@task.id}</span>
-      <span class="truncate">{@task.title}</span>
+      <span class="text-base-content/30 shrink-0 text-xs">{@task.id}</span>
+      <span class="truncate text-sm">{@task.title}</span>
     </.link>
     """
   end
