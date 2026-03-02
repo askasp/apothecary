@@ -28,9 +28,14 @@ defmodule ApothecaryWeb.DashboardLive do
 
     worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
 
+    project_name =
+      Application.get_env(:apothecary, :project_dir, File.cwd!())
+      |> Path.basename()
+
     socket =
       socket
       |> assign(:page_title, "Dashboard")
+      |> assign(:project_name, project_name)
       |> assign(:stats, task_state.stats)
       |> assign(:ready_tasks, task_state.ready_tasks)
       |> assign(:last_poll, task_state.last_poll)
@@ -1464,6 +1469,9 @@ defmodule ApothecaryWeb.DashboardLive do
             <div class="mx-auto px-2">
               <%!-- Primary input — centered, narrower --%>
               <div class="max-w-2xl mx-auto pt-16 pb-4">
+                <div class="text-base-content/30 text-xs tracking-wider uppercase mb-1 font-apothecary">
+                  {@project_name}
+                </div>
                 <h2 class="text-base-content/50 text-lg font-semibold mb-4 font-apothecary">
                   What shall we concoct?
                 </h2>
