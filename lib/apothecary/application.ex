@@ -17,6 +17,7 @@ defmodule Apothecary.Application do
       {Phoenix.PubSub, name: Apothecary.PubSub},
       Apothecary.Store,
       Apothecary.Ingredients,
+      Apothecary.BrewScheduler,
       Apothecary.PRMonitor,
       Hermes.Server.Registry,
       {Apothecary.MCP.Server, transport: :streamable_http},
