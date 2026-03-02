@@ -7,20 +7,16 @@ defmodule ApothecaryWeb.DashboardComponents do
     router: ApothecaryWeb.Router,
     statics: ApothecaryWeb.static_paths()
 
-  # --- Status Controls (full-width header bar) ---
+  # --- Concoct Controls (above textarea area) ---
 
   attr :swarm_status, :atom, default: :paused
   attr :target_count, :integer, default: 3
   attr :active_count, :integer, default: 0
   attr :working_count, :integer, default: 0
 
-  def status_controls(assigns) do
+  def concoct_controls(assigns) do
     ~H"""
-    <div class="flex items-center gap-3 px-2 py-2 text-xs flex-wrap">
-      <span class="font-apothecary text-sm font-bold tracking-wide text-base-content/80">
-        Apothecary
-      </span>
-
+    <div class="flex items-center gap-3 mb-3 text-xs">
       <%= if @swarm_status == :running do %>
         <button
           phx-click="stop-swarm"
@@ -60,8 +56,6 @@ defmodule ApothecaryWeb.DashboardComponents do
           +
         </button>
       </div>
-
-      <span class="ml-auto text-base-content/30 cursor-pointer" phx-click="toggle-help">?</span>
     </div>
     """
   end
@@ -1137,12 +1131,12 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   def tab_navigation(assigns) do
     ~H"""
-    <div class="flex items-center gap-1 px-2 py-1">
+    <div class="flex items-center gap-1">
       <button
         phx-click="switch-tab"
         phx-value-tab="workbench"
         class={[
-          "px-3 py-1.5 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer",
+          "px-3 py-1 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer",
           if(@active_tab == :workbench,
             do: "text-base-content bg-base-content/10 font-bold",
             else: "text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5"
@@ -1155,7 +1149,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         phx-click="switch-tab"
         phx-value-tab="recipes"
         class={[
-          "px-3 py-1.5 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer",
+          "px-3 py-1 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer",
           if(@active_tab == :recipes,
             do: "text-base-content bg-base-content/10 font-bold",
             else: "text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5"

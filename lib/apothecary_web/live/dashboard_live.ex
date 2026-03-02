@@ -1439,18 +1439,14 @@ defmodule ApothecaryWeb.DashboardLive do
         phx-throttle="100"
         class="flex flex-col h-screen outline-none"
       >
-        <%!-- Status controls bar --%>
-        <div class="w-full mx-auto px-2">
-          <.status_controls
-            swarm_status={@swarm_status}
-            target_count={@target_count}
-            active_count={@active_count}
-            working_count={Enum.count(@agents, &(&1.status == :working))}
-          />
+        <%!-- Top bar: branding + tabs on one line --%>
+        <div class="flex items-center gap-3 px-2 py-2 text-xs">
+          <span class="font-apothecary text-sm font-bold tracking-wide text-base-content/80">
+            Apothecary
+          </span>
+          <.tab_navigation active_tab={@active_tab} />
+          <span class="ml-auto text-base-content/30 cursor-pointer" phx-click="toggle-help">?</span>
         </div>
-
-        <%!-- Tab navigation --%>
-        <.tab_navigation active_tab={@active_tab} />
 
         <div class="border-b border-base-content/10" />
 
@@ -1472,9 +1468,16 @@ defmodule ApothecaryWeb.DashboardLive do
                 <div class="text-base-content/30 text-xs tracking-wider uppercase mb-1 font-apothecary">
                   {@project_name}
                 </div>
-                <h2 class="text-base-content/50 text-lg font-semibold mb-4 font-apothecary">
+                <h2 class="text-base-content/50 text-lg font-semibold mb-2 font-apothecary">
                   What shall we concoct?
                 </h2>
+                <%!-- Concoct + alchemist controls --%>
+                <.concoct_controls
+                  swarm_status={@swarm_status}
+                  target_count={@target_count}
+                  active_count={@active_count}
+                  working_count={Enum.count(@agents, &(&1.status == :working))}
+                />
                 <.primary_input input_focused={@input_focused} />
                 <.activity_ticker agents={@agents} />
               </div>
