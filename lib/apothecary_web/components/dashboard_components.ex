@@ -603,6 +603,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             working_agent={@working_agent}
             agent_output={@agent_output}
             dev_server={@dev_server}
+            has_preview_config={@has_preview_config}
           />
         </div>
       </div>
@@ -653,6 +654,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :working_agent, :map, default: nil
   attr :agent_output, :list, default: []
   attr :dev_server, :map, default: nil
+  attr :has_preview_config, :boolean, default: false
 
   def task_detail_panel(assigns) do
     assigns = assign(assigns, :pr_url, Map.get(assigns.task, :pr_url))
