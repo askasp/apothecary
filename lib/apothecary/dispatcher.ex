@@ -308,9 +308,7 @@ defmodule Apothecary.Dispatcher do
             %{state | idle_agents: rest_idle}
 
           {:error, reason} ->
-            Logger.error(
-              "Failed to create git worktree for #{concoction.id}: #{inspect(reason)}"
-            )
+            Logger.error("Failed to create git worktree for #{concoction.id}: #{inspect(reason)}")
 
             Apothecary.Ingredients.release_concoction(concoction.id)
             dispatch_first_available(rest, state)

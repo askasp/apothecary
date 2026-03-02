@@ -7,7 +7,6 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @group_order ~w(running ready blocked pr done)
 
-
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -188,7 +187,13 @@ defmodule ApothecaryWeb.DashboardLive do
 
     diff_view =
       if files == [] do
-        %{files: [], selected_file: 0, worktree_id: worktree_id, loading: false, error: "No changes found"}
+        %{
+          files: [],
+          selected_file: 0,
+          worktree_id: worktree_id,
+          loading: false,
+          error: "No changes found"
+        }
       else
         %{files: files, selected_file: 0, worktree_id: worktree_id, loading: false, error: nil}
       end
@@ -1057,7 +1062,9 @@ defmodule ApothecaryWeb.DashboardLive do
   defp entry_group(worktree, agents) do
     active_ids =
       agents
-      |> Enum.flat_map(fn a -> if a.current_concoction, do: [to_string(a.current_concoction.id)], else: [] end)
+      |> Enum.flat_map(fn a ->
+        if a.current_concoction, do: [to_string(a.current_concoction.id)], else: []
+      end)
       |> MapSet.new()
 
     cond do
@@ -1078,7 +1085,9 @@ defmodule ApothecaryWeb.DashboardLive do
       |> MapSet.new()
 
     case Enum.find_index(socket.assigns.card_ids, &MapSet.member?(lane_ids, &1)) do
-      nil -> socket
+      nil ->
+        socket
+
       idx ->
         socket
         |> assign(:selected_card, idx)
@@ -1205,7 +1214,9 @@ defmodule ApothecaryWeb.DashboardLive do
           <div class="max-w-5xl mx-auto px-6">
             <%!-- Primary input — centered, narrower --%>
             <div class="max-w-2xl mx-auto pt-40 pb-4">
-              <h2 class="text-base-content/50 text-lg font-semibold mb-4 font-apothecary">What shall we concoct?</h2>
+              <h2 class="text-base-content/50 text-lg font-semibold mb-4 font-apothecary">
+                What shall we concoct?
+              </h2>
               <.primary_input input_focused={@input_focused} />
               <.activity_ticker agents={@agents} />
             </div>
@@ -1213,11 +1224,12 @@ defmodule ApothecaryWeb.DashboardLive do
             <%!-- Lane: STOCKROOM — ready + blocked --%>
             <% stockroom_entries =
               Enum.flat_map(~w(ready blocked), fn g -> @worktrees_by_status[g] || [] end)
-              |> Enum.sort_by(fn e -> e.worktree.priority || 99 end)
-            %>
+              |> Enum.sort_by(fn e -> e.worktree.priority || 99 end) %>
             <div class="pb-2">
               <div class="flex items-center gap-2 py-1.5">
-                <span class="uppercase text-xs tracking-wider font-bold text-emerald-400 font-apothecary">STOCKROOM</span>
+                <span class="uppercase text-xs tracking-wider font-bold text-emerald-400 font-apothecary">
+                  STOCKROOM
+                </span>
                 <span class="text-base-content/30 text-xs">({length(stockroom_entries)})</span>
                 <span class="text-base-content/15 text-[10px] ml-1">1</span>
               </div>
@@ -1243,11 +1255,12 @@ defmodule ApothecaryWeb.DashboardLive do
             <%!-- Lane: BREWING — running --%>
             <% brewing_entries =
               (@worktrees_by_status["running"] || [])
-              |> Enum.sort_by(fn e -> e.worktree.priority || 99 end)
-            %>
+              |> Enum.sort_by(fn e -> e.worktree.priority || 99 end) %>
             <div class="pb-2">
               <div class="flex items-center gap-2 py-1.5">
-                <span class="uppercase text-xs tracking-wider font-bold text-amber-400 font-apothecary">BREWING</span>
+                <span class="uppercase text-xs tracking-wider font-bold text-amber-400 font-apothecary">
+                  BREWING
+                </span>
                 <span class="text-base-content/30 text-xs">({length(brewing_entries)})</span>
                 <span class="text-base-content/15 text-[10px] ml-1">2</span>
               </div>
@@ -1273,11 +1286,12 @@ defmodule ApothecaryWeb.DashboardLive do
             <%!-- Lane: ASSAYING — pr --%>
             <% assaying_entries =
               (@worktrees_by_status["pr"] || [])
-              |> Enum.sort_by(fn e -> e.worktree.priority || 99 end)
-            %>
+              |> Enum.sort_by(fn e -> e.worktree.priority || 99 end) %>
             <div class="pb-2">
               <div class="flex items-center gap-2 py-1.5">
-                <span class="uppercase text-xs tracking-wider font-bold text-purple-400 font-apothecary">ASSAYING</span>
+                <span class="uppercase text-xs tracking-wider font-bold text-purple-400 font-apothecary">
+                  ASSAYING
+                </span>
                 <span class="text-base-content/30 text-xs">({length(assaying_entries)})</span>
                 <span class="text-base-content/15 text-[10px] ml-1">3</span>
               </div>
@@ -1304,12 +1318,30 @@ defmodule ApothecaryWeb.DashboardLive do
             <% done_entries = @worktrees_by_status["done"] || [] %>
             <div class="pb-4">
               <div class="flex items-center gap-2">
-                <.worktree_group_header label="BOTTLED" count={length(done_entries)} color="text-green-400/70" group="done" collapsed={@collapsed_done} collapsible={true} />
+                <.worktree_group_header
+                  label="BOTTLED"
+                  count={length(done_entries)}
+                  color="text-green-400/70"
+                  group="done"
+                  collapsed={@collapsed_done}
+                  collapsible={true}
+                />
                 <span class="text-base-content/15 text-[10px]">4</span>
               </div>
               <%= if done_entries != [] do %>
-                <div :if={!@collapsed_done} class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 mt-1 mb-3">
-                  <.worktree_card :for={entry <- done_entries} worktree={entry.worktree} tasks={entry.tasks} agent={entry.agent} dev_server={entry.dev_server} selected={@selected_card_id == entry.worktree.id} group="done" />
+                <div
+                  :if={!@collapsed_done}
+                  class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 mt-1 mb-3"
+                >
+                  <.worktree_card
+                    :for={entry <- done_entries}
+                    worktree={entry.worktree}
+                    tasks={entry.tasks}
+                    agent={entry.agent}
+                    dev_server={entry.dev_server}
+                    selected={@selected_card_id == entry.worktree.id}
+                    group="done"
+                  />
                 </div>
               <% else %>
                 <div :if={!@collapsed_done} class="py-3 text-base-content/20 text-xs">empty</div>

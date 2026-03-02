@@ -5,9 +5,7 @@ defmodule Apothecary.MCP.Tools.GetIngredient do
   alias Hermes.Server.Response
 
   schema do
-    field(:ingredient_id, {:required, :string},
-      description: "The ingredient ID (e.g. t-abc123)"
-    )
+    field(:ingredient_id, {:required, :string}, description: "The ingredient ID (e.g. t-abc123)")
   end
 
   @impl true

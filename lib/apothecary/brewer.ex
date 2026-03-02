@@ -353,15 +353,25 @@ defmodule Apothecary.Brewer do
 
         if existing_pr_url do
           # Revision cycle — PR already exists, just push and go back to pr_open
-          Apothecary.Ingredients.add_note(worktree_id, "Revision pushed to existing PR: #{existing_pr_url}")
-          Apothecary.Ingredients.update_concoction(worktree_id, %{status: "pr_open", assigned_brewer_id: nil})
+          Apothecary.Ingredients.add_note(
+            worktree_id,
+            "Revision pushed to existing PR: #{existing_pr_url}"
+          )
+
+          Apothecary.Ingredients.update_concoction(worktree_id, %{
+            status: "pr_open",
+            assigned_brewer_id: nil
+          })
         else
           # First time — create PR, then set to pr_open
           pr_result = create_pr_with_retry(worktree_id, worktree_path)
 
           case pr_result do
             {:ok, _pr_url} ->
-              Apothecary.Ingredients.update_concoction(worktree_id, %{status: "pr_open", assigned_brewer_id: nil})
+              Apothecary.Ingredients.update_concoction(worktree_id, %{
+                status: "pr_open",
+                assigned_brewer_id: nil
+              })
 
             {:error, reason} ->
               branch = agent.branch || "(unknown)"
@@ -372,7 +382,10 @@ defmodule Apothecary.Brewer do
                   "Branch '#{branch}' was pushed — create PR manually."
               )
 
-              Apothecary.Ingredients.update_concoction(worktree_id, %{status: "pr_open", assigned_brewer_id: nil})
+              Apothecary.Ingredients.update_concoction(worktree_id, %{
+                status: "pr_open",
+                assigned_brewer_id: nil
+              })
           end
         end
 
@@ -434,7 +447,8 @@ defmodule Apothecary.Brewer do
     config = %{
       "mcpServers" => %{
         "apothecary" => %{
-          "url" => "http://localhost:#{port}/mcp?brewer_id=#{agent_id}&concoction_id=#{worktree_id}"
+          "url" =>
+            "http://localhost:#{port}/mcp?brewer_id=#{agent_id}&concoction_id=#{worktree_id}"
         }
       }
     }

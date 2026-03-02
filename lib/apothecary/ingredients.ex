@@ -307,14 +307,18 @@ defmodule Apothecary.Ingredients do
       Apothecary.DevServer.stop_server(id)
     catch
       :exit, reason ->
-        Logger.warning("cleanup_merged_concoction: DevServer.stop_server failed for #{id}: #{inspect(reason)}")
+        Logger.warning(
+          "cleanup_merged_concoction: DevServer.stop_server failed for #{id}: #{inspect(reason)}"
+        )
     end
 
     Apothecary.WorktreeManager.release(id)
 
     # Update local main so new worktrees branch from the latest code
     case Apothecary.Git.pull_main() do
-      {:ok, _} -> :ok
+      {:ok, _} ->
+        :ok
+
       {:error, reason} ->
         Logger.warning("cleanup_merged_concoction: pull_main failed: #{inspect(reason)}")
     end
@@ -328,7 +332,9 @@ defmodule Apothecary.Ingredients do
       Apothecary.DevServer.stop_server(id)
     catch
       :exit, reason ->
-        Logger.warning("cleanup_cancelled_concoction: DevServer.stop_server failed for #{id}: #{inspect(reason)}")
+        Logger.warning(
+          "cleanup_cancelled_concoction: DevServer.stop_server failed for #{id}: #{inspect(reason)}"
+        )
     end
 
     Apothecary.WorktreeManager.release(id)
@@ -694,7 +700,10 @@ defmodule Apothecary.Ingredients do
     Enum.filter(concoctions, &concoction_ready?(&1, wt_status_map))
   end
 
-  defp concoction_ready?(%{status: status, assigned_brewer_id: nil, parent_concoction_id: nil}, _map)
+  defp concoction_ready?(
+         %{status: status, assigned_brewer_id: nil, parent_concoction_id: nil},
+         _map
+       )
        when status in ["open", "revision_needed"],
        do: true
 
@@ -743,8 +752,8 @@ defmodule Apothecary.Ingredients do
   # --- Private: Record Manipulation ---
 
   defp apply_concoction_changes(record, changes) do
-    {table, id, status, title, priority, git_path, git_branch, parent_concoction_id, assigned_brewer_id,
-     data} = record
+    {table, id, status, title, priority, git_path, git_branch, parent_concoction_id,
+     assigned_brewer_id, data} = record
 
     now = DateTime.utc_now() |> DateTime.to_iso8601()
 
@@ -769,8 +778,8 @@ defmodule Apothecary.Ingredients do
       |> maybe_put(:dependents, changes[:dependents])
       |> Map.put(:updated_at, now)
 
-    {table, id, status, title, priority, git_path, git_branch, parent_concoction_id, assigned_brewer_id,
-     data}
+    {table, id, status, title, priority, git_path, git_branch, parent_concoction_id,
+     assigned_brewer_id, data}
   end
 
   defp apply_ingredient_changes(record, changes) do
@@ -836,7 +845,9 @@ defmodule Apothecary.Ingredients do
             data = elem(record, data_index)
             existing = data[:notes] || ""
             timestamped_note = "#{timestamp} #{note}"
-            new_notes = if existing == "", do: timestamped_note, else: "#{existing}\n#{timestamped_note}"
+
+            new_notes =
+              if existing == "", do: timestamped_note, else: "#{existing}\n#{timestamped_note}"
 
             updated =
               put_elem(

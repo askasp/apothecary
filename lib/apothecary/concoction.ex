@@ -71,8 +71,8 @@ defmodule Apothecary.Concoction do
 
   @doc "Convert to a Mnesia record tuple."
   def to_record(%__MODULE__{} = wt) do
-    {:apothecary_concoctions, wt.id, wt.status, wt.title, wt.priority, wt.git_path,
-     wt.git_branch, wt.parent_concoction_id, wt.assigned_brewer_id,
+    {:apothecary_concoctions, wt.id, wt.status, wt.title, wt.priority, wt.git_path, wt.git_branch,
+     wt.parent_concoction_id, wt.assigned_brewer_id,
      %{
        description: wt.description,
        notes: wt.notes,
