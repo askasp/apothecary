@@ -28,9 +28,14 @@ defmodule ApothecaryWeb.DashboardLive do
 
     worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
 
+    project_name =
+      Application.get_env(:apothecary, :project_dir, File.cwd!())
+      |> Path.basename()
+
     socket =
       socket
       |> assign(:page_title, "Dashboard")
+      |> assign(:project_name, project_name)
       |> assign(:stats, task_state.stats)
       |> assign(:ready_tasks, task_state.ready_tasks)
       |> assign(:last_poll, task_state.last_poll)
@@ -427,19 +432,43 @@ defmodule ApothecaryWeb.DashboardLive do
     task = socket.assigns.selected_task
     pr_url = task && Map.get(task, :pr_url)
 
-    cond do
-      is_nil(pr_url) ->
-        {:noreply, put_flash(socket, :error, "No PR URL on this worktree")}
+    case Git.merge_mode() do
+      :github ->
+        cond do
+          is_nil(pr_url) ->
+            {:noreply, put_flash(socket, :error, "No PR URL on this worktree")}
 
-      task.status != "pr_open" ->
-        {:noreply, put_flash(socket, :error, "Worktree is not in pr_open status")}
+          task.status != "pr_open" ->
+            {:noreply, put_flash(socket, :error, "Worktree is not in pr_open status")}
 
-      true ->
-        {:noreply,
-         socket
-         |> assign(:pending_action, {:merge, task.id, pr_url})
-         |> put_flash(:info, "Merge \"#{task.title}\"? Press m/y/Enter to confirm, Esc to cancel")}
+          true ->
+            {:noreply, assign(socket, :pending_action, {:merge, task.id, pr_url})}
+        end
+
+      :local ->
+        if task.status == "pr_open" do
+          {:noreply, assign(socket, :pending_action, {:merge, task.id, nil})}
+        else
+          {:noreply, put_flash(socket, :error, "Worktree is not ready for merge")}
+        end
     end
+  end
+
+  @impl true
+  def handle_event("confirm-merge", _params, socket) do
+    case socket.assigns.pending_action do
+      {:merge, task_id, pr_url} ->
+        socket = assign(socket, :pending_action, nil)
+        {:noreply, execute_merge(socket, task_id, pr_url)}
+
+      _ ->
+        {:noreply, assign(socket, :pending_action, nil)}
+    end
+  end
+
+  @impl true
+  def handle_event("cancel-merge", _params, socket) do
+    {:noreply, assign(socket, :pending_action, nil)}
   end
 
   @impl true
@@ -753,7 +782,12 @@ defmodule ApothecaryWeb.DashboardLive do
       put_flash(socket, :info, "Concocting stopped")
     else
       Dispatcher.start_swarm(socket.assigns.target_count)
-      put_flash(socket, :info, "Concocting started with #{socket.assigns.target_count} alchemists")
+
+      put_flash(
+        socket,
+        :info,
+        "Concocting started with #{socket.assigns.target_count} alchemists"
+      )
     end
   end
 
@@ -831,12 +865,18 @@ defmodule ApothecaryWeb.DashboardLive do
   defp handle_hotkey("m", socket) do
     task = socket.assigns.selected_task
 
-    if task && Map.get(task, :pr_url) && task.status == "pr_open" do
-      socket
-      |> assign(:pending_action, {:merge, task.id, task.pr_url})
-      |> put_flash(:info, "Merge \"#{task.title}\"? Press m/y/Enter to confirm, Esc to cancel")
-    else
-      socket
+    cond do
+      is_nil(task) || task.status != "pr_open" ->
+        socket
+
+      Git.merge_mode() == :github && Map.get(task, :pr_url) ->
+        assign(socket, :pending_action, {:merge, task.id, task.pr_url})
+
+      Git.merge_mode() == :local ->
+        assign(socket, :pending_action, {:merge, task.id, nil})
+
+      true ->
+        socket
     end
   end
 
@@ -911,6 +951,10 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:collapsed_done, false)
   end
 
+  # Tab switching: w=workbench, e=recipes
+  defp handle_hotkey("w", socket), do: assign(socket, :active_tab, :workbench)
+  defp handle_hotkey("e", socket), do: assign(socket, :active_tab, :recipes)
+
   defp handle_hotkey(_key, socket), do: socket
 
   # --- Diff overlay hotkeys ---
@@ -964,14 +1008,40 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp execute_merge(socket, task_id, pr_url) do
-    case Git.merge_pr(pr_url) do
-      :ok ->
-        Ingredients.add_note(task_id, "PR merged from dashboard: #{pr_url}")
-        Ingredients.cleanup_merged_concoction(task_id)
-        put_flash(socket, :info, "PR merged and worktree cleaned up")
+    case Git.merge_mode() do
+      :github ->
+        case Git.merge_pr(pr_url) do
+          :ok ->
+            Ingredients.add_note(task_id, "PR merged from dashboard: #{pr_url}")
+            Ingredients.cleanup_merged_concoction(task_id)
+            put_flash(socket, :info, "PR merged and worktree cleaned up")
 
-      {:error, reason} ->
-        put_flash(socket, :error, "Merge failed: #{inspect(reason)}")
+          {:error, reason} ->
+            put_flash(socket, :error, "Merge failed: #{inspect(reason)}")
+        end
+
+      :local ->
+        task = Ingredients.show(task_id)
+
+        git_path =
+          case task do
+            {:ok, t} -> t.git_path
+            _ -> nil
+          end
+
+        if git_path do
+          case Git.local_merge(git_path) do
+            :ok ->
+              Ingredients.add_note(task_id, "Branch merged into main locally from dashboard")
+              Ingredients.cleanup_merged_concoction(task_id)
+              put_flash(socket, :info, "Merged into main locally and cleaned up")
+
+            {:error, reason} ->
+              put_flash(socket, :error, "Local merge failed: #{inspect(reason)}")
+          end
+        else
+          put_flash(socket, :error, "No git path found for this concoction")
+        end
     end
   end
 
@@ -1053,7 +1123,13 @@ defmodule ApothecaryWeb.DashboardLive do
           {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
       end
     else
-      case Ingredients.create_concoction(%{title: title, priority: 3}) do
+      {concoction_title, description} = split_title_description(title)
+
+      case Ingredients.create_concoction(%{
+             title: concoction_title,
+             description: description,
+             priority: 3
+           }) do
         {:ok, item} when not is_nil(item) ->
           {:noreply, put_flash(socket, :info, "Concoction created: #{item.id}")}
 
@@ -1284,6 +1360,30 @@ defmodule ApothecaryWeb.DashboardLive do
     {title, parent_id, dep_ids}
   end
 
+  # Splits free-text input into a short title (first line, max 80 chars) and
+  # the rest as description. Single short lines return nil description.
+  defp split_title_description(text) do
+    lines = String.split(text, "\n", trim: false)
+    first_line = String.trim(List.first(lines) || "")
+    rest = lines |> Enum.drop(1) |> Enum.join("\n") |> String.trim()
+
+    cond do
+      rest != "" ->
+        title =
+          if String.length(first_line) > 80,
+            do: String.slice(first_line, 0, 77) <> "...",
+            else: first_line
+
+        {title, rest}
+
+      String.length(first_line) > 80 ->
+        {String.slice(first_line, 0, 77) <> "...", first_line}
+
+      true ->
+        {first_line, nil}
+    end
+  end
+
   defp entry_group(worktree, agents) do
     active_ids =
       agents
@@ -1434,18 +1534,20 @@ defmodule ApothecaryWeb.DashboardLive do
         phx-throttle="100"
         class="flex flex-col h-screen outline-none"
       >
-        <%!-- Status controls bar --%>
-        <div class="w-full mx-auto px-2">
-          <.status_controls
-            swarm_status={@swarm_status}
-            target_count={@target_count}
-            active_count={@active_count}
-            working_count={Enum.count(@agents, &(&1.status == :working))}
-          />
+        <%!-- Top bar: branding + tabs on one line --%>
+        <div class="flex items-center gap-1 sm:gap-3 px-2 py-2 text-xs min-w-0">
+          <span class="font-apothecary text-sm font-bold tracking-wide text-base-content/80 shrink-0">
+            <span class="hidden sm:inline">Apothecary</span>
+            <span class="sm:hidden">&#x2697;</span>
+          </span>
+          <.tab_navigation active_tab={@active_tab} />
+          <span
+            class="ml-auto text-base-content/30 cursor-pointer shrink-0 p-1"
+            phx-click="toggle-help"
+          >
+            ?
+          </span>
         </div>
-
-        <%!-- Tab navigation --%>
-        <.tab_navigation active_tab={@active_tab} />
 
         <div class="border-b border-base-content/10" />
 
@@ -1463,10 +1565,20 @@ defmodule ApothecaryWeb.DashboardLive do
           <% else %>
             <div class="mx-auto px-2">
               <%!-- Primary input — centered, narrower --%>
-              <div class="max-w-2xl mx-auto pt-16 pb-4">
-                <h2 class="text-base-content/50 text-lg font-semibold mb-4 font-apothecary">
+              <div class="max-w-2xl mx-auto pt-6 sm:pt-16 pb-4 px-1 sm:px-0">
+                <div class="text-base-content/30 text-xs tracking-wider uppercase mb-1 font-apothecary">
+                  {@project_name}
+                </div>
+                <h2 class="text-base-content/50 text-lg font-semibold mb-2 font-apothecary">
                   What shall we concoct?
                 </h2>
+                <%!-- Concoct + alchemist controls --%>
+                <.concoct_controls
+                  swarm_status={@swarm_status}
+                  target_count={@target_count}
+                  active_count={@active_count}
+                  working_count={Enum.count(@agents, &(&1.status == :working))}
+                />
                 <.primary_input input_focused={@input_focused} />
                 <.activity_ticker agents={@agents} />
               </div>
@@ -1603,8 +1715,11 @@ defmodule ApothecaryWeb.DashboardLive do
 
         <%!-- Footer --%>
         <div class="border-t border-base-content/10 px-2 py-1 text-xs flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <span class="text-base-content/30">j/k:nav  1-4:lanes  enter:inspect</span>
+          <div class="flex items-center gap-3 text-base-content/30">
+            <span class="hidden sm:inline">
+              j/k:nav  1-4:lanes  enter:inspect  w/e:tabs  s:concoct
+            </span>
+            <span class="sm:hidden">tap card to inspect</span>
             <button
               :if={@orphan_count > 0}
               phx-click="requeue-orphans"
@@ -1629,6 +1744,7 @@ defmodule ApothecaryWeb.DashboardLive do
         working_agent={@working_agent}
         agent_output={@agent_output}
         dev_server={@dev_servers[@selected_task_id]}
+        pending_action={@pending_action}
       />
 
       <.which_key_overlay

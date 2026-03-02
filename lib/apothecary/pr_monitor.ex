@@ -25,7 +25,11 @@ defmodule Apothecary.PRMonitor do
 
   @impl true
   def handle_info(:poll, state) do
-    check_all_prs()
+    # Only poll when in GitHub mode
+    if Apothecary.Git.merge_mode() == :github do
+      check_all_prs()
+    end
+
     schedule_poll()
     {:noreply, state}
   end

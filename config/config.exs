@@ -11,7 +11,9 @@ config :apothecary,
   generators: [timestamp_type: :utc_datetime],
   project_dir: nil,
   claude_path: "claude",
-  mnesia_copies: :disc_copies
+  mnesia_copies: :disc_copies,
+  # :auto (detect gh CLI), :github (always PR), :local (merge locally)
+  merge_mode: :auto
 
 # Configure the endpoint
 config :apothecary, ApothecaryWeb.Endpoint,
