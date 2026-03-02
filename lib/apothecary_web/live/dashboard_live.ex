@@ -253,7 +253,7 @@ defmodule ApothecaryWeb.DashboardLive do
   @impl true
   def handle_event("hotkey", %{"key" => key}, socket) do
     cond do
-      socket.assigns.input_focused and key not in ["Escape", "Enter"] ->
+      socket.assigns.input_focused and key not in ["Escape"] ->
         {:noreply, socket}
 
       socket.assigns.diff_view != nil ->
