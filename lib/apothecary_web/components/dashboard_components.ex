@@ -23,20 +23,20 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%= if @swarm_status == :running do %>
         <button
           phx-click="stop-swarm"
-          class="flex items-center gap-2 border border-base-content/20 hover:border-base-content/40 text-base-content/70 hover:text-base-content px-3 py-2 rounded cursor-pointer font-apothecary text-sm transition-colors"
+          class="flex items-center gap-2 text-base-content/70 hover:text-base-content px-3 py-2 cursor-pointer font-apothecary text-sm transition-colors"
           title="Click to stop concocting (s)"
         >
-          <.cauldron_icon animating={true} size={40} />
+          <.cauldron_icon animating={true} size={80} />
           <span class="text-base">Concocting</span>
           <span class="text-base-content/30 text-xs ml-1 hidden sm:inline">[s]</span>
         </button>
       <% else %>
         <button
           phx-click="start-swarm"
-          class="flex items-center gap-2 border border-base-content/15 hover:border-base-content/30 text-base-content/40 hover:text-base-content/70 px-3 py-2 rounded cursor-pointer font-apothecary text-sm transition-colors"
+          class="flex items-center gap-2 text-base-content/40 hover:text-base-content/70 px-3 py-2 cursor-pointer font-apothecary text-sm transition-colors"
           title="Click to start concocting (s)"
         >
-          <.cauldron_icon animating={false} size={40} />
+          <.cauldron_icon animating={false} size={80} />
           <span class="text-base">Concoct</span>
           <span class="text-base-content/30 text-xs ml-1 hidden sm:inline">[s]</span>
         </button>
