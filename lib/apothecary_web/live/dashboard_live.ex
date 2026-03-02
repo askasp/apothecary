@@ -1099,6 +1099,7 @@ defmodule ApothecaryWeb.DashboardLive do
     wt_id = wt.id
     pr_url = Map.get(wt, :pr_url)
     git_path = Map.get(wt, :git_path)
+    merge_mode = Git.merge_mode()
 
     diff_view = %{
       files: [],
@@ -1110,10 +1111,10 @@ defmodule ApothecaryWeb.DashboardLive do
 
     Elixir.Task.start(fn ->
       result =
-        cond do
-          pr_url && pr_url != "" -> Git.pr_diff(pr_url)
-          git_path && git_path != "" -> Git.worktree_diff(git_path)
-          true -> {:error, "No PR URL or git path on this worktree"}
+        try do
+          fetch_diff(merge_mode, pr_url, git_path)
+        rescue
+          e -> {:error, Exception.message(e)}
         end
 
       send(lv, {:diff_result, wt_id, result})
@@ -1121,6 +1122,36 @@ defmodule ApothecaryWeb.DashboardLive do
 
     assign(socket, :diff_view, diff_view)
   end
+
+  defp fetch_diff(:local, pr_url, git_path) do
+    with {:error, _} <- try_worktree_diff(git_path),
+         {:error, _} <- try_pr_diff(pr_url) do
+      {:error, "No diff available (no worktree path or PR URL)"}
+    end
+  end
+
+  defp fetch_diff(:github, pr_url, git_path) do
+    with {:error, _} <- try_pr_diff(pr_url),
+         {:error, _} <- try_worktree_diff(git_path) do
+      {:error, "No diff available (no PR URL or worktree path)"}
+    end
+  end
+
+  defp try_pr_diff(pr_url) when is_binary(pr_url) and pr_url != "" do
+    Git.pr_diff(pr_url)
+  end
+
+  defp try_pr_diff(_), do: {:error, :no_pr_url}
+
+  defp try_worktree_diff(git_path) when is_binary(git_path) and git_path != "" do
+    if File.dir?(git_path) do
+      Git.worktree_diff(git_path)
+    else
+      {:error, :worktree_not_found}
+    end
+  end
+
+  defp try_worktree_diff(_), do: {:error, :no_git_path}
 
   # --- Input handlers ---
 
