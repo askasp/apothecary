@@ -64,7 +64,8 @@ defmodule Apothecary.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:hermes_mcp, "~> 0.14"},
-      {:yaml_elixir, "~> 2.9"}
+      {:yaml_elixir, "~> 2.9"},
+      {:crontab, "~> 1.1"}
     ]
   end
 
