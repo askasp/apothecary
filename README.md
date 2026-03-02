@@ -34,6 +34,16 @@ Between the two, the system is self-healing. Stuck agents get recycled, and cont
 | **Alchemist** | A Claude Code agent process that works on concoctions |
 | **Recipe** | A template for creating concoctions from issues |
 
+## What you can do with it
+
+**Run a swarm overnight, wake up to PRs.** Create a batch of concoctions before bed - refactors, bug fixes, feature stubs, whatever. The agents work through the queue in parallel while you sleep. In the morning you've got a stack of PRs to review instead of a pile of tickets to start.
+
+**Scale agents up or down on the fly.** The dashboard lets you set anywhere from 1 to 10 parallel agents. Running on a beefy machine? Crank it up. Want to keep things calm? Run one at a time. You can change the count while agents are already working - new ones spin up, extras wind down.
+
+**Preview changes before merging.** Any concoction can spin up a dev server right in its worktree. Apothecary reads a `.apothecary/preview.yml` config, allocates ports, runs your setup script, and starts the server. You get a live link in the dashboard to inspect the changes an agent made - click through and see the actual running app.
+
+**Set up recurring work with recipes.** Recipes are cron-scheduled templates that automatically create concoctions on a schedule. Want dependency updates every Sunday at 3 AM? A weekly linting pass? Create a recipe with a cron expression, enable it, and it fires on schedule. The scheduler survives restarts and recalculates next-run times on startup.
+
 ## Why Elixir
 
 Each alchemist is a GenServer under a DynamicSupervisor. Agent crashes are isolated - one going down doesn't affect the others. Mnesia handles all the state so there's no external database to set up. Phoenix PubSub makes the dispatch reactive, and LiveView gives you a real-time dashboard without writing JavaScript.
