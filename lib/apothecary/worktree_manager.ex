@@ -160,6 +160,13 @@ defmodule Apothecary.WorktreeManager do
         Apothecary.Git.remove_worktree(path)
       end
 
+      # Fetch latest main so the worktree branches from up-to-date code
+      case Apothecary.Git.pull_main() do
+        {:ok, _} -> :ok
+        {:error, reason} ->
+          Logger.warning("Failed to pull main before creating worktree #{worktree_id}: #{inspect(reason)}")
+      end
+
       case Apothecary.Git.create_worktree(path, branch, base_branch) do
         {:ok, _} ->
           Logger.info("Created worktree for #{worktree_id}: #{path} (branch: #{branch})")
