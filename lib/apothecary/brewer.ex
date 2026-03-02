@@ -439,7 +439,13 @@ defmodule Apothecary.Brewer do
       }
     }
 
-    mcp_path = Path.join(worktree_path, ".mcp.json")
+    # Write to a hidden subdirectory, NOT .mcp.json in the project root.
+    # Claude auto-detects .mcp.json and prompts for MCP trust approval,
+    # which hangs headless brewers. Using --mcp-config flag instead
+    # bypasses the trust prompt since it's explicitly user-specified.
+    mcp_dir = Path.join(worktree_path, ".apothecary")
+    File.mkdir_p(mcp_dir)
+    mcp_path = Path.join(mcp_dir, "mcp.json")
 
     case File.write(mcp_path, Jason.encode!(config, pretty: true)) do
       :ok ->
@@ -472,7 +478,7 @@ defmodule Apothecary.Brewer do
       try do
         script_exe = System.find_executable("script")
 
-        mcp_config_path = Path.join(agent.worktree_path, ".mcp.json")
+        mcp_config_path = Path.join([agent.worktree_path, ".apothecary", "mcp.json"])
 
         cmd =
           "'#{claude_exe}' -p \"$APOTHECARY_PROMPT\" " <>
