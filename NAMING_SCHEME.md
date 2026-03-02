@@ -1,202 +1,141 @@
 # Apothecary Naming Scheme
 
-> *A thematic naming guide mapping every system element to its counterpart in a traditional apothecary shop.*
+> *Domain naming for the core concepts. OTP primitives (supervisors, registries, GenServers) keep their standard Elixir names.*
 
 ## The Metaphor
 
-An **apothecary** is a historical pharmacist's workshop — a place where prescriptions arrive, ingredients are sourced from gardens and vaults, apprentices compound remedies under the pharmacist's direction, and a herald announces when each preparation is ready. This maps remarkably well onto a BEAM-orchestrated AI agent swarm.
+An **apothecary** brews concoctions from ingredients. Brewers do the work.
 
 ---
 
-## Core Architecture
+## Core Domain Names
 
-| Current Name | Apothecary Name | Role | Rationale |
+| Concept | Apothecary Name | Current Name | What It Is |
 |---|---|---|---|
-| `Apothecary` (app) | **Apothecary** | The application itself | The shop. Already perfectly named. |
-| `Application` | **Shop** | OTP supervision tree root | Opening the shop starts all the processes within it. |
-| `Startup` | **Opening** | Environment validation & init | The morning ritual — checking supplies, unlocking the door, making sure everything is in order before the first customer. |
+| The application | **Apothecary** | `Apothecary` | Already named. The shop where concoctions are brewed. |
+| Unit of work / PR | **Concoction** | `Worktree` | A concoction is what gets brewed — a self-contained piece of work with its own git worktree. Multiple ingredients combine into one concoction. |
+| Step within a concoction | **Ingredient** | `Task` | An ingredient is one part of a concoction — a specific step or sub-task. A concoction may need many ingredients combined in order. |
+| Agent worker | **Brewer** | `AgentWorker` | A brewer takes a concoction's recipe, gathers the ingredients, and does the actual brewing (runs Claude Code in a worktree). |
 
-## People & Roles
+## What Stays the Same
 
-| Current Name | Apothecary Name | Role | Rationale |
-|---|---|---|---|
-| `Dispatcher` | **Pharmacist** | Assigns work to agents | The pharmacist reads incoming prescriptions and decides which apprentice should compound each one. The expert coordinator. |
-| `AgentWorker` | **Apprentice** | Spawns & manages a Claude process | Apprentices do the hands-on work — grinding, mixing, brewing. Each apprentice works on one prescription at a time. |
-| `AgentSupervisor` | **Guild** | DynamicSupervisor for workers | The guild oversees all apprentices, can admit new ones or retire them, and ensures the workshop is never left unattended. |
-| `AgentState` | **Credentials** | Struct tracking agent state | An apprentice's credentials — their ID, current assignment, status, and when they started. |
+Standard Elixir/OTP naming is good naming. These keep their current names:
 
-## Work Units
+- **Supervisors** (`AgentSupervisor`, `DynamicSupervisor`) — standard OTP
+- **Registries** — standard OTP
+- **GenServers** (`Store`, `Dispatcher`, `TaskManager`) — standard OTP pattern
+- **PubSub** — standard Phoenix
+- **Application** — standard OTP
 
-| Current Name | Apothecary Name | Role | Rationale |
-|---|---|---|---|
-| `Worktree` (struct) | **Prescription** | A unit of work / future PR | A prescription arrives from the physician (user). It specifies what remedy to prepare. Each prescription gets its own workbench (git worktree). |
-| `Task` (struct) | **Preparation** | A step within a worktree | Each prescription may require multiple preparations — one for the base, one for the active ingredient, one for the finishing. Ordered steps to fulfill the prescription. |
-| `Bead` (struct) | **Order Slip** | Legacy task struct (bd CLI) | The paper slip from the old ordering system. Being replaced by the Formulary. |
+The apothecary names apply to the **domain concepts**, not the infrastructure.
 
-## State & Storage
+## How It Maps
 
-| Current Name | Apothecary Name | Role | Rationale |
-|---|---|---|---|
-| `Store` | **Vault** | Mnesia initialization | The locked vault where all records and precious materials are kept. Disc-backed (in dev) like a proper strongbox. |
-| `TaskManager` | **Formulary** | CRUD for worktrees & tasks | The formulary is the master reference book — every known prescription, preparation, and their relationships are catalogued here. |
-| Mnesia tables | **Ledgers** | `apothecary_worktrees`, `apothecary_tasks` | The physical ledger books inside the vault. One for prescriptions, one for preparations. |
+### Concoctions (Worktrees)
 
-## Infrastructure & Tools
+A concoction is a unit of work that will become a PR. Each concoction gets its own isolated git worktree where a brewer can work without interfering with others.
 
-| Current Name | Apothecary Name | Role | Rationale |
-|---|---|---|---|
-| `WorktreeManager` | **Herbalist** | Git worktree lifecycle | The herbalist tends the gardens — growing isolated plots (worktrees) where each prescription's ingredients are cultivated without cross-contamination. |
-| `Poller` | **Sentinel** | Periodic state polling | The sentinel watches the gates, regularly checking for new arrivals and changes in the outside world. |
-| `CLI` | **Mortar** | Shell command execution | The mortar (and pestle) — the most fundamental tool. Every physical act of grinding and mixing goes through it. |
-| `Git` | **Chronicle** | Git operations wrapper | The chronicle records all history — every change, every branch, every merge. The shop's version-controlled memory. |
-| `Beads` | **Materia Medica** | Interface to bd CLI | The materia medica is an external reference catalog of all known substances and their properties. Being superseded by the internal Formulary. |
+```
+Concoction = recipe + ingredients + isolated workspace
+Worktree   = title  + tasks       + git worktree
+```
 
-## Communication
+- ID prefix: `wt-` (or consider `cx-` for concoction)
+- Statuses: `open` / `in_progress` / `blocked` / `done`
+- A concoction is "done" when all its ingredients have been combined and the result is committed.
 
-| Current Name | Apothecary Name | Role | Rationale |
-|---|---|---|---|
-| `PubSub` | **Herald** | Phoenix.PubSub message bus | The herald announces news to all who are listening. No need to check — when something happens, the herald will tell you. |
-| `beads:updates` topic | `formulary:tidings` | Task state broadcasts | Tidings from the formulary — new preparations added, statuses changed. |
-| `dispatcher:updates` topic | `pharmacist:directives` | Dispatch state broadcasts | The pharmacist's directives — who is assigned where, swarm state changes. |
-| `agent:<id>` topic | `apprentice:<id>` | Per-agent broadcasts | Private channel to a specific apprentice — their output, state changes. |
+### Ingredients (Tasks)
 
-## MCP Layer (Agent-Orchestrator Interface)
+An ingredient is a single step needed to complete a concoction. Ingredients can depend on other ingredients (you need to prepare the base before adding the active compound).
 
-| Current Name | Apothecary Name | Role | Rationale |
-|---|---|---|---|
-| MCP Server | **Counter** | HTTP endpoint for agent communication | The counter is where apprentices come to receive instructions and report back. The public-facing interface of the shop. |
-| MCP Tools | **Instruments** | Individual tool endpoints | The instruments laid out on the counter — each one for a specific purpose. |
+```
+Ingredient = one step in the recipe
+Task       = one step in the worktree
+```
 
-### Individual MCP Tools
+- ID prefix: `t-` (or consider `ig-` for ingredient)
+- Ordered by priority and dependencies
+- Created by brewers when they decompose complex concoctions
 
-| Current Tool | Apothecary Name | What It Does |
+### Brewers (Agents)
+
+A brewer is a Claude Code process running in a worktree. The dispatcher assigns concoctions to available brewers. Each brewer works on one concoction at a time.
+
+```
+Brewer = Claude Code process + worktree assignment
+Agent  = AgentWorker + port + watchdog
+```
+
+- Brewer states: `idle` / `starting` / `working` / `error`
+- Managed by the AgentSupervisor (standard DynamicSupervisor)
+
+## MCP Tools
+
+The MCP tools are the brewer's interface to the apothecary. These could be renamed to fit the theme:
+
+| Current Tool | Themed Name | What It Does |
 |---|---|---|
-| `worktree_status` | **examine_prescription** | View your prescription and all its preparations |
-| `list_tasks` | **browse_formulary** | Browse the formulary for preparations |
-| `get_task` | **inspect_preparation** | Examine a specific preparation in detail |
-| `create_task` | **compound** | Create a new preparation (decompose work) |
-| `complete_task` | **seal** | Seal a finished preparation (mark done) |
-| `add_notes` | **annotate** | Add notes to the preparation log |
-| `add_dependency` | **chain** | Declare that one preparation requires another first |
+| `worktree_status` | `concoction_status` | View the concoction and all its ingredients |
+| `list_tasks` | `list_ingredients` | List ingredients (with optional status filter) |
+| `get_task` | `get_ingredient` | Examine a specific ingredient |
+| `create_task` | `add_ingredient` | Add a new ingredient to the concoction |
+| `complete_task` | `finish_ingredient` | Mark an ingredient as done |
+| `add_notes` | `add_notes` | Log progress notes (fine as-is) |
+| `add_dependency` | `add_dependency` | Wire ingredient ordering (fine as-is) |
 
-## Web UI (The Shop Window)
+## UI Labels
 
-| Current Name | Apothecary Name | Role | Rationale |
-|---|---|---|---|
-| `DashboardLive` | **Ledger Board** | Main dashboard view | The large board at the front of the shop showing all current orders, their status, and who's working on what. |
-| `AgentLive` | **Apprentice Glass** | Agent detail view | A looking glass focused on one apprentice — watch them work in real time. |
-| `TaskDetailLive` | **Prescription Loupe** | Task detail view | A magnifying loupe to examine one prescription's full details, dependencies, and history. |
-| `DashboardComponents` | **Signage** | UI component library | The shop's signage system — status badges, priority markers, cards. |
+The dashboard can use the themed names in its UI:
 
-## Statuses
+- "Worktrees" section heading -> "Concoctions"
+- "Tasks" section heading -> "Ingredients"
+- "Agents" section heading -> "Brewers"
+- Status badges and cards can use the same terminology
 
-| Current Status | Apothecary Name | Meaning |
+## Module Rename Plan
+
+Only the domain modules need renaming. OTP wrappers keep their names.
+
+| Current Module | New Module | Notes |
 |---|---|---|
-| `"open"` | **prescribed** | Work has been ordered but not yet started |
-| `"in_progress"` | **compounding** | An apprentice is actively working on it |
-| `"blocked"` | **awaiting ingredients** | Cannot proceed — depends on other preparations |
-| `"done"` | **sealed** | Preparation complete and bottled |
+| `Apothecary.Worktree` | `Apothecary.Concoction` | Struct + Mnesia record helpers |
+| `Apothecary.Task` | `Apothecary.Ingredient` | Struct + Mnesia record helpers (also eliminates `Elixir.Task` name conflict) |
+| `Apothecary.AgentWorker` | `Apothecary.Brewer` | Port-based Claude process |
+| `Apothecary.WorktreeManager` | `Apothecary.ConcoctionManager` | Git worktree lifecycle |
 
-### Agent Statuses
+Modules that stay as they are:
 
-| Current Status | Apothecary Name | Meaning |
-|---|---|---|
-| `:idle` | **resting** | Apprentice is available for new work |
-| `:starting` | **donning apron** | Apprentice is preparing their workstation |
-| `:working` | **brewing** | Apprentice is actively compounding |
-| `:error` | **fumbled** | Something went wrong — the potion exploded |
+| Module | Why |
+|---|---|
+| `Apothecary.Store` | GenServer managing Mnesia — standard pattern |
+| `Apothecary.TaskManager` | GenServer for CRUD — could become `Apothecary.RecipeBook` but not required |
+| `Apothecary.Dispatcher` | GenServer for dispatch — standard pattern |
+| `Apothecary.AgentSupervisor` | DynamicSupervisor — standard OTP |
+| `Apothecary.CLI` | Utility module — no domain concept |
+| `Apothecary.MCP.Server` | Infrastructure — standard naming |
 
-### Dispatcher States
+## Mnesia Tables
 
-| Current Status | Apothecary Name | Meaning |
-|---|---|---|
-| `:paused` | **shop closed** | The pharmacist is not accepting new orders |
-| `:running` | **shop open** | The pharmacist is actively dispatching work |
+| Current Table | New Table |
+|---|---|
+| `apothecary_worktrees` | `apothecary_concoctions` |
+| `apothecary_tasks` | `apothecary_ingredients` |
 
-## ID Prefixes
+## Glossary
 
-| Current Prefix | Apothecary Prefix | Used For |
-|---|---|---|
-| `wt-` | `rx-` | Prescriptions (worktrees) — Rx is the traditional pharmacy symbol |
-| `t-` | `prep-` | Preparations (tasks) |
-| `agent-` | `apt-` | Apprentices (agents) — short for "apprentice" |
-
-## Configuration
-
-| Current Config Key | Apothecary Name | Purpose |
-|---|---|---|
-| `:project_dir` | `:shop_location` | Where the apothecary shop is located |
-| `:poll_interval` | `:sentinel_rounds` | How often the sentinel makes their rounds |
-| `:bd_path` | `:materia_medica_path` | Path to the external reference catalog |
-| `:claude_path` | `:apprentice_tools` | Path to the apprentice's primary tool |
-| `:skip_startup` | `:skip_opening` | Skip the morning opening ritual |
-
-## Mix Tasks
-
-| Current Name | Apothecary Name | Purpose |
-|---|---|---|
-| `mix apothecary.setup` | `mix apothecary.furnish` | Set up the shop — install shelves, stock supplies, prepare the workspace |
+| Term | Meaning |
+|---|---|
+| **Apothecary** | The application — the shop where concoctions are brewed |
+| **Concoction** | A unit of work (worktree + PR). Composed of ingredients. |
+| **Ingredient** | A single step/task within a concoction |
+| **Brewer** | A Claude Code agent that works on concoctions |
+| **Recipe** | The set of ingredients needed for a concoction (implicit, not a separate struct) |
 
 ---
 
-## Full Glossary
+## Adoption
 
-| Apothecary Term | Technical Equivalent | Quick Definition |
-|---|---|---|
-| **Annotate** | `add_notes` MCP tool | Record observations in the preparation log |
-| **Apothecary** | The application | The shop itself |
-| **Apprentice** | `AgentWorker` | A worker who compounds preparations |
-| **Apprentice Glass** | `AgentLive` | UI view watching one apprentice work |
-| **Brewing** | Agent `:working` status | Actively compounding a preparation |
-| **Browse Formulary** | `list_tasks` MCP tool | Search the formulary for preparations |
-| **Chain** | `add_dependency` MCP tool | Link preparations in sequence |
-| **Chronicle** | `Git` module | The historical record of all changes |
-| **Compound** | `create_task` MCP tool | Create a new preparation |
-| **Compounding** | `"in_progress"` status | Actively being worked on |
-| **Counter** | MCP Server | Interface where apprentices receive and report work |
-| **Credentials** | `AgentState` | An apprentice's current state and assignment |
-| **Examine Prescription** | `worktree_status` MCP tool | View prescription overview |
-| **Formulary** | `TaskManager` | Master reference of all prescriptions and preparations |
-| **Fumbled** | Agent `:error` status | Something went wrong |
-| **Guild** | `AgentSupervisor` | Manages all apprentices |
-| **Herald** | `PubSub` | Broadcasts events to all listeners |
-| **Herbalist** | `WorktreeManager` | Tends isolated gardens (git worktrees) |
-| **Inspect Preparation** | `get_task` MCP tool | View one preparation's full details |
-| **Instruments** | MCP Tools | Specific tools at the counter |
-| **Ledger Board** | `DashboardLive` | Main status display |
-| **Ledgers** | Mnesia tables | Record books in the vault |
-| **Materia Medica** | `Beads` module | External reference catalog |
-| **Mortar** | `CLI` module | Basic command execution tool |
-| **Opening** | `Startup` | Morning validation & initialization |
-| **Order Slip** | `Bead` struct | Legacy task record |
-| **Pharmacist** | `Dispatcher` | Assigns prescriptions to apprentices |
-| **Preparation** | `Task` struct | A single step within a prescription |
-| **Prescribed** | `"open"` status | Ordered but not yet started |
-| **Prescription** | `Worktree` struct | A unit of work to be fulfilled |
-| **Prescription Loupe** | `TaskDetailLive` | UI for examining one prescription |
-| **Resting** | Agent `:idle` status | Available for new work |
-| **Seal** | `complete_task` MCP tool | Mark a preparation as finished |
-| **Sealed** | `"done"` status | Complete and bottled |
-| **Sentinel** | `Poller` | Watches for external changes |
-| **Shop** | `Application` | The OTP supervision tree |
-| **Shop Closed** | Dispatcher `:paused` | Not accepting new work |
-| **Shop Open** | Dispatcher `:running` | Actively dispatching |
-| **Signage** | `DashboardComponents` | UI component library |
-| **Vault** | `Store` | Mnesia persistence layer |
-
----
-
-## Notes on Adoption
-
-This naming scheme can be adopted incrementally:
-
-1. **Documentation first** — Use these names in docs, comments, and UI labels immediately
-2. **UI labels** — Update dashboard text ("Agents" -> "Apprentices", "Tasks" -> "Preparations")
-3. **Module renames** — The most invasive change; do in a dedicated refactor pass:
-   - `AgentWorker` -> `Apprentice`
-   - `AgentSupervisor` -> `Guild`
-   - `Dispatcher` -> `Pharmacist`
-   - etc.
-4. **ID prefixes** — Update `wt-` to `rx-` and `t-` to `prep-` (requires migration)
-
-The names that work best immediately without any code changes are the **status labels** and **UI terminology** — these can go into the dashboard today and make the whole experience more cohesive.
+1. **UI labels first** — Update dashboard headings and card labels. Zero code risk.
+2. **MCP tool names** — Rename the 5 tools that map to domain concepts. Agents will adapt.
+3. **Structs and modules** — Rename `Worktree` -> `Concoction`, `Task` -> `Ingredient`, `AgentWorker` -> `Brewer`. This also fixes the `Elixir.Task` naming conflict.
+4. **Mnesia tables** — Rename tables with a migration. Do last since it touches persistence.
