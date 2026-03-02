@@ -951,6 +951,9 @@ defmodule ApothecaryWeb.DashboardLive do
         String.starts_with?(to_string(item.id), "wt-")
       end)
 
+    # Hide cancelled concoctions (PR closed without merge)
+    worktrees = Enum.reject(worktrees, &(&1.status == "cancelled"))
+
     tasks_by_wt =
       Enum.group_by(tasks, fn t ->
         t.concoction_id || t.parent
