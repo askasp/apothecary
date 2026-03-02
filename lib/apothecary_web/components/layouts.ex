@@ -35,22 +35,8 @@ defmodule ApothecaryWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <header class="navbar bg-base-200 px-4 sm:px-6 lg:px-8 border-b border-base-300">
-      <div class="flex-1">
-        <.link navigate={~p"/"} class="flex items-center gap-2">
-          <.icon name="hero-beaker" class="size-6 text-primary" />
-          <span class="text-lg font-bold">Apothecary</span>
-        </.link>
-      </div>
-      <div class="flex-none flex items-center gap-4">
-        <.theme_toggle />
-      </div>
-    </header>
-
-    <main class="px-4 py-6 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-7xl space-y-4">
-        {render_slot(@inner_block)}
-      </div>
+    <main class="font-mono text-sm h-screen">
+      {render_slot(@inner_block)}
     </main>
 
     <.flash_group flash={@flash} />

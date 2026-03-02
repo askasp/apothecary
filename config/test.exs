@@ -24,8 +24,8 @@ config :phoenix_live_view,
 config :phoenix,
   sort_verified_routes_query_params: true
 
-# Disable poller and startup in tests
+# Disable startup checks in tests, use ram_copies for Mnesia
 config :apothecary,
   project_dir: nil,
-  poll_interval: :timer.hours(24),
-  skip_startup: true
+  skip_startup: true,
+  mnesia_copies: :ram_copies

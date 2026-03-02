@@ -436,115 +436,96 @@ And **never** do this:
 
 <!-- usage-rules-end -->
 
-<!-- BEGIN BEADS INTEGRATION -->
-## Issue Tracking with bd (beads)
+<!-- BEGIN INGREDIENT MANAGEMENT -->
+## Ingredient Management via MCP
 
-**IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
+**IMPORTANT**: This project uses **MCP tools** for ALL ingredient tracking. The Apothecary orchestrator manages state via Mnesia. Do NOT use markdown TODOs, external issue trackers, or other tracking methods.
 
-### Why bd?
+### Available MCP Tools
 
-- Dependency-aware: Track blockers and relationships between issues
-- Git-friendly: Dolt-powered version control with native sync
-- Agent-optimized: JSON output, ready work detection, discovered-from links
-- Prevents duplicate tracking systems and confusion
-
-### Quick Start
-
-**Check for ready work:**
-
-```bash
-bd ready --json
-```
-
-**Create new issues:**
-
-```bash
-bd create "Issue title" --description="Detailed context" -t bug|feature|task -p 0-4 --json
-bd create "Issue title" --description="What this issue is about" -p 1 --deps discovered-from:bd-123 --json
-```
-
-**Claim and update:**
-
-```bash
-bd update <id> --claim --json
-bd update bd-42 --priority 1 --json
-```
-
-**Complete work:**
-
-```bash
-bd close bd-42 --reason "Completed" --json
-```
-
-### Issue Types
-
-- `bug` - Something broken
-- `feature` - New functionality
-- `task` - Work item (tests, docs, refactoring)
-- `epic` - Large feature with subtasks
-- `chore` - Maintenance (dependencies, tooling)
+| Tool | Purpose |
+|------|---------|
+| `concoction_status` | See your concoction overview and all ingredients |
+| `list_ingredients` | List ingredients (with optional status filter) |
+| `create_ingredient` | Create a sub-ingredient (for decomposing complex work) |
+| `complete_ingredient` | Mark an ingredient as done with optional summary |
+| `add_notes` | Log progress notes (persists across restarts) |
+| `get_ingredient` | Get full details of a specific ingredient |
+| `add_dependency` | Wire dependencies between ingredients |
 
 ### Priorities
 
 - `0` - Critical (security, data loss, broken builds)
 - `1` - High (major features, important bugs)
-- `2` - Medium (default, nice-to-have)
+- `2` - Medium (default)
 - `3` - Low (polish, optimization)
 - `4` - Backlog (future ideas)
 
-### Workflow for AI Agents
+### Workflow for Brewers
 
-1. **Check ready work**: `bd ready` shows unblocked issues
-2. **Claim your task atomically**: `bd update <id> --claim`
-3. **Work on it**: Implement, test, document
-4. **Discover new work?** Create linked issue:
-   - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
-5. **Complete**: `bd close <id> --reason "Done"`
+1. **Check your work**: Use `concoction_status` to see your concoction and any pre-created ingredients
+2. **Decompose** (if complex): Use `create_ingredient` to break work into ordered steps
+3. **Wire deps** (if needed): Use `add_dependency` to set blocking relationships
+4. **Work**: Implement each ingredient in priority order
+5. **Track**: Use `complete_ingredient` when done with each ingredient
+6. **Log progress**: Use `add_notes` to record decisions and context
+7. **Commit**: Commit after each logical unit of work
 
-### Auto-Sync
+### Auto-Decomposition
 
-bd automatically syncs via Dolt:
+When you receive work, assess its complexity:
 
-- Each write auto-commits to Dolt history
-- Use `bd dolt push`/`bd dolt pull` for remote sync
-- No manual export/import needed!
+- **Small and self-contained**: Just do it directly. Use `complete_ingredient` when done.
+- **Complex (multiple files/systems)**: Decompose first:
+  1. Use `create_ingredient` for each logical step
+  2. Use `add_dependency` to wire ordering if ingredients depend on each other
+  3. Use `list_ingredients` to verify the plan looks right
+  4. Start working on the first ready ingredient
+
+### Progress Notes
+
+Use `add_notes` to log context that survives brewer restarts:
+- What you've tried and what worked/didn't
+- Key decisions and why you made them
+- Blockers or issues encountered
+- Partial progress on long ingredients
 
 ### Important Rules
 
-- ✅ Use bd for ALL task tracking
-- ✅ Always use `--json` flag for programmatic use
-- ✅ Link discovered work with `discovered-from` dependencies
-- ✅ Check `bd ready` before asking "what should I work on?"
-- ❌ Do NOT create markdown TODO lists
-- ❌ Do NOT use external issue trackers
-- ❌ Do NOT duplicate tracking systems
+- Use MCP tools for ALL ingredient tracking
+- NEVER create markdown TODO lists or other tracking systems
+- DO use `add_notes` for context that future brewers might need
+- DO use `complete_ingredient` to mark each finished step
 
-For more details, see README.md and docs/QUICKSTART.md.
+<!-- END INGREDIENT MANAGEMENT -->
 
-<!-- END BEADS INTEGRATION -->
+## Session Completion
 
-## Landing the Plane (Session Completion)
+When your work is done:
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd sync
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
+1. **Ensure all changes are committed** - Work is NOT done until committed
+2. **Mark ingredients as done** - Use `complete_ingredient` for each finished ingredient
+3. **Add final summary** - Use `add_notes` on the concoction with what was accomplished
+4. **Exit cleanly** - The orchestrator will:
+   - Push your branch to remote
+   - Create a pull request
+   - Close the concoction
 
 **CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
+- Work is NOT complete until all changes are committed
+- NEVER push to main or merge into main
+- NEVER push at all - the orchestrator handles pushing and PR creation
+- NEVER create PRs yourself - the orchestrator handles this
+- DO commit frequently with descriptive messages
+- DO include the concoction or ingredient ID in commit messages
+
+## Non-Interactive Shell Commands
+
+**ALWAYS use non-interactive flags** with file operations to avoid hanging:
+
+```bash
+cp -f source dest           # NOT: cp source dest
+mv -f source dest           # NOT: mv source dest
+rm -f file                  # NOT: rm file
+rm -rf directory            # NOT: rm -r directory
+```

@@ -18,14 +18,14 @@ defmodule ApothecaryWeb.Router do
     pipe_through :browser
 
     live "/", DashboardLive
-    live "/tasks/:id", TaskDetailLive
-    live "/agents/:id", AgentLive
+    live "/ingredients/:id", DashboardLive
+    live "/brewers/:id", AgentLive
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", ApothecaryWeb do
-  #   pipe_through :api
-  # end
+  # MCP endpoint for agent-to-orchestrator communication
+  scope "/mcp" do
+    forward "/", Hermes.Server.Transport.StreamableHTTP.Plug, server: Apothecary.MCP.Server
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:apothecary, :dev_routes) do

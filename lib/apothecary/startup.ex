@@ -1,19 +1,19 @@
 defmodule Apothecary.Startup do
   @moduledoc """
-  Validates the environment and auto-initializes beads on application boot.
+  Validates the environment on application boot.
   Called from Application.start/2.
   """
 
   require Logger
 
   def run do
-    project_dir = Application.get_env(:apothecary, :project_dir)
+    project_dir = Application.get_env(:apothecary, :project_dir) || File.cwd!()
+    Application.put_env(:apothecary, :project_dir, project_dir)
 
     with :ok <- validate_project_dir(project_dir),
          :ok <- validate_git_repo(project_dir),
-         :ok <- check_bd_binary(),
          :ok <- check_claude_binary(),
-         :ok <- maybe_init_beads(project_dir),
+         :ok <- check_gh_binary(),
          :ok <- maybe_write_claude_md(project_dir) do
       Logger.info("Apothecary started for project: #{project_dir}")
       :ok
@@ -28,8 +28,6 @@ defmodule Apothecary.Startup do
     end
   end
 
-  defp validate_project_dir(nil), do: {:warn, "no project_dir configured"}
-
   defp validate_project_dir(dir) do
     if File.dir?(dir), do: :ok, else: {:error, "project_dir does not exist: #{dir}"}
   end
@@ -41,49 +39,24 @@ defmodule Apothecary.Startup do
     end
   end
 
-  defp check_bd_binary do
-    bd = Application.get_env(:apothecary, :bd_path, "bd")
-
-    if System.find_executable(bd) do
-      :ok
-    else
-      {:warn, "bd (beads) not found in PATH. Install with: npm install -g @beads/bd"}
-    end
-  end
-
   defp check_claude_binary do
     claude = Application.get_env(:apothecary, :claude_path, "claude")
 
     if System.find_executable(claude) do
       :ok
     else
-      {:warn, "claude not found in PATH. Swarm will fail until claude CLI is available."}
+      {:warn,
+       "WARNING: '#{claude}' not found in PATH! " <>
+         "The swarm WILL FAIL to spawn agents. " <>
+         "Install Claude Code CLI or set :claude_path in config."}
     end
   end
 
-  defp maybe_init_beads(dir) do
-    bd = Application.get_env(:apothecary, :bd_path, "bd")
-
-    unless System.find_executable(bd) do
-      {:warn, "skipping beads init (bd not in PATH)"}
+  defp check_gh_binary do
+    if System.find_executable("gh") do
+      :ok
     else
-      beads_dir = Path.join(dir, ".beads")
-
-      if File.dir?(beads_dir) do
-        Logger.debug("Beads already initialized in #{dir}")
-        :ok
-      else
-        Logger.info("Initializing beads in #{dir}...")
-
-        case Apothecary.CLI.run(bd, ["init", "--quiet"], cd: dir) do
-          {:ok, _} ->
-            Logger.info("Beads initialized successfully")
-            :ok
-
-          {:error, {_, msg}} ->
-            {:warn, "beads init failed: #{msg}"}
-        end
-      end
+      {:warn, "gh (GitHub CLI) not found in PATH. PR creation will fail after agents finish work."}
     end
   end
 
@@ -102,52 +75,39 @@ defmodule Apothecary.Startup do
   @doc "Returns the default CLAUDE.md content for swarm agents."
   def default_claude_md do
     """
-    ## Issue Tracking
+    ## Ingredient Management
 
-    We use **beads** (`bd`) for all task tracking. Always use `--json` flag.
+    Ingredients are managed by the Apothecary orchestrator via MCP tools.
+
+    ### MCP Tools
+    - **concoction_status** — See your concoction overview and all ingredients
+    - **list_ingredients** — List ingredients (with optional status filter)
+    - **create_ingredient** — Create a sub-ingredient (for decomposing complex work)
+    - **complete_ingredient** — Mark an ingredient as done
+    - **add_notes** — Log progress notes (persists across restarts)
+    - **get_ingredient** — Get full details of an ingredient
+    - **add_dependency** — Wire dependencies between ingredients
 
     ### Workflow
-    1. On session start: check `bd ready --json` for available tasks
-    2. Do the work on your current branch (a git worktree branch, NOT main)
-    3. When done: commit, push your branch
-    4. Use `bd update <id> --notes "..."` to log progress
+    1. Use `concoction_status` to see your concoction and any pre-created ingredients
+    2. If work is complex, use `create_ingredient` to decompose into steps
+    3. Do the work on your current branch (a git worktree branch, NOT main)
+    4. Use `complete_ingredient` as you finish each step
+    5. Commit when done with each piece of work
 
     ### Rules
     - **NEVER push to main.** You are always on a feature branch in a worktree.
-    - **NEVER use `bd edit`** (opens $EDITOR, which you can't use).
-    - Always `git push` before finishing. Unpushed work is lost.
-    - Use `bd update <id> --notes "..."` to log progress for context survival.
-    - If blocked: `bd update <id> --status blocked --notes "reason"`
+    - **NEVER push at all** — the orchestrator handles pushing and PR creation.
+    - Commit when done with each piece of work.
+    - Use MCP tools for ALL ingredient tracking — no markdown TODOs.
 
     ### Auto-Decomposition
-    When you receive a task, assess its complexity:
+    - **Small ingredient:** just do it directly, use `complete_ingredient` when done.
+    - **Complex ingredient:** use `create_ingredient` to break into steps, work through each.
 
-    - **If the task is small and self-contained:** just do it directly.
-    - **If the task touches multiple files/systems, decompose it:**
-
-      **Phase 1 — Create ALL subtasks first:**
-      ```
-      bd create "Subtask title" -t task -p 1 --parent <parent-id> --json
-      ```
-
-      **Phase 2 — Wire ALL dependencies IMMEDIATELY:**
-      ```
-      bd dep add <blocked_id> <blocker_id>
-      ```
-
-      **Phase 3 — Verify:**
-      ```
-      bd dep tree <parent-id>
-      bd ready --json
-      ```
-
-      **Phase 4 — Start working** on the first ready subtask.
-
-    ### PR Workflow
-    - After completing work, always create a PR:
-      `gh pr create --base main --head $(git branch --show-current) --fill`
-    - Include the bead ID in the PR title
-    - Do NOT delete your branch after creating the PR
+    ### Session Completion
+    - Commit all changes and mark ingredients done via `complete_ingredient`
+    - The orchestrator handles pushing, PR creation, and concoction closure
     """
   end
 end

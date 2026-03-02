@@ -10,9 +10,8 @@ import Config
 config :apothecary,
   generators: [timestamp_type: :utc_datetime],
   project_dir: nil,
-  poll_interval: 2_000,
-  bd_path: "bd",
-  claude_path: "claude"
+  claude_path: "claude",
+  mnesia_copies: :disc_copies
 
 # Configure the endpoint
 config :apothecary, ApothecaryWeb.Endpoint,

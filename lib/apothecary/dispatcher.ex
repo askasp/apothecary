@@ -1,9 +1,11 @@
 defmodule Apothecary.Dispatcher do
   @moduledoc """
-  Coordinates task assignment between the beads queue and agent workers.
+  Coordinates concoction assignment between the ingredient queue and brewers.
 
-  Starts in :paused state. The user starts the swarm from the UI, which
-  transitions to :running and begins claiming tasks for idle agents.
+  Concoction-centric dispatch model:
+  - Each concoction gets its own git worktree and one brewer
+  - Brewers work on all ingredients within their assigned concoction
+  - Different concoctions can run in parallel across different brewers
   """
 
   use GenServer
@@ -11,7 +13,10 @@ defmodule Apothecary.Dispatcher do
 
   @pubsub Apothecary.PubSub
   @topic "dispatcher:updates"
-  @dispatch_interval 3_000
+  @dispatch_interval 5_000
+  @max_fast_failures 3
+  @backoff_ms 30_000
+  @fast_failure_window_ms 60_000
 
   # Client API
 
@@ -19,24 +24,24 @@ defmodule Apothecary.Dispatcher do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @doc "Start the swarm with N agents."
-  def start_swarm(agent_count) do
-    GenServer.call(__MODULE__, {:start_swarm, agent_count}, 60_000)
+  @doc "Start the swarm with N brewers."
+  def start_swarm(brewer_count) do
+    GenServer.call(__MODULE__, {:start_swarm, brewer_count}, 60_000)
   end
 
-  @doc "Stop the swarm, terminating all agents."
+  @doc "Stop the swarm, terminating all brewers."
   def stop_swarm do
     GenServer.call(__MODULE__, :stop_swarm, 30_000)
   end
 
-  @doc "Set the target agent count (scale up/down)."
+  @doc "Set the target brewer count (scale up/down)."
   def set_agent_count(count) do
     GenServer.call(__MODULE__, {:set_agent_count, count}, 60_000)
   end
 
-  @doc "Report an agent as idle and ready for the next task."
-  def agent_idle(agent_pid) do
-    GenServer.cast(__MODULE__, {:agent_idle, agent_pid})
+  @doc "Report a brewer as idle and ready for the next concoction."
+  def agent_idle(brewer_pid) do
+    GenServer.cast(__MODULE__, {:agent_idle, brewer_pid})
   end
 
   @doc "Get dispatcher status."
@@ -53,12 +58,19 @@ defmodule Apothecary.Dispatcher do
 
   @impl true
   def init(_opts) do
+    # Subscribe to ingredient updates for reactive dispatch
+    Apothecary.Ingredients.subscribe()
+
     state = %{
       status: :paused,
       target_count: 0,
       agent_pids: [],
       idle_agents: [],
-      agents: %{}
+      agents: %{},
+      # Track consecutive fast failures per brewer slot for backoff
+      # %{slot_id => %{count: N, last_failure: monotonic_time}}
+      failure_tracker: %{},
+      backoff_timers: %{}
     }
 
     {:ok, state}
@@ -66,7 +78,7 @@ defmodule Apothecary.Dispatcher do
 
   @impl true
   def handle_call({:start_swarm, count}, _from, state) do
-    Logger.info("Starting swarm with #{count} agents")
+    Logger.info("Starting swarm with #{count} brewers")
     state = %{state | status: :running, target_count: count}
     state = scale_agents(state)
     schedule_dispatch()
@@ -79,8 +91,11 @@ defmodule Apothecary.Dispatcher do
     Logger.info("Stopping swarm")
 
     Enum.each(state.agent_pids, fn pid ->
-      Apothecary.AgentSupervisor.stop_agent(pid)
+      Apothecary.BrewerSupervisor.stop_brewer(pid)
     end)
+
+    # Cancel any pending backoff timers
+    Enum.each(state.backoff_timers, fn {_slot, timer} -> Process.cancel_timer(timer) end)
 
     state = %{
       state
@@ -88,7 +103,9 @@ defmodule Apothecary.Dispatcher do
         target_count: 0,
         agent_pids: [],
         idle_agents: [],
-        agents: %{}
+        agents: %{},
+        failure_tracker: %{},
+        backoff_timers: %{}
     }
 
     broadcast(state)
@@ -119,15 +136,21 @@ defmodule Apothecary.Dispatcher do
   @impl true
   def handle_cast({:agent_idle, pid}, state) do
     idle = if pid in state.idle_agents, do: state.idle_agents, else: [pid | state.idle_agents]
-    state = %{state | idle_agents: idle}
+
+    # Reset failure counter on successful idle (brewer completed work)
+    brewer_state = state.agents[pid]
+    slot_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(pid)
+    failure_tracker = Map.delete(state.failure_tracker, slot_id)
+
+    state = %{state | idle_agents: idle, failure_tracker: failure_tracker}
     state = try_dispatch(state)
     broadcast(state)
     {:noreply, state}
   end
 
   @impl true
-  def handle_cast({:agent_update, pid, agent_state}, state) do
-    agents = Map.put(state.agents, pid, agent_state)
+  def handle_cast({:agent_update, pid, brewer_state}, state) do
+    agents = Map.put(state.agents, pid, brewer_state)
     state = %{state | agents: agents}
     broadcast(state)
     {:noreply, state}
@@ -145,13 +168,52 @@ defmodule Apothecary.Dispatcher do
     {:noreply, state}
   end
 
+  # React to ingredient state changes (replaces polling)
   @impl true
-  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
-    Logger.warning("Agent #{inspect(pid)} went down")
+  def handle_info({:ingredients_update, _state}, %{status: :running} = state) do
+    state = try_dispatch(state)
+    {:noreply, state}
+  end
+
+  def handle_info({:ingredients_update, _state}, state) do
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
+    brewer_state = state.agents[pid]
+    slot_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(pid)
+    Logger.warning("Brewer #{inspect(slot_id)} (#{inspect(pid)}) went down: #{inspect(reason)}")
+
     agent_pids = List.delete(state.agent_pids, pid)
     idle_agents = List.delete(state.idle_agents, pid)
     agents = Map.delete(state.agents, pid)
     state = %{state | agent_pids: agent_pids, idle_agents: idle_agents, agents: agents}
+
+    # Track failure for backoff
+    state = record_failure(state, slot_id)
+
+    if should_backoff?(state, slot_id) do
+      Logger.warning(
+        "Brewer slot #{slot_id} hit #{@max_fast_failures} fast failures, " <>
+          "backing off #{div(@backoff_ms, 1000)}s before respawn"
+      )
+
+      timer = Process.send_after(self(), {:backoff_expired, slot_id}, @backoff_ms)
+      state = put_in(state.backoff_timers[slot_id], timer)
+      broadcast(state)
+      {:noreply, state}
+    else
+      state = scale_agents(state)
+      broadcast(state)
+      {:noreply, state}
+    end
+  end
+
+  @impl true
+  def handle_info({:backoff_expired, slot_id}, state) do
+    Logger.info("Backoff expired for brewer slot #{slot_id}, attempting respawn")
+    state = %{state | backoff_timers: Map.delete(state.backoff_timers, slot_id)}
     state = scale_agents(state)
     broadcast(state)
     {:noreply, state}
@@ -173,13 +235,13 @@ defmodule Apothecary.Dispatcher do
       current < target ->
         new_agents =
           for id <- (current + 1)..target do
-            case Apothecary.AgentSupervisor.start_agent(id) do
+            case Apothecary.BrewerSupervisor.start_brewer(id) do
               {:ok, pid} ->
                 Process.monitor(pid)
                 pid
 
               {:error, reason} ->
-                Logger.error("Failed to start agent #{id}: #{inspect(reason)}")
+                Logger.error("Failed to start brewer #{id}: #{inspect(reason)}")
                 nil
             end
           end
@@ -193,7 +255,7 @@ defmodule Apothecary.Dispatcher do
 
       current > target ->
         {to_stop, to_keep} = Enum.split(state.agent_pids, current - target)
-        Enum.each(to_stop, &Apothecary.AgentSupervisor.stop_agent/1)
+        Enum.each(to_stop, &Apothecary.BrewerSupervisor.stop_brewer/1)
 
         %{
           state
@@ -211,20 +273,92 @@ defmodule Apothecary.Dispatcher do
   defp try_dispatch(%{status: :paused} = state), do: state
 
   defp try_dispatch(state) do
-    case Apothecary.Beads.ready() do
-      {:ok, [task | _]} ->
-        case Apothecary.Beads.claim(task.id) do
-          {:ok, _} ->
-            [agent_pid | rest] = state.idle_agents
-            Apothecary.AgentWorker.assign_task(agent_pid, task)
-            %{state | idle_agents: rest}
+    case Apothecary.Ingredients.ready_concoctions() do
+      [] ->
+        state
 
-          {:error, _} ->
-            state
+      concoctions ->
+        dispatch_first_available(concoctions, state)
+    end
+  end
+
+  defp dispatch_first_available([], state), do: state
+  defp dispatch_first_available(_concoctions, %{idle_agents: []} = state), do: state
+
+  defp dispatch_first_available([concoction | rest], state) do
+    [brewer_pid | _] = state.idle_agents
+    brewer_state = state.agents[brewer_pid]
+    brewer_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(brewer_pid)
+
+    # Atomically claim the concoction
+    case Apothecary.Ingredients.claim_concoction(concoction.id, brewer_id) do
+      {:ok, claimed} ->
+        # Create/get git worktree
+        case ensure_git_worktree(concoction) do
+          {:ok, path, branch} ->
+            # Update concoction record with git info
+            Apothecary.Ingredients.update_concoction(concoction.id, %{
+              git_path: path,
+              git_branch: branch
+            })
+
+            # Assign to brewer
+            [_ | rest_idle] = state.idle_agents
+            Apothecary.Brewer.assign_concoction(brewer_pid, claimed, path, branch)
+            %{state | idle_agents: rest_idle}
+
+          {:error, reason} ->
+            Logger.error(
+              "Failed to create git worktree for #{concoction.id}: #{inspect(reason)}"
+            )
+
+            Apothecary.Ingredients.release_concoction(concoction.id)
+            dispatch_first_available(rest, state)
         end
 
-      _ ->
-        state
+      {:error, _} ->
+        dispatch_first_available(rest, state)
+    end
+  end
+
+  defp ensure_git_worktree(%{git_path: path, git_branch: branch})
+       when not is_nil(path) and not is_nil(branch) do
+    if File.dir?(path) do
+      {:ok, path, branch}
+    else
+      # Git worktree was removed, recreate
+      Apothecary.WorktreeManager.checkout(path)
+    end
+  end
+
+  defp ensure_git_worktree(concoction) do
+    Apothecary.WorktreeManager.checkout(concoction.id)
+  end
+
+  defp record_failure(state, slot_id) do
+    now = System.monotonic_time(:millisecond)
+
+    entry =
+      case state.failure_tracker[slot_id] do
+        %{count: count, first_failure: first} ->
+          if now - first > @fast_failure_window_ms do
+            # Window expired, start fresh
+            %{count: 1, first_failure: now}
+          else
+            %{count: count + 1, first_failure: first}
+          end
+
+        nil ->
+          %{count: 1, first_failure: now}
+      end
+
+    %{state | failure_tracker: Map.put(state.failure_tracker, slot_id, entry)}
+  end
+
+  defp should_backoff?(state, slot_id) do
+    case state.failure_tracker[slot_id] do
+      %{count: count} when count >= @max_fast_failures -> true
+      _ -> false
     end
   end
 

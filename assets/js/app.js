@@ -27,6 +27,61 @@ import topbar from "../vendor/topbar"
 
 let Hooks = {
   ...colocatedHooks,
+  DashboardKeys: {
+    mounted() {
+      this.el.focus()
+
+      this.handleEvent("focus-element", ({ selector }) => {
+        const el = document.querySelector(selector)
+        if (el) el.focus()
+      })
+      this.handleEvent("scroll-to-selected", () => {
+        const el = document.querySelector("[data-selected]")
+        if (el) el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" })
+      })
+      this.handleEvent("blur-input", () => {
+        if (document.activeElement) document.activeElement.blur()
+        this.el.focus()
+      })
+      this.handleEvent("scroll-to-diff-file", () => {
+        const el = document.querySelector("[data-diff-selected]")
+        if (el) el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" })
+      })
+    },
+    updated() {
+      if (!document.activeElement || document.activeElement === document.body) {
+        this.el.focus()
+      }
+    }
+  },
+  TextareaSubmit: {
+    mounted() {
+      this.el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault()
+          const text = this.el.value.trim()
+          if (text) {
+            this.pushEvent("submit-input", { text })
+            this.el.value = ""
+          }
+        }
+      })
+    }
+  },
+  InlineSubmit: {
+    mounted() {
+      this.el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault()
+          const form = this.el.closest("form")
+          if (form && this.el.value.trim()) {
+            form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+            this.el.value = ""
+          }
+        }
+      })
+    }
+  },
   ScrollBottom: {
     mounted() {
       this.scrollToBottom()
@@ -53,7 +108,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
 })
 
 // Show progress bar on live navigation and form submits
-topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})
+topbar.config({barColors: {0: "#34d399"}, shadowColor: "rgba(0, 0, 0, .3)"})
 window.addEventListener("phx:page-loading-start", _info => topbar.show(300))
 window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 

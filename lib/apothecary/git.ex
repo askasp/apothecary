@@ -66,6 +66,80 @@ defmodule Apothecary.Git do
     end
   end
 
+  @doc "Fetch latest main and merge it into the current worktree branch."
+  def merge_main_into(worktree_path) do
+    base = main_branch()
+
+    with {:ok, _} <- CLI.run("git", ["fetch", "origin", base], cd: worktree_path),
+         {:ok, _} <- CLI.run("git", ["merge", "origin/#{base}", "--no-edit"], cd: worktree_path) do
+      :ok
+    end
+  end
+
+  @doc "Push the current branch in a worktree to origin."
+  def push_branch(worktree_path) do
+    case current_branch(worktree_path) do
+      {:ok, branch} ->
+        CLI.run("git", ["push", "-u", "origin", branch], cd: worktree_path)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc "Create a PR from the current branch in a worktree. Returns {:ok, pr_url} or {:error, reason}."
+  def create_pr(worktree_path, title) do
+    case current_branch(worktree_path) do
+      {:ok, branch} ->
+        base = main_branch()
+
+        case CLI.run(
+               "gh",
+               ["pr", "create", "--base", base, "--head", branch, "--title", title, "--fill"],
+               cd: worktree_path
+             ) do
+          {:ok, url} -> {:ok, String.trim(url)}
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc "Merge a PR on GitHub. Returns :ok or {:error, reason}."
+  def merge_pr(pr_url) do
+    case CLI.run("gh", ["pr", "merge", pr_url, "--merge", "--delete-branch"], cd: project_dir()) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "View PR diff. Returns {:ok, diff} or {:error, reason}."
+  def pr_diff(pr_url) do
+    CLI.run("gh", ["pr", "diff", pr_url], cd: project_dir())
+  end
+
+  @doc "Get diff of a worktree branch against main. Returns {:ok, diff} or {:error, reason}."
+  def worktree_diff(worktree_path) do
+    base = main_branch()
+    CLI.run("git", ["diff", "#{base}...HEAD"], cd: worktree_path)
+  end
+
+  @doc "Get PR status from GitHub. Returns {:ok, map} or {:error, reason}."
+  def pr_status(pr_url) do
+    case CLI.run("gh", ["pr", "view", pr_url, "--json", "state,reviewDecision"], cd: project_dir()) do
+      {:ok, output} ->
+        case Jason.decode(String.trim(output)) do
+          {:ok, data} -> {:ok, data}
+          {:error, _} -> {:error, "Failed to parse PR status JSON"}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   @doc "Pull latest changes on the main branch."
   def pull_main do
     base = main_branch()

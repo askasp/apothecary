@@ -15,9 +15,14 @@ defmodule Apothecary.Application do
       ApothecaryWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:apothecary, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Apothecary.PubSub},
-      Apothecary.Poller,
+      Apothecary.Store,
+      Apothecary.Ingredients,
+      Apothecary.PRMonitor,
+      Hermes.Server.Registry,
+      {Apothecary.MCP.Server, transport: :streamable_http},
       Apothecary.WorktreeManager,
-      {Apothecary.AgentSupervisor, []},
+      Apothecary.DevServer,
+      {Apothecary.BrewerSupervisor, []},
       Apothecary.Dispatcher,
       ApothecaryWeb.Endpoint
     ]

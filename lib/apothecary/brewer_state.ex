@@ -1,5 +1,5 @@
-defmodule Apothecary.AgentState do
-  @moduledoc "Struct representing the state of a swarm agent for the dashboard."
+defmodule Apothecary.BrewerState do
+  @moduledoc "Struct representing the state of a brewer for the dashboard."
 
   @type status :: :idle | :working | :starting | :error
 
@@ -7,7 +7,7 @@ defmodule Apothecary.AgentState do
           id: integer(),
           worktree_path: String.t() | nil,
           branch: String.t() | nil,
-          current_task: Apothecary.Bead.t() | nil,
+          current_concoction: Apothecary.Concoction.t() | nil,
           status: status(),
           pid: pid() | nil,
           output: [String.t()],
@@ -18,7 +18,7 @@ defmodule Apothecary.AgentState do
     :id,
     :worktree_path,
     :branch,
-    :current_task,
+    :current_concoction,
     :pid,
     :started_at,
     status: :idle,

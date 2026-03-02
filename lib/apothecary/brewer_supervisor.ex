@@ -1,5 +1,5 @@
-defmodule Apothecary.AgentSupervisor do
-  @moduledoc "DynamicSupervisor for agent worker processes."
+defmodule Apothecary.BrewerSupervisor do
+  @moduledoc "DynamicSupervisor for brewer processes."
 
   use DynamicSupervisor
 
@@ -12,25 +12,25 @@ defmodule Apothecary.AgentSupervisor do
     DynamicSupervisor.init(strategy: :one_for_one)
   end
 
-  @doc "Start a new agent worker under this supervisor."
-  def start_agent(id) do
-    spec = {Apothecary.AgentWorker, id: id}
+  @doc "Start a new brewer under this supervisor."
+  def start_brewer(id) do
+    spec = {Apothecary.Brewer, id: id}
     DynamicSupervisor.start_child(__MODULE__, spec)
   end
 
-  @doc "Stop an agent worker."
-  def stop_agent(pid) when is_pid(pid) do
+  @doc "Stop a brewer."
+  def stop_brewer(pid) when is_pid(pid) do
     DynamicSupervisor.terminate_child(__MODULE__, pid)
   end
 
-  @doc "Count running agents."
+  @doc "Count running brewers."
   def count do
     %{active: active} = DynamicSupervisor.count_children(__MODULE__)
     active
   end
 
-  @doc "List all agent worker PIDs."
-  def agents do
+  @doc "List all brewer PIDs."
+  def brewers do
     __MODULE__
     |> DynamicSupervisor.which_children()
     |> Enum.map(fn {_, pid, _, _} -> pid end)

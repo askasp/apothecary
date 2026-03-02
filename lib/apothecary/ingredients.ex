@@ -311,6 +311,13 @@ defmodule Apothecary.Ingredients do
     end
 
     Apothecary.WorktreeManager.release(id)
+
+    # Update local main so new worktrees branch from the latest code
+    case Apothecary.Git.pull_main() do
+      {:ok, _} -> :ok
+      {:error, reason} ->
+        Logger.warning("cleanup_merged_concoction: pull_main failed: #{inspect(reason)}")
+    end
   end
 
   # --- Ingredient Operations ---
