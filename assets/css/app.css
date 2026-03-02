@@ -182,14 +182,16 @@
   75% { transform: rotate(1.5deg); }
 }
 
-/* Stirring ladle — rotates around center of cauldron mouth */
+/* Stirring ladle — elliptical stir inside the cauldron */
 @keyframes ladle-stir {
-  0%   { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0%   { transform: translateX(6px)  translateY(0);    }
+  25%  { transform: translateX(0)    translateY(2px);  }
+  50%  { transform: translateX(-6px) translateY(0);    }
+  75%  { transform: translateX(0)    translateY(-2px); }
+  100% { transform: translateX(6px)  translateY(0);    }
 }
 .cauldron-ladle {
-  transform-origin: 32px 28px;
-  animation: ladle-stir 2.5s linear infinite;
+  animation: ladle-stir 2.5s ease-in-out infinite;
 }
 
 /* Bubbles rise and pop */
