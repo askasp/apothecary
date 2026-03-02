@@ -434,6 +434,28 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("change-priority", %{"dir" => dir}, socket) do
+    id = socket.assigns.selected_task_id
+
+    if id do
+      task = socket.assigns.selected_task
+      current = (task && task.priority) || 3
+
+      new_priority =
+        case dir do
+          "up" -> max(current - 1, 0)
+          "down" -> min(current + 1, 4)
+        end
+
+      if new_priority != current do
+        Ingredients.update_priority(id, new_priority)
+      end
+    end
+
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_event("start-edit", %{"field" => field}, socket) do
     {:noreply, assign(socket, :editing_field, String.to_existing_atom(field))}
   end
@@ -682,6 +704,38 @@ defmodule ApothecaryWeb.DashboardLive do
       socket
       |> assign(:pending_action, {:merge, task.id, task.pr_url})
       |> put_flash(:info, "Merge \"#{task.title}\"? Press m/y/Enter to confirm, Esc to cancel")
+    else
+      socket
+    end
+  end
+
+  defp handle_hotkey("ArrowUp", socket) do
+    if socket.assigns.selected_task_id do
+      task = socket.assigns.selected_task
+      current = (task && task.priority) || 3
+      new_priority = max(current - 1, 0)
+
+      if new_priority != current do
+        Ingredients.update_priority(socket.assigns.selected_task_id, new_priority)
+      end
+
+      socket
+    else
+      socket
+    end
+  end
+
+  defp handle_hotkey("ArrowDown", socket) do
+    if socket.assigns.selected_task_id do
+      task = socket.assigns.selected_task
+      current = (task && task.priority) || 3
+      new_priority = min(current + 1, 4)
+
+      if new_priority != current do
+        Ingredients.update_priority(socket.assigns.selected_task_id, new_priority)
+      end
+
+      socket
     else
       socket
     end
