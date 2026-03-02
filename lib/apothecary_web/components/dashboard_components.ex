@@ -21,25 +21,32 @@ defmodule ApothecaryWeb.DashboardComponents do
         Apothecary
       </span>
       <span class="text-base-content/30">│</span>
+    <div class="flex items-center gap-3 px-2 py-2 text-xs flex-wrap">
+      <span class="font-apothecary text-sm font-bold tracking-wide text-base-content/80">Apothecary</span>
+
       <%= if @swarm_status == :running do %>
         <button
           phx-click="stop-swarm"
-          class="text-green-400 hover:text-red-400 cursor-pointer font-bold"
+          class="flex items-center gap-2 border border-base-content/20 hover:border-base-content/40 text-base-content/70 hover:text-base-content px-3 py-1.5 rounded cursor-pointer font-apothecary text-sm transition-colors"
           title="Click to stop brewing (s)"
         >
-          ▶ BREWING
+          <span class="cauldron-stir text-xl">&#x2697;</span>
+          <span class="text-base">Brewing</span>
+          <span class="text-base-content/30 text-xs ml-1">[s]</span>
         </button>
       <% else %>
         <button
           phx-click="start-swarm"
-          class="bg-green-400/10 text-green-400 hover:bg-green-400/20 px-2 py-0.5 cursor-pointer font-bold"
+          class="flex items-center gap-2 border border-base-content/15 hover:border-base-content/30 text-base-content/40 hover:text-base-content/70 px-3 py-1.5 rounded cursor-pointer font-apothecary text-sm transition-colors"
           title="Click to start brewing (s)"
         >
-          ▶ BREW
+          <span class="text-xl">&#x2697;</span>
+          <span class="text-base">Brew</span>
+          <span class="text-base-content/30 text-xs ml-1">[s]</span>
         </button>
       <% end %>
 
-      <span class="text-base-content/30">│</span>
+      <span class="text-base-content/20">│</span>
 
       <div class="flex items-center gap-1">
         <button
@@ -56,6 +63,11 @@ defmodule ApothecaryWeb.DashboardComponents do
           +
         </button>
       </div>
+
+      <span class="text-base-content/20">│</span>
+      <span class="text-emerald-400">{@ready_count}rdy</span>
+      <span class="text-base-content/30">/</span>
+      <span class="text-base-content/50">{@task_count}tot</span>
 
       <span class="ml-auto text-base-content/30 cursor-pointer" phx-click="toggle-help">?</span>
     </div>

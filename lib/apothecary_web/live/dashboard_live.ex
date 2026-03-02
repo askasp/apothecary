@@ -1198,7 +1198,7 @@ defmodule ApothecaryWeb.DashboardLive do
         class="flex flex-col h-screen outline-none"
       >
         <%!-- Status controls bar --%>
-        <div class="w-full max-w-5xl mx-auto">
+        <div class="w-full mx-auto px-2">
           <.status_controls
             swarm_status={@swarm_status}
             target_count={@target_count}
@@ -1211,7 +1211,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
         <%!-- Scrollable content --%>
         <div class="flex-1 overflow-y-auto">
-          <div class="max-w-5xl mx-auto px-6">
+          <div class="mx-auto px-2">
             <%!-- Primary input — centered, narrower --%>
             <div class="max-w-2xl mx-auto pt-40 pb-4">
               <h2 class="text-base-content/50 text-lg font-semibold mb-4 font-apothecary">
@@ -1351,7 +1351,7 @@ defmodule ApothecaryWeb.DashboardLive do
         </div>
 
         <%!-- Footer --%>
-        <div class="border-t border-base-content/10 px-6 py-1 text-xs flex items-center justify-between">
+        <div class="border-t border-base-content/10 px-2 py-1 text-xs flex items-center justify-between">
           <div class="flex items-center gap-3">
             <span class="text-base-content/30">j/k:nav  1-4:lanes  enter:inspect</span>
             <button

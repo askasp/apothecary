@@ -104,6 +104,20 @@
 
 /* This file is for your main application CSS */
 
+/* --- Cauldron stirring animation (header when brewing) --- */
+@keyframes cauldron-stir {
+  0%   { transform: rotate(0deg) translateY(0); }
+  25%  { transform: rotate(-6deg) translateY(-1px); }
+  50%  { transform: rotate(0deg) translateY(0); }
+  75%  { transform: rotate(6deg) translateY(-1px); }
+  100% { transform: rotate(0deg) translateY(0); }
+}
+.cauldron-stir {
+  display: inline-block;
+  animation: cauldron-stir 2s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
 /* --- Brewing animations --- */
 
 /* Gentle float for flask icon on active cards */
