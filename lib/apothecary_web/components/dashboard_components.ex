@@ -17,7 +17,9 @@ defmodule ApothecaryWeb.DashboardComponents do
   def status_controls(assigns) do
     ~H"""
     <div class="flex items-center gap-3 px-2 py-2 text-xs flex-wrap">
-      <span class="font-apothecary text-sm font-bold tracking-wide text-base-content/80">Apothecary</span>
+      <span class="font-apothecary text-sm font-bold tracking-wide text-base-content/80">
+        Apothecary
+      </span>
 
       <%= if @swarm_status == :running do %>
         <button
