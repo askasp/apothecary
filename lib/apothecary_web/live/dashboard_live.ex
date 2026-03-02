@@ -150,7 +150,7 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey(%{"key" => "n"}, socket) do
-    {:noreply, assign(socket, :show_create_form, !socket.assigns.show_create_form)}
+    {:noreply, assign(socket, :show_create_form, true)}
   end
 
   defp handle_hotkey(%{"key" => "p"}, socket) do
