@@ -6,13 +6,13 @@ Apothecary is a small Elixir app that runs multiple Claude Code agents in parall
 
 ## How it works
 
-1. You create a **concoction** (a unit of work)
-2. The **dispatcher** assigns it to an idle **brewer** (an agent process)
-3. A git worktree gets created so the agent has its own branch
+1. You create a **concoction** (a feature branch with all its related work)
+2. The **dispatcher** assigns it to an idle **alchemist** (a Claude Code agent process)
+3. A git worktree gets created so the alchemist has its own branch
 4. Claude Code spawns, reads the task, and starts coding
-5. If the work is complex, the agent breaks it into **ingredients** (sub-tasks) on its own
+5. If the work is complex, the alchemist breaks it into **ingredients** (sub-tasks) on its own
 6. When it's done, the branch gets pushed and a PR opens
-7. If reviewers request changes, an agent gets re-dispatched to address them
+7. If reviewers request changes, an alchemist gets re-dispatched to address them
 
 The whole thing is reactive via PubSub - no polling. State changes propagate and the dispatcher picks up work immediately.
 
@@ -20,14 +20,14 @@ The whole thing is reactive via PubSub - no polling. State changes propagate and
 
 | Term | What it is |
 |------|-----------|
-| **Concoction** | A unit of work that becomes a PR (`wt-*` IDs) |
+| **Concoction** | A feature and its worktree branch - everything needed for one PR (`wt-*` IDs) |
 | **Ingredient** | A step within a concoction (`t-*` IDs) |
-| **Brewer** | A Claude Code agent process |
+| **Alchemist** | A Claude Code agent process that works on concoctions |
 | **Recipe** | A template for creating concoctions from issues |
 
 ## Why Elixir
 
-Each brewer is a GenServer under a DynamicSupervisor. Agent crashes are isolated - one going down doesn't affect the others. Mnesia handles all the state so there's no external database to set up. Phoenix PubSub makes the dispatch reactive, and LiveView gives you a real-time dashboard without writing JavaScript.
+Each alchemist is a GenServer under a DynamicSupervisor. Agent crashes are isolated - one going down doesn't affect the others. Mnesia handles all the state so there's no external database to set up. Phoenix PubSub makes the dispatch reactive, and LiveView gives you a real-time dashboard without writing JavaScript.
 
 The BEAM is good at running lots of concurrent processes that talk to each other and occasionally fall over. That's exactly what this is.
 
