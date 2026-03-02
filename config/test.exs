@@ -7,7 +7,6 @@ config :apothecary, ApothecaryWeb.Endpoint,
   secret_key_base: "fgpN26lj+XDk5cbhoUCqc5PJ9AiMAXUGDzH8YhvmVRRoBwQpL8Rvc5POKjXMoaz8",
   server: false
 
-
 # Print only warnings and errors during test
 config :logger, level: :warning
 

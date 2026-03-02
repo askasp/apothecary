@@ -108,7 +108,12 @@ defmodule ApothecaryWeb.DashboardComponents do
             else: ""
           )
         ]}
-        title={if(@gh_available, do: "Use GitHub PRs for merge", else: "gh CLI not found — install to use GitHub PRs")}
+        title={
+          if(@gh_available,
+            do: "Use GitHub PRs for merge",
+            else: "gh CLI not found — install to use GitHub PRs"
+          )
+        }
       >
         github
       </button>

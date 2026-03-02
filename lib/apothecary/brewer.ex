@@ -348,8 +348,14 @@ defmodule Apothecary.Brewer do
     parts =
       [
         "Session completed by Brewer #{agent.id}.",
-        if(completed != [], do: "Completed ingredients:\n#{Enum.join(completed, "\n")}", else: nil),
-        if(remaining != [], do: "Remaining ingredients:\n#{Enum.join(remaining, "\n")}", else: nil),
+        if(completed != [],
+          do: "Completed ingredients:\n#{Enum.join(completed, "\n")}",
+          else: nil
+        ),
+        if(remaining != [],
+          do: "Remaining ingredients:\n#{Enum.join(remaining, "\n")}",
+          else: nil
+        ),
         if(git_log != "", do: git_log, else: nil),
         if(diff_stat != "", do: diff_stat, else: nil)
       ]
@@ -395,7 +401,10 @@ defmodule Apothecary.Brewer do
         reason_line,
         if(in_progress_section != "", do: in_progress_section, else: nil),
         if(uncommitted != "", do: uncommitted, else: nil),
-        if(last_output != "", do: "\nLast output (#{min(length(output), 100)} lines):\n#{last_output}", else: nil)
+        if(last_output != "",
+          do: "\nLast output (#{min(length(output), 100)} lines):\n#{last_output}",
+          else: nil
+        )
       ]
       |> Enum.reject(&is_nil/1)
 
