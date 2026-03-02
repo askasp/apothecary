@@ -447,6 +447,7 @@ defmodule Apothecary.Brewer do
     config = %{
       "mcpServers" => %{
         "apothecary" => %{
+          "type" => "http",
           "url" =>
             "http://localhost:#{port}/mcp?brewer_id=#{agent_id}&concoction_id=#{worktree_id}"
         }
