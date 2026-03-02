@@ -31,6 +31,17 @@ let Hooks = {
     mounted() {
       this.el.focus()
 
+      // Block hotkeys when typing in an input/textarea so keys like 's'
+      // don't trigger hotkey actions. Capture phase runs before LiveView's
+      // phx-window-keydown handler.
+      window.addEventListener("keydown", (e) => {
+        const tag = e.target.tagName
+        const isInput = tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable
+        if (isInput && e.key !== "Escape") {
+          e.stopPropagation()
+        }
+      }, true)
+
       this.handleEvent("focus-element", ({ selector }) => {
         const el = document.querySelector(selector)
         if (el) el.focus()

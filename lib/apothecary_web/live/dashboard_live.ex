@@ -59,7 +59,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:pending_action, nil)
       |> assign(:known_ingredient_ids, extract_ingredient_ids(task_state.tasks))
       # Tab navigation
-      |> assign(:active_tab, :stockroom)
+      |> assign(:active_tab, :workbench)
       # Recipe state
       |> assign(:recipes, Ingredients.list_recipes())
       |> assign(:show_recipe_form, false)
@@ -289,13 +289,13 @@ defmodule ApothecaryWeb.DashboardLive do
     Dispatcher.start_swarm(socket.assigns.target_count)
 
     {:noreply,
-     put_flash(socket, :info, "Brewing started with #{socket.assigns.target_count} brewers")}
+     put_flash(socket, :info, "Concocting started with #{socket.assigns.target_count} alchemists")}
   end
 
   @impl true
   def handle_event("stop-swarm", _params, socket) do
     Dispatcher.stop_swarm()
-    {:noreply, put_flash(socket, :info, "Brewing stopped")}
+    {:noreply, put_flash(socket, :info, "Concocting stopped")}
   end
 
   @impl true
@@ -310,7 +310,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
     socket =
       if socket.assigns.swarm_status != :running do
-        put_flash(socket, :info, "Brewer count set to #{count}")
+        put_flash(socket, :info, "Alchemist count set to #{count}")
       else
         socket
       end
@@ -330,7 +330,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
     socket =
       if socket.assigns.swarm_status != :running do
-        put_flash(socket, :info, "Brewer count set to #{count}")
+        put_flash(socket, :info, "Alchemist count set to #{count}")
       else
         socket
       end
@@ -750,10 +750,10 @@ defmodule ApothecaryWeb.DashboardLive do
   defp handle_hotkey("s", socket) do
     if socket.assigns.swarm_status == :running do
       Dispatcher.stop_swarm()
-      put_flash(socket, :info, "Brewing stopped")
+      put_flash(socket, :info, "Concocting stopped")
     else
       Dispatcher.start_swarm(socket.assigns.target_count)
-      put_flash(socket, :info, "Brewing started with #{socket.assigns.target_count} brewers")
+      put_flash(socket, :info, "Concocting started with #{socket.assigns.target_count} alchemists")
     end
   end
 
@@ -771,7 +771,7 @@ defmodule ApothecaryWeb.DashboardLive do
     socket = assign(socket, :target_count, count)
 
     if socket.assigns.swarm_status != :running do
-      put_flash(socket, :info, "Brewer count set to #{count}")
+      put_flash(socket, :info, "Alchemist count set to #{count}")
     else
       socket
     end
@@ -787,7 +787,7 @@ defmodule ApothecaryWeb.DashboardLive do
     socket = assign(socket, :target_count, count)
 
     if socket.assigns.swarm_status != :running do
-      put_flash(socket, :info, "Brewer count set to #{count}")
+      put_flash(socket, :info, "Alchemist count set to #{count}")
     else
       socket
     end
@@ -900,7 +900,7 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  # Lane jumps: 1=stockroom, 2=brewing, 3=assaying, 4=bottled
+  # Lane jumps: 1=stockroom, 2=concocting, 3=assaying, 4=bottled
   defp handle_hotkey("1", socket), do: jump_to_lane(socket, ~w(ready blocked))
   defp handle_hotkey("2", socket), do: jump_to_lane(socket, ~w(running))
   defp handle_hotkey("3", socket), do: jump_to_lane(socket, ~w(pr))
@@ -1099,7 +1099,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
     if agent && agent.pid do
       Brewer.send_instruction(agent.pid, text)
-      {:noreply, put_flash(socket, :info, "Sent to brewer-#{agent.id}")}
+      {:noreply, put_flash(socket, :info, "Sent to alchemist-#{agent.id}")}
     else
       {:noreply, put_flash(socket, :error, "No active agent process")}
     end
@@ -1502,14 +1502,14 @@ defmodule ApothecaryWeb.DashboardLive do
                 <% end %>
               </div>
 
-              <%!-- Lane: BREWING — running --%>
+              <%!-- Lane: CONCOCTING — running --%>
               <% brewing_entries =
                 (@worktrees_by_status["running"] || [])
                 |> Enum.sort_by(fn e -> e.worktree.priority || 99 end) %>
               <div class="pb-2">
                 <div class="flex items-center gap-2 py-1.5">
                   <span class="uppercase text-xs tracking-wider font-bold text-amber-400 font-apothecary">
-                    BREWING
+                    CONCOCTING
                   </span>
                   <span class="text-base-content/30 text-xs">({length(brewing_entries)})</span>
                   <span class="text-base-content/15 text-[10px] ml-1">2</span>

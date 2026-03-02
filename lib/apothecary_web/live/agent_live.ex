@@ -19,7 +19,7 @@ defmodule ApothecaryWeb.AgentLive do
 
     socket =
       socket
-      |> assign(:page_title, "Brewer #{agent_id}")
+      |> assign(:page_title, "Alchemist #{agent_id}")
       |> assign(:agent_id, agent_id)
       |> assign(:agent, agent)
       |> assign(:output, (agent && agent.output) || [])
@@ -75,7 +75,7 @@ defmodule ApothecaryWeb.AgentLive do
         >
           <div class="flex items-center gap-3 text-base-content/30">
             <.link navigate={~p"/"} class="hover:text-base-content/50">[bksp:back]</.link>
-            <span class="text-base-content/50">BREWER {@agent_id}</span>
+            <span class="text-base-content/50">ALCHEMIST {@agent_id}</span>
             <.agent_status_badge :if={@agent} status={@agent.status} />
           </div>
 

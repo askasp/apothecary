@@ -25,20 +25,20 @@ defmodule ApothecaryWeb.DashboardComponents do
         <button
           phx-click="stop-swarm"
           class="flex items-center gap-2 border border-base-content/20 hover:border-base-content/40 text-base-content/70 hover:text-base-content px-3 py-1.5 rounded cursor-pointer font-apothecary text-sm transition-colors"
-          title="Click to stop brewing (s)"
+          title="Click to stop concocting (s)"
         >
           <span class="cauldron-stir text-xl">&#x2697;</span>
-          <span class="text-base">Brewing</span>
+          <span class="text-base">Concocting</span>
           <span class="text-base-content/30 text-xs ml-1">[s]</span>
         </button>
       <% else %>
         <button
           phx-click="start-swarm"
           class="flex items-center gap-2 border border-base-content/15 hover:border-base-content/30 text-base-content/40 hover:text-base-content/70 px-3 py-1.5 rounded cursor-pointer font-apothecary text-sm transition-colors"
-          title="Click to start brewing (s)"
+          title="Click to start concocting (s)"
         >
           <span class="text-xl">&#x2697;</span>
-          <span class="text-base">Brew</span>
+          <span class="text-base">Concoct</span>
           <span class="text-base-content/30 text-xs ml-1">[s]</span>
         </button>
       <% end %>
@@ -52,7 +52,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         >
           -
         </button>
-        <span class="text-base-content/50">{@target_count} brewers</span>
+        <span class="text-base-content/50">{@target_count} alchemists</span>
         <button
           phx-click="inc-agents"
           class="text-base-content/50 hover:text-base-content cursor-pointer px-1"
@@ -278,7 +278,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%!-- Preview indicator (only visible when active) --%>
       <.preview_indicator worktree_id={@worktree.id} dev_server={@dev_server} />
 
-      <%!-- Large flask overlay for actively brewing cards --%>
+      <%!-- Large flask overlay for actively concocting cards --%>
       <span
         :if={@agent && @agent.status == :working}
         class="absolute bottom-1 right-2 text-5xl text-amber-400/20 brew-icon pointer-events-none select-none"
@@ -646,7 +646,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   def agent_output_panel(assigns) do
     ~H"""
     <div class="space-y-1">
-      <.section label={"brewer-#{@working_agent.id} output"} />
+      <.section label={"alchemist-#{@working_agent.id} output"} />
       <div
         id="agent-output"
         phx-hook="ScrollBottom"
@@ -991,15 +991,15 @@ defmodule ApothecaryWeb.DashboardComponents do
           <div class="space-y-1">
             <div class="text-emerald-400 mb-1">lanes</div>
             <.hk key="1" desc="jump to stockroom" />
-            <.hk key="2" desc="jump to brewing" />
+            <.hk key="2" desc="jump to concocting" />
             <.hk key="3" desc="jump to assaying" />
             <.hk key="4" desc="jump to bottled" />
           </div>
 
           <div class="space-y-1">
             <div class="text-emerald-400 mb-1">actions</div>
-            <.hk key="s" desc="start/stop swarm" />
-            <.hk key="+/-" desc="brewer count" />
+            <.hk key="s" desc="start/stop concocting" />
+            <.hk key="+/-" desc="alchemist count" />
             <.hk key="r" desc="refresh" />
             <.hk key="R" desc="requeue orphans" />
             <.hk key="d" desc="view diff" />
@@ -1069,7 +1069,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   end
 
   defp page_label(:dashboard), do: "NORMAL"
-  defp page_label(:agent), do: "BREWER"
+  defp page_label(:agent), do: "ALCHEMIST"
   defp page_label(_), do: ""
 
   # --- Helper functions ---
@@ -1124,7 +1124,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp group_badge_classes("done"), do: "bg-green-400/10 text-green-400/60"
   defp group_badge_classes(_), do: ""
 
-  defp group_badge_label("running"), do: "BREWING"
+  defp group_badge_label("running"), do: "CONCOCTING"
   defp group_badge_label("ready"), do: "STOCKED"
   defp group_badge_label("blocked"), do: "MISSING"
   defp group_badge_label("pr"), do: "ASSAYING"
@@ -1140,16 +1140,16 @@ defmodule ApothecaryWeb.DashboardComponents do
     <div class="flex items-center gap-1 px-2 py-1">
       <button
         phx-click="switch-tab"
-        phx-value-tab="stockroom"
+        phx-value-tab="workbench"
         class={[
           "px-3 py-1.5 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer",
-          if(@active_tab == :stockroom,
+          if(@active_tab == :workbench,
             do: "text-base-content bg-base-content/10 font-bold",
             else: "text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5"
           )
         ]}
       >
-        Stockroom
+        Workbench
       </button>
       <button
         phx-click="switch-tab"
@@ -1162,7 +1162,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           )
         ]}
       >
-        Recurring Brews
+        Recurring Concoctions
       </button>
     </div>
     """
@@ -1181,7 +1181,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       <div class="flex items-center justify-between mb-6">
         <div>
           <h2 class="text-base-content/50 text-lg font-semibold font-apothecary">
-            Recurring Brews
+            Recurring Concoctions
           </h2>
           <p class="text-base-content/30 text-xs mt-1">
             Recipes that automatically create concoctions on a schedule
@@ -1204,7 +1204,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           <div class="text-4xl mb-3 opacity-20">&#x1F4DC;</div>
           <p class="text-base-content/30 text-sm">No recipes yet</p>
           <p class="text-base-content/20 text-xs mt-1">
-            Create a recipe to schedule recurring brews
+            Create a recipe to schedule recurring concoctions
           </p>
         </div>
       <% else %>
