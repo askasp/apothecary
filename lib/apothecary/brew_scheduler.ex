@@ -116,7 +116,6 @@ defmodule Apothecary.BrewScheduler do
         )
 
         # Update next_run_at in the database
-        Apothecary.Ingredients.update_recipe(recipe.id, %{})
         update_next_run(recipe.id, next_iso)
 
         %{state | timers: Map.put(state.timers, recipe.id, timer)}

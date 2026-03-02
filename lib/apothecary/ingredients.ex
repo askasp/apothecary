@@ -751,7 +751,10 @@ defmodule Apothecary.Ingredients do
           [record] ->
             updated = put_elem(record, 5, !elem(record, 5))
             now = DateTime.utc_now() |> DateTime.to_iso8601()
-            updated = update_record_data(updated, 7, fn data -> Map.put(data, :updated_at, now) end)
+
+            updated =
+              update_record_data(updated, 7, fn data -> Map.put(data, :updated_at, now) end)
+
             :mnesia.write(updated)
             updated
 

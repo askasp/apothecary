@@ -32,7 +32,9 @@ defmodule Apothecary.Recipe do
   ]
 
   @doc "Build a Recipe struct from a Mnesia record tuple."
-  def from_record({:apothecary_recipes, id, title, description, schedule, enabled, priority, data}) do
+  def from_record(
+        {:apothecary_recipes, id, title, description, schedule, enabled, priority, data}
+      ) do
     %__MODULE__{
       id: id,
       title: title,
