@@ -179,7 +179,13 @@ defmodule Apothecary.DevServer do
         server = state.servers[wt_id]
 
         if server do
-          server = %{server | status: :error, error: "Process exited with code #{code}", port: nil}
+          server = %{
+            server
+            | status: :error,
+              error: "Process exited with code #{code}",
+              port: nil
+          }
+
           state = put_in(state.servers[wt_id], server)
           state = release_port_mapping(state, port)
           broadcast_update(wt_id, server)
@@ -345,7 +351,9 @@ defmodule Apothecary.DevServer do
         # Run shutdown command if defined
         if config.shutdown do
           Logger.info("DevServer running shutdown: #{config.shutdown} for #{wt_id}")
-          charlist_env = Enum.map(env, fn {k, v} -> {String.to_charlist(k), String.to_charlist(v)} end)
+
+          charlist_env =
+            Enum.map(env, fn {k, v} -> {String.to_charlist(k), String.to_charlist(v)} end)
 
           Elixir.Task.start(fn ->
             try do

@@ -128,7 +128,9 @@ defmodule Apothecary.Git do
 
   @doc "Get PR status from GitHub. Returns {:ok, map} or {:error, reason}."
   def pr_status(pr_url) do
-    case CLI.run("gh", ["pr", "view", pr_url, "--json", "state,reviewDecision"], cd: project_dir()) do
+    case CLI.run("gh", ["pr", "view", pr_url, "--json", "state,reviewDecision"],
+           cd: project_dir()
+         ) do
       {:ok, output} ->
         case Jason.decode(String.trim(output)) do
           {:ok, data} -> {:ok, data}

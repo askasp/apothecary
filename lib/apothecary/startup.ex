@@ -56,7 +56,8 @@ defmodule Apothecary.Startup do
     if System.find_executable("gh") do
       :ok
     else
-      {:warn, "gh (GitHub CLI) not found in PATH. PR creation will fail after agents finish work."}
+      {:warn,
+       "gh (GitHub CLI) not found in PATH. PR creation will fail after agents finish work."}
     end
   end
 

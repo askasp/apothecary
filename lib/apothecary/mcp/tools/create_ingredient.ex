@@ -7,13 +7,9 @@ defmodule Apothecary.MCP.Tools.CreateIngredient do
   schema do
     field(:title, {:required, :string}, description: "Short title for the ingredient")
 
-    field(:description, :string,
-      description: "Detailed description of what needs to be done"
-    )
+    field(:description, :string, description: "Detailed description of what needs to be done")
 
-    field(:priority, :integer,
-      description: "Priority 0-4 (0=critical, 3=default, 4=backlog)"
-    )
+    field(:priority, :integer, description: "Priority 0-4 (0=critical, 3=default, 4=backlog)")
   end
 
   @impl true

@@ -13,13 +13,13 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :target_count, :integer, default: 3
   attr :active_count, :integer, default: 0
   attr :working_count, :integer, default: 0
-  attr :ready_count, :integer, default: 0
-  attr :task_count, :integer, default: 0
 
   def status_controls(assigns) do
     ~H"""
     <div class="flex items-center gap-3 px-6 py-2 text-xs flex-wrap">
-      <span class="font-apothecary text-sm font-bold tracking-wide text-base-content/80">Apothecary</span>
+      <span class="font-apothecary text-sm font-bold tracking-wide text-base-content/80">
+        Apothecary
+      </span>
       <span class="text-base-content/30">│</span>
       <%= if @swarm_status == :running do %>
         <button
@@ -57,11 +57,6 @@ defmodule ApothecaryWeb.DashboardComponents do
         </button>
       </div>
 
-      <span class="text-base-content/30">│</span>
-      <span class="text-emerald-400">{@ready_count}rdy</span>
-      <span class="text-base-content/30">/</span>
-      <span class="text-base-content/50">{@task_count}tot</span>
-
       <span class="ml-auto text-base-content/30 cursor-pointer" phx-click="toggle-help">?</span>
     </div>
     """
@@ -77,7 +72,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       <textarea
         id="primary-input"
         rows="5"
-        placeholder="What shall we brew? (#wt-id for ingredient, >>id for deps)"
+        placeholder=""
         phx-hook="TextareaSubmit"
         phx-focus="input-focus"
         phx-blur="input-blur"
@@ -130,7 +125,9 @@ defmodule ApothecaryWeb.DashboardComponents do
       class="flex items-center gap-2 px-3 py-1.5 w-full text-left cursor-pointer hover:bg-base-content/5"
     >
       <span class="w-3 text-base-content/30">{if(@collapsed, do: "▸", else: "▾")}</span>
-      <span class={["uppercase text-xs tracking-wider font-bold font-apothecary", @color]}>{@label}</span>
+      <span class={["uppercase text-xs tracking-wider font-bold font-apothecary", @color]}>
+        {@label}
+      </span>
       <span class="text-base-content/30 text-xs">({@count})</span>
     </button>
     <div
@@ -138,7 +135,9 @@ defmodule ApothecaryWeb.DashboardComponents do
       class="flex items-center gap-2 px-3 py-1.5"
     >
       <span class="w-3 text-base-content/30">▾</span>
-      <span class={["uppercase text-xs tracking-wider font-bold font-apothecary", @color]}>{@label}</span>
+      <span class={["uppercase text-xs tracking-wider font-bold font-apothecary", @color]}>
+        {@label}
+      </span>
       <span class="text-base-content/30 text-xs">({@count})</span>
     </div>
     """
@@ -170,7 +169,10 @@ defmodule ApothecaryWeb.DashboardComponents do
       data-selected={@selected || nil}
       class={[
         "border bg-base-200/30 flex flex-col relative overflow-hidden scroll-card rounded-xl",
-        if(@selected, do: "border-primary ring-1 ring-primary/50", else: "border-base-content/10 hover:border-base-content/20")
+        if(@selected,
+          do: "border-primary ring-1 ring-primary/50",
+          else: "border-base-content/10 hover:border-base-content/20"
+        )
       ]}
     >
       <%!-- Card header --%>
@@ -182,8 +184,13 @@ defmodule ApothecaryWeb.DashboardComponents do
           <span class={["text-sm font-bold truncate flex-1", status_color(@worktree.status)]}>
             {@worktree.title || @worktree.id}
           </span>
-          <span :if={@group} class={["text-[10px] uppercase tracking-wider px-1.5 py-0.5 font-bold shrink-0",
-            group_badge_classes(@group)]}>
+          <span
+            :if={@group}
+            class={[
+              "text-[10px] uppercase tracking-wider px-1.5 py-0.5 font-bold shrink-0",
+              group_badge_classes(@group)
+            ]}
+          >
             {group_badge_label(@group)}
           </span>
           <span :if={@agent} class="text-cyan-400 text-xs shrink-0">
@@ -234,14 +241,19 @@ defmodule ApothecaryWeb.DashboardComponents do
           phx-mounted={Phoenix.LiveView.JS.transition("ingredient-new")}
           class="flex items-center gap-1.5 py-0.5"
         >
-          <span class={if task.status in ["done", "closed"], do: "text-green-400", else: "text-base-content/30"}>
+          <span class={
+            if task.status in ["done", "closed"], do: "text-green-400", else: "text-base-content/30"
+          }>
             {if task.status in ["done", "closed"], do: "✓", else: "□"}
           </span>
           <.link
             patch={~p"/?task=#{task.id}"}
             class={[
               "truncate hover:text-primary cursor-pointer",
-              if(task.status in ["done", "closed"], do: "text-base-content/30 line-through", else: "text-base-content/70")
+              if(task.status in ["done", "closed"],
+                do: "text-base-content/30 line-through",
+                else: "text-base-content/70"
+              )
             ]}
           >
             {task.title}
@@ -272,7 +284,9 @@ defmodule ApothecaryWeb.DashboardComponents do
       <span
         :if={@agent && @agent.status == :working}
         class="absolute bottom-1 right-2 text-5xl text-amber-400/20 brew-icon pointer-events-none select-none"
-      >&#x2697;</span>
+      >
+        &#x2697;
+      </span>
     </div>
     """
   end
@@ -725,7 +739,10 @@ defmodule ApothecaryWeb.DashboardComponents do
         :if={@dev_server.output != []}
         class="bg-base-200/50 p-2 text-xs max-h-40 overflow-y-auto"
       >
-        <div :for={line <- @dev_server.output} class="text-base-content/50 whitespace-pre-wrap break-all">
+        <div
+          :for={line <- @dev_server.output}
+          class="text-base-content/50 whitespace-pre-wrap break-all"
+        >
           {line}
         </div>
       </div>
@@ -751,7 +768,10 @@ defmodule ApothecaryWeb.DashboardComponents do
         :if={@dev_server.output != []}
         class="bg-base-200/50 p-2 text-xs max-h-40 overflow-y-auto"
       >
-        <div :for={line <- @dev_server.output} class="text-base-content/50 whitespace-pre-wrap break-all">
+        <div
+          :for={line <- @dev_server.output}
+          class="text-base-content/50 whitespace-pre-wrap break-all"
+        >
           {line}
         </div>
       </div>
@@ -930,7 +950,9 @@ defmodule ApothecaryWeb.DashboardComponents do
         phx-click={%Phoenix.LiveView.JS{}}
       >
         <div class="flex items-center justify-between mb-3 text-sm">
-          <span class="text-base-content/50 uppercase tracking-wider font-apothecary">── keybindings ──</span>
+          <span class="text-base-content/50 uppercase tracking-wider font-apothecary">
+            ── keybindings ──
+          </span>
           <span class="text-base-content/30">[esc] close</span>
         </div>
 
