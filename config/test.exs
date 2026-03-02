@@ -7,8 +7,6 @@ config :apothecary, ApothecaryWeb.Endpoint,
   secret_key_base: "fgpN26lj+XDk5cbhoUCqc5PJ9AiMAXUGDzH8YhvmVRRoBwQpL8Rvc5POKjXMoaz8",
   server: false
 
-# Disable swoosh api client as it is only required for production adapters
-config :swoosh, :api_client, false
 
 # Print only warnings and errors during test
 config :logger, level: :warning
