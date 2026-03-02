@@ -184,34 +184,24 @@ defmodule ApothecaryWeb.DashboardComponents do
         patch={~p"/?task=#{@worktree.id}"}
         class="px-3 pt-2 pb-1 cursor-pointer hover:bg-base-content/5"
       >
-        <div class="flex items-center gap-2">
-          <span class={["text-sm font-bold truncate flex-1", status_color(@worktree.status)]}>
-            {@worktree.title || @worktree.id}
-          </span>
+        <div class={["text-sm font-bold", status_color(@worktree.status)]}>
+          {@worktree.title || @worktree.id}
+        </div>
+        <div class="flex items-center gap-2 text-xs text-base-content/40 mt-0.5">
+          <span>{@worktree.id}</span>
           <span
             :if={@group}
             class={[
-              "text-[10px] uppercase tracking-wider px-1.5 py-0.5 font-bold shrink-0",
+              "text-[10px] uppercase tracking-wider px-1.5 py-0.5 font-bold",
               group_badge_classes(@group)
             ]}
           >
             {group_badge_label(@group)}
           </span>
-          <span :if={@agent} class="text-cyan-400 text-xs shrink-0">
+          <span :if={@agent} class="text-cyan-400">
             {agent_dot(@agent.status)}B{@agent.id}
           </span>
-          <span :if={@agent && @agent.status == :working} class="text-amber-400/60 text-xs shrink-0">
-            <span class="brew-cycle">
-              <span>concocting...</span>
-              <span>stirring...</span>
-              <span>bringing to boil...</span>
-              <span>simmering...</span>
-            </span>
-          </span>
-        </div>
-        <div class="flex items-center gap-2 text-xs text-base-content/40 mt-0.5">
-          <span>{@worktree.id}</span>
-          <span :if={@worktree.git_branch} class="truncate">⎇ {@worktree.git_branch}</span>
+          <span :if={@worktree.git_branch} class="truncate ml-auto">⎇ {@worktree.git_branch}</span>
         </div>
       </.link>
 
@@ -246,9 +236,17 @@ defmodule ApothecaryWeb.DashboardComponents do
           class="flex items-center gap-1.5 py-0.5"
         >
           <span class={
-            if task.status in ["done", "closed"], do: "text-green-400", else: "text-base-content/30"
+            cond do
+              task.status in ["done", "closed"] -> "text-green-400"
+              task.status == "in_progress" -> "text-amber-400 animate-pulse"
+              true -> "text-base-content/30"
+            end
           }>
-            {if task.status in ["done", "closed"], do: "✓", else: "□"}
+            {cond do
+              task.status in ["done", "closed"] -> "✓"
+              task.status == "in_progress" -> "◐"
+              true -> "□"
+            end}
           </span>
           <.link
             patch={~p"/?task=#{task.id}"}
