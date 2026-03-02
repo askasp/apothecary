@@ -1395,12 +1395,12 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   def tab_navigation(assigns) do
     ~H"""
-    <div class="flex items-center gap-1">
+    <div class="flex items-center gap-1 min-w-0">
       <button
         phx-click="switch-tab"
         phx-value-tab="workbench"
         class={[
-          "px-3 py-1 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer",
+          "px-2 sm:px-3 py-1 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer whitespace-nowrap",
           if(@active_tab == :workbench,
             do: "text-base-content bg-base-content/10 font-bold",
             else: "text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5"
@@ -1413,14 +1413,15 @@ defmodule ApothecaryWeb.DashboardComponents do
         phx-click="switch-tab"
         phx-value-tab="recipes"
         class={[
-          "px-3 py-1 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer",
+          "px-2 sm:px-3 py-1 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer whitespace-nowrap",
           if(@active_tab == :recipes,
             do: "text-base-content bg-base-content/10 font-bold",
             else: "text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5"
           )
         ]}
       >
-        Recurring Concoctions
+        <span class="sm:hidden">Recipes</span>
+        <span class="hidden sm:inline">Recurring Concoctions</span>
       </button>
     </div>
     """

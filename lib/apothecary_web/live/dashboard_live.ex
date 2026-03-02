@@ -1535,9 +1535,10 @@ defmodule ApothecaryWeb.DashboardLive do
         class="flex flex-col h-screen outline-none"
       >
         <%!-- Top bar: branding + tabs on one line --%>
-        <div class="flex items-center gap-2 sm:gap-3 px-2 py-2 text-xs">
+        <div class="flex items-center gap-1 sm:gap-3 px-2 py-2 text-xs min-w-0">
           <span class="font-apothecary text-sm font-bold tracking-wide text-base-content/80 shrink-0">
-            Apothecary
+            <span class="hidden sm:inline">Apothecary</span>
+            <span class="sm:hidden">&#x2697;</span>
           </span>
           <.tab_navigation active_tab={@active_tab} />
           <span
