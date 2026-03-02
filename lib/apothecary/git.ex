@@ -109,7 +109,10 @@ defmodule Apothecary.Git do
 
   @doc "Merge a PR on GitHub. Returns :ok or {:error, reason}."
   def merge_pr(pr_url) do
-    case CLI.run("gh", ["pr", "merge", pr_url, "--merge", "--delete-branch"], cd: project_dir()) do
+    case CLI.run("gh", ["pr", "merge", pr_url, "--merge", "--delete-branch"],
+           cd: project_dir(),
+           timeout: 60_000
+         ) do
       {:ok, _} -> :ok
       {:error, reason} -> {:error, reason}
     end

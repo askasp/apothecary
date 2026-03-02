@@ -193,7 +193,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           <span
             :if={@group}
             class={[
-              "text-[10px] uppercase tracking-wider px-1.5 py-0.5 font-bold shrink-0",
+              "text-[10px] uppercase tracking-wider px-1.5 py-0.5 font-bold",
               group_badge_classes(@group)
             ]}
           >

@@ -55,6 +55,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:working_agent, nil)
       |> assign(:agent_output, [])
       |> assign(:diff_view, nil)
+      |> assign(:pending_action, nil)
       |> assign(:known_ingredient_ids, extract_ingredient_ids(task_state.tasks))
 
     {:ok, socket}
@@ -103,9 +104,8 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:task_count, length(state.tasks))
       |> assign(:orphan_count, compute_orphan_count(state.tasks, active_task_ids))
       |> assign(:worktrees_by_status, worktrees_by_status)
-      |> assign(:card_ids, build_card_ids(worktrees_by_status))
       |> assign(:known_ingredient_ids, new_ids)
-      |> clamp_card_index()
+      |> rebuild_card_ids(worktrees_by_status)
 
     socket =
       if socket.assigns.selected_task_id do
@@ -124,12 +124,19 @@ defmodule ApothecaryWeb.DashboardLive do
 
     update_agent_subscriptions(old_agents, agents)
 
+    # Rebuild card groups since agent assignments affect which lane cards appear in
+    task_state = Ingredients.get_state()
+    dev_servers = socket.assigns.dev_servers
+    worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
+
     socket =
       socket
       |> assign(:swarm_status, status.status)
       |> assign(:target_count, status.target_count)
       |> assign(:active_count, status.active_count)
       |> assign(:agents, agents)
+      |> assign(:worktrees_by_status, worktrees_by_status)
+      |> rebuild_card_ids(worktrees_by_status)
 
     socket =
       if socket.assigns.selected_task_id do
@@ -161,8 +168,7 @@ defmodule ApothecaryWeb.DashboardLive do
       socket
       |> assign(:dev_servers, dev_servers)
       |> assign(:worktrees_by_status, worktrees_by_status)
-      |> assign(:card_ids, build_card_ids(worktrees_by_status))
-      |> clamp_card_index()
+      |> rebuild_card_ids(worktrees_by_status)
 
     {:noreply, socket}
   end
@@ -232,6 +238,9 @@ defmodule ApothecaryWeb.DashboardLive do
 
       socket.assigns.diff_view != nil ->
         {:noreply, handle_diff_hotkey(key, socket)}
+
+      socket.assigns.pending_action != nil ->
+        {:noreply, handle_pending_action(key, socket)}
 
       true ->
         {:noreply, handle_hotkey(key, socket)}
@@ -406,15 +415,10 @@ defmodule ApothecaryWeb.DashboardLive do
         {:noreply, put_flash(socket, :error, "Worktree is not in pr_open status")}
 
       true ->
-        case Apothecary.Git.merge_pr(pr_url) do
-          :ok ->
-            Ingredients.add_note(task.id, "PR merged from dashboard: #{pr_url}")
-            Ingredients.cleanup_merged_concoction(task.id)
-            {:noreply, put_flash(socket, :info, "PR merged and worktree cleaned up")}
-
-          {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Merge failed: #{inspect(reason)}")}
-        end
+        {:noreply,
+         socket
+         |> assign(:pending_action, {:merge, task.id, pr_url})
+         |> put_flash(:info, "Merge \"#{task.title}\"? Press m/y/Enter to confirm, Esc to cancel")}
     end
   end
 
@@ -522,6 +526,11 @@ defmodule ApothecaryWeb.DashboardLive do
 
   defp handle_hotkey("Escape", socket) do
     cond do
+      socket.assigns.pending_action ->
+        socket
+        |> assign(:pending_action, nil)
+        |> clear_flash()
+
       socket.assigns.editing_field ->
         assign(socket, :editing_field, nil)
 
@@ -670,15 +679,9 @@ defmodule ApothecaryWeb.DashboardLive do
     task = socket.assigns.selected_task
 
     if task && Map.get(task, :pr_url) && task.status == "pr_open" do
-      case Apothecary.Git.merge_pr(task.pr_url) do
-        :ok ->
-          Ingredients.add_note(task.id, "PR merged from dashboard: #{task.pr_url}")
-          Ingredients.cleanup_merged_concoction(task.id)
-          put_flash(socket, :info, "PR merged and worktree cleaned up")
-
-        {:error, reason} ->
-          put_flash(socket, :error, "Merge failed: #{inspect(reason)}")
-      end
+      socket
+      |> assign(:pending_action, {:merge, task.id, task.pr_url})
+      |> put_flash(:info, "Merge \"#{task.title}\"? Press m/y/Enter to confirm, Esc to cancel")
     else
       socket
     end
@@ -749,6 +752,43 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_diff_hotkey(_key, socket), do: socket
+
+  # --- Pending action confirmation ---
+
+  defp handle_pending_action(key, socket) when key in ["m", "y", "Enter"] do
+    case socket.assigns.pending_action do
+      {:merge, task_id, pr_url} ->
+        socket = assign(socket, :pending_action, nil)
+        execute_merge(socket, task_id, pr_url)
+
+      _ ->
+        assign(socket, :pending_action, nil)
+    end
+  end
+
+  defp handle_pending_action("Escape", socket) do
+    socket
+    |> assign(:pending_action, nil)
+    |> clear_flash()
+  end
+
+  defp handle_pending_action(_key, socket) do
+    socket
+    |> assign(:pending_action, nil)
+    |> clear_flash()
+  end
+
+  defp execute_merge(socket, task_id, pr_url) do
+    case Git.merge_pr(pr_url) do
+      :ok ->
+        Ingredients.add_note(task_id, "PR merged from dashboard: #{pr_url}")
+        Ingredients.cleanup_merged_concoction(task_id)
+        put_flash(socket, :info, "PR merged and worktree cleaned up")
+
+      {:error, reason} ->
+        put_flash(socket, :error, "Merge failed: #{inspect(reason)}")
+    end
+  end
 
   # --- Diff fetch ---
 
@@ -1119,10 +1159,22 @@ defmodule ApothecaryWeb.DashboardLive do
     stockroom ++ brewing ++ assaying ++ done
   end
 
-  defp clamp_card_index(socket) do
-    max_idx = max(length(socket.assigns.card_ids) - 1, 0)
-    idx = min(socket.assigns.selected_card, max_idx)
-    assign(socket, :selected_card, idx)
+  defp rebuild_card_ids(socket, worktrees_by_status) do
+    old_card_ids = socket.assigns.card_ids
+    old_selected_id = Enum.at(old_card_ids, socket.assigns.selected_card)
+    new_card_ids = build_card_ids(worktrees_by_status)
+
+    idx =
+      if old_selected_id do
+        Enum.find_index(new_card_ids, &(&1 == old_selected_id)) ||
+          min(socket.assigns.selected_card, max(length(new_card_ids) - 1, 0))
+      else
+        min(socket.assigns.selected_card, max(length(new_card_ids) - 1, 0))
+      end
+
+    socket
+    |> assign(:card_ids, new_card_ids)
+    |> assign(:selected_card, idx)
   end
 
   defp extract_ingredient_ids(tasks) do
