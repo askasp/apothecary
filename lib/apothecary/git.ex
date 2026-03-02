@@ -151,6 +151,18 @@ defmodule Apothecary.Git do
     CLI.run("git", ["pull", "--rebase", "origin", base], cd: project_dir())
   end
 
+  @doc "Get the recent commit log for a worktree. Returns {:ok, log} or {:error, reason}."
+  def worktree_log(worktree_path, count \\ 20) do
+    base = main_branch()
+
+    CLI.run("git", ["log", "--oneline", "#{base}..HEAD", "-#{count}"], cd: worktree_path)
+  end
+
+  @doc "Get a summary of uncommitted changes in a worktree. Returns {:ok, diff_stat} or {:error, reason}."
+  def worktree_status(worktree_path) do
+    CLI.run("git", ["diff", "--stat", "HEAD"], cd: worktree_path)
+  end
+
   @doc "Check if the `gh` CLI is installed and available."
   def gh_available? do
     case System.find_executable("gh") do

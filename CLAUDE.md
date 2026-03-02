@@ -37,6 +37,14 @@ When you receive a large task, assess its complexity:
   2. Use `add_dependency` to wire ordering if needed
   3. Work through ingredients in order, using `complete_ingredient` as you go
 
+### Context Survival ("Land the Plane")
+Your session may be interrupted at any time (crash, timeout, OOM). Notes and git history are how the next brewer rebuilds context.
+
+- **Log progress frequently**: Call `add_notes` after each significant milestone, decision, or discovery
+- **Be structured in notes**: Include what you tried, what worked/didn't, and what's next
+- **Commit early, commit often**: Each commit is a recovery checkpoint — uncommitted work is lost on crash
+- **Before finishing**: Write a final summary note covering what was accomplished and any remaining work
+
 ### Session Completion
 - When you finish all work: commit your changes and mark ingredients done
 - The orchestrator will handle pushing, PR creation, and concoction closure

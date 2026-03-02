@@ -67,8 +67,40 @@ let Hooks = {
   },
   TextareaSubmit: {
     mounted() {
+      this.mentionActive = false
+      this.mentionStart = -1
+      this.selectedIndex = 0
+      this.results = []
+
+      this.dropdown = document.getElementById("file-autocomplete-dropdown")
+
       this.el.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
+        if (this.mentionActive && this.results.length > 0) {
+          if (e.key === "ArrowDown") {
+            e.preventDefault()
+            this.selectedIndex = (this.selectedIndex + 1) % this.results.length
+            this.renderDropdown()
+            return
+          }
+          if (e.key === "ArrowUp") {
+            e.preventDefault()
+            this.selectedIndex = (this.selectedIndex - 1 + this.results.length) % this.results.length
+            this.renderDropdown()
+            return
+          }
+          if (e.key === "Tab" || e.key === "Enter") {
+            e.preventDefault()
+            this.selectFile(this.results[this.selectedIndex])
+            return
+          }
+          if (e.key === "Escape") {
+            e.preventDefault()
+            this.closeMention()
+            return
+          }
+        }
+
+        if (e.key === "Enter" && !e.shiftKey && !this.mentionActive) {
           e.preventDefault()
           const text = this.el.value.trim()
           if (text) {
@@ -77,6 +109,105 @@ let Hooks = {
           }
         }
       })
+
+      this.el.addEventListener("input", () => {
+        const pos = this.el.selectionStart
+        const text = this.el.value.substring(0, pos)
+
+        // Find the last @ that starts a mention (after whitespace or at start)
+        const match = text.match(/(^|[\s\n])@([^\s]*)$/)
+        if (match) {
+          const query = match[2]
+          this.mentionStart = pos - query.length - 1 // -1 for the @
+          this.mentionQuery = query
+
+          if (query.length >= 1) {
+            this.pushEvent("file-search", { query }, (reply) => {
+              this.results = reply.files || []
+              this.selectedIndex = 0
+              if (this.results.length > 0) {
+                this.mentionActive = true
+                this.renderDropdown()
+              } else {
+                this.closeMention()
+              }
+            })
+          } else {
+            // Just typed @, show nothing until they type more
+            this.closeMention()
+          }
+        } else {
+          this.closeMention()
+        }
+      })
+
+      // Close on click outside
+      document.addEventListener("click", (e) => {
+        if (!this.el.contains(e.target) && this.dropdown && !this.dropdown.contains(e.target)) {
+          this.closeMention()
+        }
+      })
+    },
+
+    selectFile(filePath) {
+      if (!filePath) return
+      const before = this.el.value.substring(0, this.mentionStart)
+      const after = this.el.value.substring(this.el.selectionStart)
+      this.el.value = before + "@" + filePath + " " + after
+      const newPos = this.mentionStart + 1 + filePath.length + 1
+      this.el.selectionStart = newPos
+      this.el.selectionEnd = newPos
+      this.el.focus()
+      this.closeMention()
+    },
+
+    closeMention() {
+      this.mentionActive = false
+      this.results = []
+      this.selectedIndex = 0
+      if (this.dropdown) {
+        this.dropdown.classList.add("hidden")
+        this.dropdown.innerHTML = ""
+      }
+    },
+
+    renderDropdown() {
+      if (!this.dropdown || this.results.length === 0) return
+      this.dropdown.classList.remove("hidden")
+
+      this.dropdown.innerHTML = this.results.map((file, i) => {
+        const parts = file.split("/")
+        const fileName = parts.pop()
+        const dir = parts.join("/")
+        const isSelected = i === this.selectedIndex
+        return `<div class="file-ac-item ${isSelected ? "file-ac-selected" : ""}" data-index="${i}">
+          <span class="file-ac-name">${this.escapeHtml(fileName)}</span>
+          ${dir ? `<span class="file-ac-dir">${this.escapeHtml(dir)}/</span>` : ""}
+        </div>`
+      }).join("")
+
+      // Scroll selected into view
+      const selected = this.dropdown.querySelector(".file-ac-selected")
+      if (selected) selected.scrollIntoView({ block: "nearest" })
+
+      // Click handlers
+      this.dropdown.querySelectorAll(".file-ac-item").forEach(item => {
+        item.addEventListener("mousedown", (e) => {
+          e.preventDefault()
+          const idx = parseInt(item.dataset.index)
+          this.selectFile(this.results[idx])
+        })
+        item.addEventListener("mouseenter", () => {
+          this.selectedIndex = parseInt(item.dataset.index)
+          this.renderDropdown()
+        })
+      })
+    },
+
+    escapeHtml(text) {
+      const div = document.createElement("div")
+      div.textContent = text
+      return div.innerHTML
     }
   },
   InlineSubmit: {
