@@ -25,7 +25,7 @@ Supervisors, registries, and GenServers are standard Elixir/OTP patterns — goo
 
 - **Supervisors** — `AgentSupervisor`, `DynamicSupervisor`
 - **Registries** — standard OTP
-- **GenServers** — `Store`, `Dispatcher`, `TaskManager`
+- **GenServers** — `Store`, `Dispatcher`, `TaskManager`, `WorktreeManager`
 - **PubSub** — standard Phoenix
 - **Application** — standard OTP
 - **CLI** — utility, not a domain concept
@@ -80,16 +80,15 @@ Agent  = AgentWorker + port + watchdog
 
 ## Module Renames
 
-Only the domain structs/modules get renamed:
+Only the three domain structs get renamed:
 
 | Current Module | New Module |
 |---|---|
 | `Apothecary.Worktree` | `Apothecary.Concoction` |
 | `Apothecary.Task` | `Apothecary.Ingredient` |
 | `Apothecary.AgentWorker` | `Apothecary.Brewer` |
-| `Apothecary.WorktreeManager` | `Apothecary.ConcoctionManager` |
 
-Everything else (`Store`, `TaskManager`, `Dispatcher`, `AgentSupervisor`, `CLI`, `MCP.*`) stays as-is.
+Everything else (`Store`, `TaskManager`, `WorktreeManager`, `Dispatcher`, `AgentSupervisor`, `CLI`, `MCP.*`) stays as-is.
 
 ## Mnesia Tables
 
