@@ -236,29 +236,13 @@ defmodule Apothecary.Brewer do
     end
 
     if state.worktree_id do
-      last_output = output |> Enum.take(-30) |> Enum.join("\n")
+      add_crash_context(
+        state.worktree_id,
+        agent,
+        "Brewer #{agent.id} failed (exit code #{code}).",
+        output
+      )
 
-      # Find any in-progress ingredients for richer crash context
-      in_progress_ids =
-        Apothecary.Ingredients.list_ingredients(concoction_id: state.worktree_id)
-        |> Enum.filter(&(&1.status == "in_progress"))
-        |> Enum.map(& &1.id)
-
-      in_progress_info =
-        if in_progress_ids != [] do
-          "\nIn-progress ingredients at time of crash: #{Enum.join(in_progress_ids, ", ")}"
-        else
-          ""
-        end
-
-      note =
-        if last_output != "" do
-          "Brewer #{agent.id} failed (exit code #{code}).#{in_progress_info}\nLast output:\n#{last_output}"
-        else
-          "Brewer #{agent.id} failed with exit code #{code}.#{in_progress_info}"
-        end
-
-      Apothecary.Ingredients.add_note(state.worktree_id, note)
       Apothecary.Ingredients.release_concoction(state.worktree_id)
     end
 
@@ -301,28 +285,13 @@ defmodule Apothecary.Brewer do
     Port.close(port)
 
     if state.worktree_id do
-      last_output = agent.output |> Enum.take(-30) |> Enum.join("\n")
+      add_crash_context(
+        state.worktree_id,
+        agent,
+        "Brewer #{agent.id} killed by watchdog (stuck for #{div(@stuck_timeout_ms, 60_000)} min).",
+        agent.output
+      )
 
-      in_progress_ids =
-        Apothecary.Ingredients.list_ingredients(concoction_id: state.worktree_id)
-        |> Enum.filter(&(&1.status == "in_progress"))
-        |> Enum.map(& &1.id)
-
-      in_progress_info =
-        if in_progress_ids != [] do
-          "\nIn-progress ingredients at time of kill: #{Enum.join(in_progress_ids, ", ")}"
-        else
-          ""
-        end
-
-      note =
-        if last_output != "" do
-          "Brewer #{agent.id} killed by watchdog (stuck for #{div(@stuck_timeout_ms, 60_000)} min).#{in_progress_info}\nLast output:\n#{last_output}"
-        else
-          "Brewer #{agent.id} killed by watchdog (stuck).#{in_progress_info}"
-        end
-
-      Apothecary.Ingredients.add_note(state.worktree_id, note)
       Apothecary.Ingredients.release_concoction(state.worktree_id)
     end
 
@@ -369,12 +338,64 @@ defmodule Apothecary.Brewer do
         _ -> ""
       end
 
+    # Include diff stat so the next brewer sees total scope of changes
+    diff_stat =
+      case Apothecary.Git.worktree_diff_stat(agent.worktree_path) do
+        {:ok, stat} when stat != "" -> "\nFiles changed (branch vs main):\n#{stat}"
+        _ -> ""
+      end
+
     parts =
       [
         "Session completed by Brewer #{agent.id}.",
         if(completed != [], do: "Completed ingredients:\n#{Enum.join(completed, "\n")}", else: nil),
         if(remaining != [], do: "Remaining ingredients:\n#{Enum.join(remaining, "\n")}", else: nil),
-        if(git_log != "", do: git_log, else: nil)
+        if(git_log != "", do: git_log, else: nil),
+        if(diff_stat != "", do: diff_stat, else: nil)
+      ]
+      |> Enum.reject(&is_nil/1)
+
+    Apothecary.Ingredients.add_note(worktree_id, Enum.join(parts, "\n"))
+  end
+
+  # Private — Crash/kill context for recovery
+
+  defp add_crash_context(worktree_id, agent, reason_line, output) do
+    # Capture more output (100 lines) for better crash recovery
+    last_output = output |> Enum.take(-100) |> Enum.join("\n")
+
+    # Find in-progress ingredients with their titles for richer context
+    ingredients = Apothecary.Ingredients.list_ingredients(concoction_id: worktree_id)
+
+    in_progress =
+      ingredients
+      |> Enum.filter(&(&1.status == "in_progress"))
+      |> Enum.map(&"  - #{&1.id}: #{&1.title}")
+
+    in_progress_section =
+      if in_progress != [] do
+        "\nIn-progress ingredients at time of failure:\n#{Enum.join(in_progress, "\n")}"
+      else
+        ""
+      end
+
+    # Include uncommitted changes so the next brewer knows what was mid-flight
+    uncommitted =
+      if agent.worktree_path do
+        case Apothecary.Git.worktree_status(agent.worktree_path) do
+          {:ok, status} when status != "" -> "\nUncommitted changes:\n#{status}"
+          _ -> ""
+        end
+      else
+        ""
+      end
+
+    parts =
+      [
+        reason_line,
+        if(in_progress_section != "", do: in_progress_section, else: nil),
+        if(uncommitted != "", do: uncommitted, else: nil),
+        if(last_output != "", do: "\nLast output (#{min(length(output), 100)} lines):\n#{last_output}", else: nil)
       ]
       |> Enum.reject(&is_nil/1)
 
