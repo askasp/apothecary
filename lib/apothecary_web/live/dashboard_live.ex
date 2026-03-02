@@ -1204,8 +1204,8 @@ defmodule ApothecaryWeb.DashboardLive do
         <div class="flex-1 overflow-y-auto">
           <div class="max-w-5xl mx-auto px-6">
             <%!-- Primary input — centered, narrower --%>
-            <div class="max-w-2xl mx-auto pt-32 pb-4">
-              <p class="text-base-content/40 text-sm mb-3">What shall we concoct?</p>
+            <div class="max-w-2xl mx-auto pt-40 pb-4">
+              <h2 class="text-base-content/50 text-lg font-semibold mb-4 font-apothecary">What shall we concoct?</h2>
               <.primary_input input_focused={@input_focused} />
               <.activity_ticker agents={@agents} />
             </div>
