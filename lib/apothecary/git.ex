@@ -109,7 +109,10 @@ defmodule Apothecary.Git do
 
   @doc "Merge a PR on GitHub. Returns :ok or {:error, reason}."
   def merge_pr(pr_url) do
-    case CLI.run("gh", ["pr", "merge", pr_url, "--merge", "--delete-branch"],
+    # Don't use --delete-branch: the branch is checked out in a worktree,
+    # so local branch deletion fails and causes gh to report an error even
+    # though the merge succeeded. We handle cleanup via WorktreeManager.release.
+    case CLI.run("gh", ["pr", "merge", pr_url, "--merge"],
            cd: project_dir(),
            timeout: 60_000
          ) do
