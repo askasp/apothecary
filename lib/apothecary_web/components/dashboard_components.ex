@@ -70,7 +70,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       <textarea
         id="primary-input"
         rows="5"
-        placeholder="What shall we brew? (#wt-id for ingredient, >>id for deps)"
+        placeholder=""
         phx-hook="TextareaSubmit"
         phx-focus="input-focus"
         phx-blur="input-blur"
