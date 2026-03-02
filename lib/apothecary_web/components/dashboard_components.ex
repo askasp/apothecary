@@ -23,7 +23,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           class="flex items-center gap-2 border border-base-content/20 hover:border-base-content/40 text-base-content/70 hover:text-base-content px-3 py-2 rounded cursor-pointer font-apothecary text-sm transition-colors"
           title="Click to stop concocting (s)"
         >
-          <.cauldron_icon animating={true} size={32} />
+          <.cauldron_icon animating={true} size={40} />
           <span class="text-base">Concocting</span>
           <span class="text-base-content/30 text-xs ml-1 hidden sm:inline">[s]</span>
         </button>
@@ -33,7 +33,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           class="flex items-center gap-2 border border-base-content/15 hover:border-base-content/30 text-base-content/40 hover:text-base-content/70 px-3 py-2 rounded cursor-pointer font-apothecary text-sm transition-colors"
           title="Click to start concocting (s)"
         >
-          <.cauldron_icon animating={false} size={32} />
+          <.cauldron_icon animating={false} size={40} />
           <span class="text-base">Concoct</span>
           <span class="text-base-content/30 text-xs ml-1 hidden sm:inline">[s]</span>
         </button>
@@ -75,98 +75,84 @@ defmodule ApothecaryWeb.DashboardComponents do
       xmlns="http://www.w3.org/2000/svg"
       class={["cauldron-svg", @animating && "cauldron-brewing"]}
     >
-      <%!-- Cauldron body — round black pot --%>
-      <ellipse cx="32" cy="42" rx="22" ry="14" fill="#1a1a1a" />
+      <%!-- Iron bail handle --%>
       <path
-        d="M10 36 C10 36, 10 52, 32 54 C54 52, 54 36, 54 36"
-        fill="#222"
-        stroke="#333"
-        stroke-width="1.5"
-      />
-      <ellipse cx="32" cy="36" rx="22" ry="10" fill="#2a2a2a" stroke="#444" stroke-width="1" />
-      <%!-- Rim highlight --%>
-      <ellipse cx="32" cy="36" rx="20" ry="8.5" fill="none" stroke="#555" stroke-width="0.5" />
-      <%!-- Liquid inside --%>
-      <ellipse cx="32" cy="37" rx="18" ry="7" fill="#1a472a" opacity="0.9" />
-      <%!-- Liquid surface shimmer --%>
-      <ellipse cx="28" cy="36" rx="8" ry="3" fill="#2d6b3f" opacity="0.5" />
-
-      <%!-- Legs --%>
-      <line x1="16" y1="48" x2="13" y2="58" stroke="#333" stroke-width="2.5" stroke-linecap="round" />
-      <line x1="48" y1="48" x2="51" y2="58" stroke="#333" stroke-width="2.5" stroke-linecap="round" />
-      <line x1="32" y1="52" x2="32" y2="60" stroke="#333" stroke-width="2.5" stroke-linecap="round" />
-
-      <%!-- Handle --%>
-      <path
-        d="M18 32 C18 22, 46 22, 46 32"
+        d="M14 26 C14 10, 50 10, 50 26"
         fill="none"
-        stroke="#444"
-        stroke-width="2"
+        stroke="#3a3a3a"
+        stroke-width="2.5"
+        stroke-linecap="round"
+      />
+      <%!-- Handle attachment rings --%>
+      <circle cx="14" cy="26" r="2" fill="#2a2a2a" stroke="#444" stroke-width="0.8" />
+      <circle cx="50" cy="26" r="2" fill="#2a2a2a" stroke="#444" stroke-width="0.8" />
+
+      <%!-- Rim — thick iron band --%>
+      <ellipse cx="32" cy="28" rx="21" ry="7" fill="#2a2a2a" stroke="#444" stroke-width="1.5" />
+      <ellipse cx="32" cy="28" rx="19" ry="5.5" fill="none" stroke="#555" stroke-width="0.5" />
+
+      <%!-- Cauldron body — big round belly --%>
+      <path
+        d="M11 28 C11 28, 8 38, 12 46 C16 54, 48 54, 52 46 C56 38, 53 28, 53 28"
+        fill="#1a1a1a"
+        stroke="#333"
+        stroke-width="1.2"
+      />
+      <%!-- Body highlight — curved iron sheen --%>
+      <path
+        d="M15 32 C14 38, 16 44, 22 48"
+        fill="none"
+        stroke="#3a3a3a"
+        stroke-width="1"
+        opacity="0.6"
         stroke-linecap="round"
       />
 
-      <%!-- Bubbles (animated when brewing) --%>
+      <%!-- Iron rivets/studs on body --%>
+      <circle cx="16" cy="34" r="1" fill="#3a3a3a" />
+      <circle cx="48" cy="34" r="1" fill="#3a3a3a" />
+      <circle cx="14" cy="40" r="1" fill="#3a3a3a" />
+      <circle cx="50" cy="40" r="1" fill="#3a3a3a" />
+
+      <%!-- Decorative band around middle --%>
+      <path
+        d="M13 38 C13 38, 22 42, 32 42 C42 42, 51 38, 51 38"
+        fill="none"
+        stroke="#3a3a3a"
+        stroke-width="0.8"
+        opacity="0.5"
+      />
+
+      <%!-- Liquid inside --%>
+      <ellipse cx="32" cy="30" rx="17" ry="4.5" fill="#1a472a" opacity="0.9" />
+      <%!-- Liquid surface shimmer --%>
+      <ellipse cx="28" cy="29.5" rx="7" ry="2.5" fill="#2d6b3f" opacity="0.5" />
+
+      <%!-- Three stubby iron legs --%>
+      <path d="M18 50 L15 58 L19 58 Z" fill="#2a2a2a" stroke="#3a3a3a" stroke-width="0.5" />
+      <path d="M46 50 L45 58 L49 58 Z" fill="#2a2a2a" stroke="#3a3a3a" stroke-width="0.5" />
+      <path d="M32 52 L30 60 L34 60 Z" fill="#2a2a2a" stroke="#3a3a3a" stroke-width="0.5" />
+
+      <%!-- Animated elements when brewing --%>
       <%= if @animating do %>
-        <circle
-          class="cauldron-bubble cauldron-bubble-1"
-          cx="26"
-          cy="35"
-          r="1.5"
-          fill="#4ade80"
-          opacity="0.7"
-        />
-        <circle
-          class="cauldron-bubble cauldron-bubble-2"
-          cx="34"
-          cy="34"
-          r="2"
-          fill="#34d399"
-          opacity="0.6"
-        />
-        <circle
-          class="cauldron-bubble cauldron-bubble-3"
-          cx="30"
-          cy="36"
-          r="1"
-          fill="#6ee7b7"
-          opacity="0.8"
-        />
-        <circle
-          class="cauldron-bubble cauldron-bubble-4"
-          cx="38"
-          cy="35"
-          r="1.3"
-          fill="#4ade80"
-          opacity="0.5"
-        />
+        <%!-- Stirring ladle --%>
+        <g class="cauldron-ladle">
+          <%!-- Ladle handle (diagonal stick) --%>
+          <line x1="32" y1="28" x2="46" y2="8" stroke="#8B6914" stroke-width="2" stroke-linecap="round" />
+          <%!-- Ladle bowl --%>
+          <ellipse cx="32" cy="30" rx="4" ry="2" fill="#6B5210" stroke="#8B6914" stroke-width="0.8" />
+        </g>
+
+        <%!-- Bubbles --%>
+        <circle class="cauldron-bubble cauldron-bubble-1" cx="26" cy="28" r="1.5" fill="#4ade80" opacity="0.7" />
+        <circle class="cauldron-bubble cauldron-bubble-2" cx="36" cy="27" r="2" fill="#34d399" opacity="0.6" />
+        <circle class="cauldron-bubble cauldron-bubble-3" cx="30" cy="29" r="1" fill="#6ee7b7" opacity="0.8" />
+        <circle class="cauldron-bubble cauldron-bubble-4" cx="38" cy="28" r="1.3" fill="#4ade80" opacity="0.5" />
+
         <%!-- Steam wisps --%>
-        <path
-          class="cauldron-steam cauldron-steam-1"
-          d="M26 30 C24 24, 28 20, 26 14"
-          stroke="#4ade80"
-          stroke-width="1"
-          fill="none"
-          opacity="0.3"
-          stroke-linecap="round"
-        />
-        <path
-          class="cauldron-steam cauldron-steam-2"
-          d="M32 28 C34 22, 30 18, 32 12"
-          stroke="#34d399"
-          stroke-width="1.2"
-          fill="none"
-          opacity="0.25"
-          stroke-linecap="round"
-        />
-        <path
-          class="cauldron-steam cauldron-steam-3"
-          d="M38 30 C40 24, 36 20, 38 14"
-          stroke="#6ee7b7"
-          stroke-width="0.8"
-          fill="none"
-          opacity="0.2"
-          stroke-linecap="round"
-        />
+        <path class="cauldron-steam cauldron-steam-1" d="M24 24 C22 18, 26 14, 24 8" stroke="#4ade80" stroke-width="1" fill="none" opacity="0.3" stroke-linecap="round" />
+        <path class="cauldron-steam cauldron-steam-2" d="M32 22 C34 16, 30 12, 32 6" stroke="#34d399" stroke-width="1.2" fill="none" opacity="0.25" stroke-linecap="round" />
+        <path class="cauldron-steam cauldron-steam-3" d="M40 24 C42 18, 38 14, 40 8" stroke="#6ee7b7" stroke-width="0.8" fill="none" opacity="0.2" stroke-linecap="round" />
       <% end %>
     </svg>
     """
