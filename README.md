@@ -58,14 +58,52 @@ The BEAM is good at running lots of concurrent processes that talk to each other
 - **Claude Code CLI** - headless mode for autonomous coding
 - **Tailwind v4** + **daisyUI** - dashboard styling
 
+## WARNING
+
+The Great Work is not without risk. Efforts have been made to isolate transmutation into worktrees, but this is **NOT PRODUCTION-READY**. Alchemists can and will make mistakes. At the very least:
+
+- **Protect your main branch from force pushes**
+- **Require PRs for merging** (no direct pushes to main)
+- **Require at least one code review** before merging
+
+Do not point this at a repo you can't afford to have messy PRs on. You have been warned.
+
 ## Getting started
 
+### Prerequisites
+
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) on your PATH
+- A GitHub repo you want agents to work on
+
+### Install
+
 ```bash
+curl -fsSL https://raw.githubusercontent.com/askasp/apothecary/main/install.sh | bash
+```
+
+Or download a binary directly from [GitHub Releases](https://github.com/askasp/apothecary/releases/latest).
+
+### Run
+
+`cd` into the repo you want agents to work on and start apothecary:
+
+```bash
+cd /path/to/your/repo
+apothecary
+```
+
+Visit [`localhost:4000`](http://localhost:4000) to open the dashboard. Create a concoction, and an alchemist will pick it up.
+
+### From source
+
+If you'd rather run from source (requires Elixir):
+
+```bash
+git clone https://github.com/askasp/apothecary.git
+cd apothecary
 mix setup
 mix phx.server
 ```
-
-Visit [`localhost:4000`](http://localhost:4000). You'll need Claude Code CLI on your PATH.
 
 ## License
 
