@@ -11,6 +11,7 @@ defmodule ApothecaryWeb.DashboardLive do
   def mount(_params, _session, socket) do
     if connected?(socket) do
       Ingredients.subscribe()
+      Ingredients.subscribe_recipes()
       Dispatcher.subscribe()
       DevServer.subscribe()
     end
@@ -57,6 +58,13 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:diff_view, nil)
       |> assign(:pending_action, nil)
       |> assign(:known_ingredient_ids, extract_ingredient_ids(task_state.tasks))
+      # Tab navigation
+      |> assign(:active_tab, :stockroom)
+      # Recipe state
+      |> assign(:recipes, Ingredients.list_recipes())
+      |> assign(:show_recipe_form, false)
+      |> assign(:recipe_form, to_form(%{"title" => "", "description" => "", "schedule" => "", "priority" => "3"}, as: :recipe))
+      |> assign(:editing_recipe_id, nil)
 
     {:ok, socket}
   end
@@ -213,6 +221,13 @@ defmodule ApothecaryWeb.DashboardLive do
     }
 
     {:noreply, assign(socket, :diff_view, diff_view)}
+  end
+
+  # Recipe PubSub handlers — refresh the recipe list on any change
+  @impl true
+  def handle_info({recipe_event, _recipe}, socket)
+      when recipe_event in [:recipe_created, :recipe_updated, :recipe_toggled, :recipe_deleted] do
+    {:noreply, assign(socket, :recipes, Ingredients.list_recipes())}
   end
 
   # --- Event handlers ---
@@ -514,6 +529,111 @@ defmodule ApothecaryWeb.DashboardLive do
         create_child_from_input(text, socket)
     end
   end
+
+  # --- Tab navigation ---
+
+  @impl true
+  def handle_event("switch-tab", %{"tab" => tab}, socket) do
+    active_tab = String.to_existing_atom(tab)
+    {:noreply, assign(socket, :active_tab, active_tab)}
+  end
+
+  # --- Recipe event handlers ---
+
+  @impl true
+  def handle_event("show-recipe-form", _params, socket) do
+    form = to_form(%{"title" => "", "description" => "", "schedule" => "", "priority" => "3"}, as: :recipe)
+
+    {:noreply,
+     socket
+     |> assign(:show_recipe_form, true)
+     |> assign(:recipe_form, form)
+     |> assign(:editing_recipe_id, nil)}
+  end
+
+  @impl true
+  def handle_event("cancel-recipe-form", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_recipe_form, false)
+     |> assign(:editing_recipe_id, nil)}
+  end
+
+  @impl true
+  def handle_event("save-recipe", %{"recipe" => params}, socket) do
+    attrs = %{
+      title: params["title"],
+      description: params["description"],
+      schedule: params["schedule"],
+      priority: parse_priority(params["priority"])
+    }
+
+    result =
+      if socket.assigns.editing_recipe_id do
+        Ingredients.update_recipe(socket.assigns.editing_recipe_id, attrs)
+      else
+        Ingredients.create_recipe(attrs)
+      end
+
+    case result do
+      {:ok, _recipe} ->
+        {:noreply,
+         socket
+         |> assign(:show_recipe_form, false)
+         |> assign(:editing_recipe_id, nil)
+         |> assign(:recipes, Ingredients.list_recipes())
+         |> put_flash(:info, if(socket.assigns.editing_recipe_id, do: "Recipe updated", else: "Recipe created"))}
+
+      {:error, {:invalid_schedule, _}} ->
+        {:noreply, put_flash(socket, :error, "Invalid cron expression")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Error: #{inspect(reason)}")}
+    end
+  end
+
+  @impl true
+  def handle_event("toggle-recipe", %{"id" => id}, socket) do
+    Ingredients.toggle_recipe(id)
+    {:noreply, assign(socket, :recipes, Ingredients.list_recipes())}
+  end
+
+  @impl true
+  def handle_event("edit-recipe", %{"id" => id}, socket) do
+    case Ingredients.get_recipe(id) do
+      {:ok, recipe} ->
+        form =
+          to_form(
+            %{
+              "title" => recipe.title || "",
+              "description" => recipe.description || "",
+              "schedule" => recipe.schedule || "",
+              "priority" => to_string(recipe.priority || 3)
+            },
+            as: :recipe
+          )
+
+        {:noreply,
+         socket
+         |> assign(:show_recipe_form, true)
+         |> assign(:recipe_form, form)
+         |> assign(:editing_recipe_id, id)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Recipe not found")}
+    end
+  end
+
+  @impl true
+  def handle_event("delete-recipe", %{"id" => id}, socket) do
+    Ingredients.delete_recipe(id)
+    {:noreply, assign(socket, :recipes, Ingredients.list_recipes())}
+  end
+
+  defp parse_priority(nil), do: 3
+  defp parse_priority(""), do: 3
+  defp parse_priority(s) when is_binary(s), do: String.to_integer(s)
+  defp parse_priority(n) when is_integer(n), do: n
 
   # --- Hotkey handlers ---
 
@@ -1242,10 +1362,23 @@ defmodule ApothecaryWeb.DashboardLive do
           />
         </div>
 
+        <%!-- Tab navigation --%>
+        <.tab_navigation active_tab={@active_tab} />
+
         <div class="border-b border-base-content/10" />
 
         <%!-- Scrollable content --%>
         <div class="flex-1 overflow-y-auto">
+          <%= if @active_tab == :recipes do %>
+            <div class="mx-auto px-2">
+              <.recipe_list
+                recipes={@recipes}
+                show_recipe_form={@show_recipe_form}
+                recipe_form={@recipe_form}
+                editing_recipe_id={@editing_recipe_id}
+              />
+            </div>
+          <% else %>
           <div class="mx-auto px-2">
             <%!-- Primary input — centered, narrower --%>
             <div class="max-w-2xl mx-auto pt-16 pb-4">
@@ -1383,6 +1516,7 @@ defmodule ApothecaryWeb.DashboardLive do
               <% end %>
             </div>
           </div>
+          <% end %>
         </div>
 
         <%!-- Footer --%>

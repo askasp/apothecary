@@ -1087,4 +1087,297 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp group_badge_label("pr"), do: "ASSAYING"
   defp group_badge_label("done"), do: "BOTTLED"
   defp group_badge_label(_), do: ""
+
+  # --- Tab Navigation ---
+
+  attr :active_tab, :atom, required: true
+
+  def tab_navigation(assigns) do
+    ~H"""
+    <div class="flex items-center gap-1 px-2 py-1">
+      <button
+        phx-click="switch-tab"
+        phx-value-tab="stockroom"
+        class={[
+          "px-3 py-1.5 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer",
+          if(@active_tab == :stockroom,
+            do: "text-base-content bg-base-content/10 font-bold",
+            else: "text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5"
+          )
+        ]}
+      >
+        Stockroom
+      </button>
+      <button
+        phx-click="switch-tab"
+        phx-value-tab="recipes"
+        class={[
+          "px-3 py-1.5 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer",
+          if(@active_tab == :recipes,
+            do: "text-base-content bg-base-content/10 font-bold",
+            else: "text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5"
+          )
+        ]}
+      >
+        Recurring Brews
+      </button>
+    </div>
+    """
+  end
+
+  # --- Recipe List ---
+
+  attr :recipes, :list, required: true
+  attr :show_recipe_form, :boolean, default: false
+  attr :recipe_form, :any, default: nil
+  attr :editing_recipe_id, :string, default: nil
+
+  def recipe_list(assigns) do
+    ~H"""
+    <div class="max-w-3xl mx-auto pt-8 pb-4">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-base-content/50 text-lg font-semibold font-apothecary">
+            Recurring Brews
+          </h2>
+          <p class="text-base-content/30 text-xs mt-1">
+            Recipes that automatically create concoctions on a schedule
+          </p>
+        </div>
+        <button
+          :if={!@show_recipe_form}
+          phx-click="show-recipe-form"
+          class="flex items-center gap-1.5 border border-base-content/20 hover:border-base-content/40 text-base-content/60 hover:text-base-content px-3 py-1.5 rounded text-xs cursor-pointer transition-colors"
+        >
+          <span>+</span>
+          <span>New Recipe</span>
+        </button>
+      </div>
+
+      <.recipe_form :if={@show_recipe_form} form={@recipe_form} editing_id={@editing_recipe_id} />
+
+      <%= if @recipes == [] and !@show_recipe_form do %>
+        <div class="text-center py-16">
+          <div class="text-4xl mb-3 opacity-20">&#x1F4DC;</div>
+          <p class="text-base-content/30 text-sm">No recipes yet</p>
+          <p class="text-base-content/20 text-xs mt-1">
+            Create a recipe to schedule recurring brews
+          </p>
+        </div>
+      <% else %>
+        <div class="space-y-2">
+          <.recipe_card :for={recipe <- @recipes} recipe={recipe} />
+        </div>
+      <% end %>
+    </div>
+    """
+  end
+
+  # --- Recipe Form ---
+
+  attr :form, :any, required: true
+  attr :editing_id, :string, default: nil
+
+  def recipe_form(assigns) do
+    ~H"""
+    <div class="border border-base-content/15 rounded-lg p-4 mb-4 bg-base-content/3">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-semibold text-base-content/70 font-apothecary">
+          {if(@editing_id, do: "Edit Recipe", else: "New Recipe")}
+        </h3>
+        <button
+          phx-click="cancel-recipe-form"
+          class="text-base-content/30 hover:text-base-content/60 text-xs cursor-pointer"
+        >
+          Cancel
+        </button>
+      </div>
+
+      <.form for={@form} id="recipe-form" phx-submit="save-recipe">
+        <input type="hidden" name="recipe[id]" value={@editing_id} />
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs text-base-content/40 block mb-1">Title</label>
+            <input
+              type="text"
+              name="recipe[title]"
+              value={@form[:title].value}
+              placeholder="e.g. Daily dependency updates"
+              class="bg-transparent border border-base-content/20 focus:border-primary outline-none px-3 py-1.5 text-sm w-full rounded"
+              required
+            />
+          </div>
+
+          <div>
+            <label class="text-xs text-base-content/40 block mb-1">Description</label>
+            <textarea
+              name="recipe[description]"
+              rows="3"
+              placeholder="The task description that will be used when creating the concoction..."
+              class="bg-transparent border border-base-content/20 focus:border-primary outline-none px-3 py-1.5 text-sm w-full rounded resize-none"
+            >{@form[:description].value}</textarea>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-base-content/40 block mb-1">
+                Schedule (cron expression)
+              </label>
+              <input
+                type="text"
+                name="recipe[schedule]"
+                value={@form[:schedule].value}
+                placeholder="0 9 * * MON-FRI"
+                class="bg-transparent border border-base-content/20 focus:border-primary outline-none px-3 py-1.5 text-sm w-full rounded font-mono"
+                required
+              />
+              <p class="text-[10px] text-base-content/25 mt-1">
+                min hour day month weekday (UTC)
+              </p>
+            </div>
+
+            <div>
+              <label class="text-xs text-base-content/40 block mb-1">Priority</label>
+              <select
+                name="recipe[priority]"
+                class="bg-transparent border border-base-content/20 focus:border-primary outline-none px-3 py-1.5 text-sm w-full rounded"
+              >
+                <option value="0" selected={@form[:priority].value == "0"}>P0 - Critical</option>
+                <option value="1" selected={@form[:priority].value == "1"}>P1 - High</option>
+                <option value="2" selected={@form[:priority].value == "2"}>P2 - Medium</option>
+                <option
+                  value="3"
+                  selected={@form[:priority].value in [nil, "", "3"]}
+                >
+                  P3 - Default
+                </option>
+                <option value="4" selected={@form[:priority].value == "4"}>P4 - Backlog</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="flex justify-end pt-1">
+            <button
+              type="submit"
+              class="bg-primary/20 hover:bg-primary/30 text-primary px-4 py-1.5 rounded text-xs cursor-pointer transition-colors"
+            >
+              {if(@editing_id, do: "Update Recipe", else: "Create Recipe")}
+            </button>
+          </div>
+        </div>
+      </.form>
+    </div>
+    """
+  end
+
+  # --- Recipe Card ---
+
+  attr :recipe, :any, required: true
+
+  def recipe_card(assigns) do
+    ~H"""
+    <div class={[
+      "border rounded-lg px-4 py-3 transition-colors",
+      if(@recipe.enabled,
+        do: "border-base-content/15 bg-base-content/3",
+        else: "border-base-content/8 bg-base-content/2 opacity-60"
+      )
+    ]}>
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <h3 class="text-sm font-medium text-base-content/80 truncate">
+              {@recipe.title}
+            </h3>
+            <span class={[
+              "text-[10px] px-1.5 py-0.5 rounded",
+              priority_color(@recipe.priority)
+            ]}>
+              P{@recipe.priority || 3}
+            </span>
+            <span class={[
+              "text-[10px] px-1.5 py-0.5 rounded",
+              if(@recipe.enabled,
+                do: "bg-emerald-400/15 text-emerald-400",
+                else: "bg-base-content/10 text-base-content/30"
+              )
+            ]}>
+              {if(@recipe.enabled, do: "active", else: "paused")}
+            </span>
+          </div>
+
+          <p :if={@recipe.description} class="text-xs text-base-content/30 mt-1 line-clamp-2">
+            {@recipe.description}
+          </p>
+
+          <div class="flex items-center gap-4 mt-2 text-[11px] text-base-content/30">
+            <span class="font-mono bg-base-content/5 px-1.5 py-0.5 rounded text-base-content/50">
+              {@recipe.schedule}
+            </span>
+            <span :if={@recipe.next_run_at} class="flex items-center gap-1">
+              <span class="text-base-content/20">next:</span>
+              {format_relative_time(@recipe.next_run_at)}
+            </span>
+            <span :if={@recipe.last_run_at} class="flex items-center gap-1">
+              <span class="text-base-content/20">last:</span>
+              {format_relative_time(@recipe.last_run_at)}
+            </span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1 shrink-0">
+          <button
+            phx-click="toggle-recipe"
+            phx-value-id={@recipe.id}
+            class="text-base-content/30 hover:text-base-content/60 px-2 py-1 text-xs cursor-pointer transition-colors"
+            title={if(@recipe.enabled, do: "Pause", else: "Resume")}
+          >
+            {if(@recipe.enabled, do: "pause", else: "resume")}
+          </button>
+          <button
+            phx-click="edit-recipe"
+            phx-value-id={@recipe.id}
+            class="text-base-content/30 hover:text-base-content/60 px-2 py-1 text-xs cursor-pointer transition-colors"
+            title="Edit"
+          >
+            edit
+          </button>
+          <button
+            phx-click="delete-recipe"
+            phx-value-id={@recipe.id}
+            class="text-base-content/30 hover:text-red-400/60 px-2 py-1 text-xs cursor-pointer transition-colors"
+            title="Delete"
+            data-confirm="Delete this recipe?"
+          >
+            delete
+          </button>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp format_relative_time(nil), do: "—"
+
+  defp format_relative_time(iso_string) when is_binary(iso_string) do
+    case DateTime.from_iso8601(iso_string) do
+      {:ok, dt, _} ->
+        now = DateTime.utc_now()
+        diff = DateTime.diff(dt, now, :second)
+
+        cond do
+          diff > 86_400 -> "#{div(diff, 86_400)}d"
+          diff > 3_600 -> "#{div(diff, 3_600)}h"
+          diff > 60 -> "#{div(diff, 60)}m"
+          diff > 0 -> "#{diff}s"
+          diff > -60 -> "just now"
+          diff > -3_600 -> "#{div(-diff, 60)}m ago"
+          diff > -86_400 -> "#{div(-diff, 3_600)}h ago"
+          true -> "#{div(-diff, 86_400)}d ago"
+        end
+
+      _ ->
+        iso_string
+    end
+  end
 end
