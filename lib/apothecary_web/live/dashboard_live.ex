@@ -1195,8 +1195,6 @@ defmodule ApothecaryWeb.DashboardLive do
             target_count={@target_count}
             active_count={@active_count}
             working_count={Enum.count(@agents, &(&1.status == :working))}
-            ready_count={length(@ready_tasks)}
-            task_count={@task_count}
           />
         </div>
 
@@ -1206,8 +1204,8 @@ defmodule ApothecaryWeb.DashboardLive do
         <div class="flex-1 overflow-y-auto">
           <div class="max-w-5xl mx-auto px-6">
             <%!-- Primary input — centered, narrower --%>
-            <div class="max-w-2xl mx-auto pt-16 pb-4">
-              <p class="text-base-content/40 text-sm mb-3">Describe a concoction and press enter to brew it</p>
+            <div class="max-w-2xl mx-auto pt-24 pb-4">
+              <p class="text-base-content/40 text-sm mb-3">What shall we concoct?</p>
               <.primary_input input_focused={@input_focused} />
               <.activity_ticker agents={@agents} />
             </div>

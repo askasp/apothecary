@@ -13,8 +13,6 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :target_count, :integer, default: 3
   attr :active_count, :integer, default: 0
   attr :working_count, :integer, default: 0
-  attr :ready_count, :integer, default: 0
-  attr :task_count, :integer, default: 0
 
   def status_controls(assigns) do
     ~H"""
@@ -56,11 +54,6 @@ defmodule ApothecaryWeb.DashboardComponents do
           +
         </button>
       </div>
-
-      <span class="text-base-content/30">│</span>
-      <span class="text-emerald-400">{@ready_count}rdy</span>
-      <span class="text-base-content/30">/</span>
-      <span class="text-base-content/50">{@task_count}tot</span>
 
       <span class="ml-auto text-base-content/30 cursor-pointer" phx-click="toggle-help">?</span>
     </div>
