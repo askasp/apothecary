@@ -22,6 +22,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:last_poll, poller_state.last_poll)
       |> assign(:error, poller_state.error)
       |> assign(:filter, "all")
+      |> assign(:show_create_form, false)
       |> assign(:task_count, length(poller_state.tasks))
       |> assign(:swarm_status, dispatcher_status.status)
       |> assign(:target_count, max(dispatcher_status.target_count, 3))
@@ -105,6 +106,16 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("keydown", params, socket) do
+    handle_hotkey(params, socket)
+  end
+
+  @impl true
+  def handle_event("toggle-create-form", _params, socket) do
+    {:noreply, assign(socket, :show_create_form, !socket.assigns.show_create_form)}
+  end
+
+  @impl true
   def handle_event("create-task", params, socket) do
     attrs = %{
       title: params["title"],
@@ -116,12 +127,42 @@ defmodule ApothecaryWeb.DashboardLive do
     case Apothecary.Beads.create(attrs) do
       {:ok, _} ->
         Poller.force_refresh()
-        {:noreply, put_flash(socket, :info, "Task created")}
+
+        {:noreply,
+         socket
+         |> assign(:show_create_form, false)
+         |> put_flash(:info, "Task created")}
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed to create task: #{inspect(reason)}")}
     end
   end
+
+  defp handle_hotkey(%{"key" => "s"}, socket) do
+    if socket.assigns.swarm_status == :paused do
+      Dispatcher.start_swarm(socket.assigns.target_count)
+
+      {:noreply,
+       put_flash(socket, :info, "Swarm started with #{socket.assigns.target_count} agents")}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  defp handle_hotkey(%{"key" => "n"}, socket) do
+    {:noreply, assign(socket, :show_create_form, !socket.assigns.show_create_form)}
+  end
+
+  defp handle_hotkey(%{"key" => "p"}, socket) do
+    if socket.assigns.swarm_status == :running do
+      Dispatcher.stop_swarm()
+      {:noreply, put_flash(socket, :info, "Swarm stopped")}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  defp handle_hotkey(_params, socket), do: {:noreply, socket}
 
   defp filter_tasks(tasks, "all"), do: tasks
   defp filter_tasks(tasks, "ready"), do: Enum.filter(tasks, &(&1.status in ["ready", "open"]))
@@ -134,6 +175,7 @@ defmodule ApothecaryWeb.DashboardLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash}>
+      <div id="hotkeys" phx-hook=".Hotkeys" phx-update="ignore" class="hidden" />
       <div class="space-y-6">
         <%!-- Header --%>
         <div class="flex items-center justify-between">
@@ -198,7 +240,22 @@ defmodule ApothecaryWeb.DashboardLive do
               active_count={@active_count}
             />
 
-            <.create_task_form />
+            <div class="space-y-2">
+              <button
+                phx-click="toggle-create-form"
+                class={[
+                  "btn btn-sm w-full",
+                  if(@show_create_form, do: "btn-ghost", else: "btn-primary")
+                ]}
+              >
+                <.icon
+                  name={if(@show_create_form, do: "hero-x-mark", else: "hero-plus")}
+                  class="size-4"
+                />
+                {if(@show_create_form, do: "Cancel", else: "New Task")}
+              </button>
+              <.create_task_form :if={@show_create_form} />
+            </div>
 
             <div :if={@agents != []} class="space-y-2">
               <h3 class="font-semibold">Active Agents</h3>
@@ -216,6 +273,24 @@ defmodule ApothecaryWeb.DashboardLive do
           </div>
         </div>
       </div>
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".Hotkeys">
+        export default {
+          mounted() {
+            this.handler = (e) => {
+              const tag = e.target.tagName
+              if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return
+              if (e.key === "s" || e.key === "p" || e.key === "n") {
+                this.pushEvent("keydown", {key: e.key})
+              }
+            }
+            window.addEventListener("keydown", this.handler)
+          },
+          destroyed() {
+            window.removeEventListener("keydown", this.handler)
+          }
+        }
+      </script>
     </Layouts.app>
     """
   end

@@ -29,6 +29,7 @@ defmodule Apothecary.Startup do
   end
 
   defp validate_project_dir(nil), do: {:warn, "no project_dir configured"}
+
   defp validate_project_dir(dir) do
     if File.dir?(dir), do: :ok, else: {:error, "project_dir does not exist: #{dir}"}
   end
