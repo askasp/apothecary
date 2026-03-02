@@ -4,7 +4,7 @@ defmodule Apothecary.PRMonitor do
 
   - MERGED → mark_merged + cleanup_merged_concoction (releases disk, sets done)
   - CHANGES_REQUESTED → mark_revision_needed (dispatcher picks it up)
-  - CLOSED without merge → add note, leave for manual handling
+  - CLOSED without merge → cleanup_cancelled_concoction (releases disk, sets cancelled)
   - OPEN with no changes requested → no action
   """
 
@@ -59,12 +59,9 @@ defmodule Apothecary.PRMonitor do
         Apothecary.Ingredients.mark_revision_needed(wt.id)
 
       {:ok, %{"state" => "CLOSED"}} ->
-        Logger.warning("PRMonitor: PR closed without merge for #{wt.id}")
-
-        Apothecary.Ingredients.add_note(
-          wt.id,
-          "PR closed without merge — manual intervention needed"
-        )
+        Logger.info("PRMonitor: PR closed without merge for #{wt.id}, cleaning up")
+        Apothecary.Ingredients.add_note(wt.id, "PR closed without merge: #{wt.pr_url}")
+        Apothecary.Ingredients.cleanup_cancelled_concoction(wt.id)
 
       {:ok, %{"state" => "OPEN"}} ->
         # No action needed — PR is open and awaiting review
