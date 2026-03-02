@@ -196,6 +196,9 @@ defmodule Apothecary.Brewer do
 
     worktree_id = state.worktree_id
 
+    # Record session summary on clean exit
+    add_session_summary(worktree_id, agent)
+
     # Finalize the concoction (push, PR, close)
     finalize_concoction(worktree_id, agent)
 
@@ -233,13 +236,26 @@ defmodule Apothecary.Brewer do
     end
 
     if state.worktree_id do
-      last_output = output |> Enum.take(-10) |> Enum.join("\n")
+      last_output = output |> Enum.take(-30) |> Enum.join("\n")
+
+      # Find any in-progress ingredients for richer crash context
+      in_progress_ids =
+        Apothecary.Ingredients.list_ingredients(concoction_id: state.worktree_id)
+        |> Enum.filter(&(&1.status == "in_progress"))
+        |> Enum.map(& &1.id)
+
+      in_progress_info =
+        if in_progress_ids != [] do
+          "\nIn-progress ingredients at time of crash: #{Enum.join(in_progress_ids, ", ")}"
+        else
+          ""
+        end
 
       note =
         if last_output != "" do
-          "Brewer #{agent.id} failed (exit code #{code}). Last output:\n#{last_output}"
+          "Brewer #{agent.id} failed (exit code #{code}).#{in_progress_info}\nLast output:\n#{last_output}"
         else
-          "Brewer #{agent.id} failed with exit code #{code}"
+          "Brewer #{agent.id} failed with exit code #{code}.#{in_progress_info}"
         end
 
       Apothecary.Ingredients.add_note(state.worktree_id, note)
@@ -285,13 +301,25 @@ defmodule Apothecary.Brewer do
     Port.close(port)
 
     if state.worktree_id do
-      last_output = agent.output |> Enum.take(-10) |> Enum.join("\n")
+      last_output = agent.output |> Enum.take(-30) |> Enum.join("\n")
+
+      in_progress_ids =
+        Apothecary.Ingredients.list_ingredients(concoction_id: state.worktree_id)
+        |> Enum.filter(&(&1.status == "in_progress"))
+        |> Enum.map(& &1.id)
+
+      in_progress_info =
+        if in_progress_ids != [] do
+          "\nIn-progress ingredients at time of kill: #{Enum.join(in_progress_ids, ", ")}"
+        else
+          ""
+        end
 
       note =
         if last_output != "" do
-          "Brewer #{agent.id} killed by watchdog (stuck for #{div(@stuck_timeout_ms, 60_000)} min). Last output:\n#{last_output}"
+          "Brewer #{agent.id} killed by watchdog (stuck for #{div(@stuck_timeout_ms, 60_000)} min).#{in_progress_info}\nLast output:\n#{last_output}"
         else
-          "Brewer #{agent.id} killed by watchdog (stuck)"
+          "Brewer #{agent.id} killed by watchdog (stuck).#{in_progress_info}"
         end
 
       Apothecary.Ingredients.add_note(state.worktree_id, note)
@@ -319,6 +347,39 @@ defmodule Apothecary.Brewer do
   end
 
   def terminate(_reason, _state), do: :ok
+
+  # Private — Session summary on clean exit
+
+  defp add_session_summary(worktree_id, agent) do
+    ingredients = Apothecary.Ingredients.list_ingredients(concoction_id: worktree_id)
+
+    completed =
+      ingredients
+      |> Enum.filter(&(&1.status == "done"))
+      |> Enum.map(&"  - #{&1.id}: #{&1.title}")
+
+    remaining =
+      ingredients
+      |> Enum.reject(&(&1.status == "done"))
+      |> Enum.map(&"  - #{&1.id}: #{&1.title} (#{&1.status})")
+
+    git_log =
+      case Apothecary.Git.worktree_log(agent.worktree_path, 10) do
+        {:ok, log} when log != "" -> "\nCommits made:\n#{log}"
+        _ -> ""
+      end
+
+    parts =
+      [
+        "Session completed by Brewer #{agent.id}.",
+        if(completed != [], do: "Completed ingredients:\n#{Enum.join(completed, "\n")}", else: nil),
+        if(remaining != [], do: "Remaining ingredients:\n#{Enum.join(remaining, "\n")}", else: nil),
+        if(git_log != "", do: git_log, else: nil)
+      ]
+      |> Enum.reject(&is_nil/1)
+
+    Apothecary.Ingredients.add_note(worktree_id, Enum.join(parts, "\n"))
+  end
 
   # Private — Concoction finalization
 
@@ -599,6 +660,8 @@ defmodule Apothecary.Brewer do
         ""
       end
 
+    git_context = build_git_context(worktree_path)
+
     """
     You are an autonomous coding agent working in: #{worktree_path}
 
@@ -608,6 +671,7 @@ defmodule Apothecary.Brewer do
     Description: #{worktree.description || worktree.title}
 
     #{notes_section}
+    #{git_context}
     #{revision_section}
     ## Ingredient Management via MCP
     You have MCP tools to manage ingredients within this concoction:
@@ -656,9 +720,45 @@ defmodule Apothecary.Brewer do
     - The orchestrator will handle pushing, PR creation, and closing
     - Do NOT push — the orchestrator handles that
 
+    ## Context Survival ("Land the Plane")
+    Your session may be interrupted at any time (crash, timeout, OOM). To help the next brewer recover quickly:
+    - **Log progress frequently**: Call `add_notes` after each significant milestone, decision, or discovery
+    - **Be structured**: Include what you tried, what worked/didn't, and what's next
+    - **Before finishing**: Write a final summary note with `add_notes` covering what was accomplished and any remaining work
+    - **Commit early, commit often**: Each commit is a recovery checkpoint — uncommitted work may be lost
+    - Notes and git history are the primary way the next brewer rebuilds context if you crash
+
     #{if claude_md != "", do: "## Project Guidelines (CLAUDE.md)\n#{claude_md}", else: ""}
     #{if agents_md != "", do: "## Agent Guidelines (AGENTS.md)\n#{agents_md}", else: ""}
     """
+  end
+
+  defp build_git_context(worktree_path) do
+    log_section =
+      case Apothecary.Git.worktree_log(worktree_path) do
+        {:ok, log} when log != "" ->
+          "### Commits on this branch\n```\n#{log}\n```"
+
+        _ ->
+          nil
+      end
+
+    uncommitted_section =
+      case Apothecary.Git.worktree_status(worktree_path) do
+        {:ok, status} when status != "" ->
+          "### Uncommitted changes\n```\n#{status}\n```"
+
+        _ ->
+          nil
+      end
+
+    sections = Enum.reject([log_section, uncommitted_section], &is_nil/1)
+
+    if sections == [] do
+      ""
+    else
+      "## Git Context (prior work on this branch)\n" <> Enum.join(sections, "\n\n")
+    end
   end
 
   defp format_ingredient_list([]), do: ""
