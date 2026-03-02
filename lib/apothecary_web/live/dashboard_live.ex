@@ -27,6 +27,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:target_count, max(dispatcher_status.target_count, 3))
       |> assign(:active_count, dispatcher_status.active_count)
       |> assign(:agents, Map.values(dispatcher_status.agents))
+      |> assign(:show_create_form, false)
       |> stream(:tasks, poller_state.tasks)
 
     {:ok, socket}
@@ -105,6 +106,11 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("toggle-create-form", _params, socket) do
+    {:noreply, assign(socket, :show_create_form, !socket.assigns.show_create_form)}
+  end
+
+  @impl true
   def handle_event("create-task", params, socket) do
     attrs = %{
       title: params["title"],
@@ -116,7 +122,11 @@ defmodule ApothecaryWeb.DashboardLive do
     case Apothecary.Beads.create(attrs) do
       {:ok, _} ->
         Poller.force_refresh()
-        {:noreply, put_flash(socket, :info, "Task created")}
+
+        {:noreply,
+         socket
+         |> assign(:show_create_form, false)
+         |> put_flash(:info, "Task created")}
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed to create task: #{inspect(reason)}")}
@@ -211,7 +221,7 @@ defmodule ApothecaryWeb.DashboardLive do
               <.agent_card :for={agent <- @agents} agent={agent} />
             </div>
 
-            <.create_task_form />
+            <.create_task_form show={@show_create_form} />
 
             <div :if={@ready_tasks != []} class="bg-base-200 rounded-box p-5 space-y-2">
               <h3 class="font-semibold text-sm">Ready Queue</h3>

@@ -239,12 +239,28 @@ defmodule ApothecaryWeb.DashboardComponents do
   # Create task form
 
   attr :form, :any, default: nil
+  attr :show, :boolean, default: false
 
   def create_task_form(assigns) do
     ~H"""
     <div class="bg-base-200 rounded-box p-5 space-y-3">
-      <h3 class="font-semibold">Add Ingredient</h3>
-      <.form for={%{}} phx-submit="create-task" id="create-task-form" class="space-y-3">
+      <button
+        phx-click="toggle-create-form"
+        class="flex items-center justify-between w-full font-semibold cursor-pointer"
+      >
+        <span>Add Ingredient</span>
+        <.icon
+          name={if(@show, do: "hero-chevron-up", else: "hero-chevron-down")}
+          class="size-4 text-base-content/50"
+        />
+      </button>
+      <.form
+        :if={@show}
+        for={%{}}
+        phx-submit="create-task"
+        id="create-task-form"
+        class="space-y-3"
+      >
         <input
           type="text"
           name="title"
