@@ -1182,7 +1182,8 @@ defmodule ApothecaryWeb.DashboardLive do
         <div class="flex-1 overflow-y-auto">
           <div class="max-w-5xl mx-auto px-6">
             <%!-- Primary input — centered, narrower --%>
-            <div class="max-w-2xl mx-auto pt-10 pb-2">
+            <div class="max-w-2xl mx-auto pt-16 pb-4">
+              <p class="text-base-content/40 text-sm mb-3">Describe a concoction and press enter to brew it</p>
               <.primary_input input_focused={@input_focused} />
               <.activity_ticker agents={@agents} />
             </div>
