@@ -440,11 +440,25 @@ defmodule ApothecaryWeb.DashboardLive do
         {:noreply, put_flash(socket, :error, "Worktree is not in pr_open status")}
 
       true ->
-        {:noreply,
-         socket
-         |> assign(:pending_action, {:merge, task.id, pr_url})
-         |> put_flash(:info, "Merge \"#{task.title}\"? Press m/y/Enter to confirm, Esc to cancel")}
+        {:noreply, assign(socket, :pending_action, {:merge, task.id, pr_url})}
     end
+  end
+
+  @impl true
+  def handle_event("confirm-merge", _params, socket) do
+    case socket.assigns.pending_action do
+      {:merge, task_id, pr_url} ->
+        socket = assign(socket, :pending_action, nil)
+        {:noreply, execute_merge(socket, task_id, pr_url)}
+
+      _ ->
+        {:noreply, assign(socket, :pending_action, nil)}
+    end
+  end
+
+  @impl true
+  def handle_event("cancel-merge", _params, socket) do
+    {:noreply, assign(socket, :pending_action, nil)}
   end
 
   @impl true
@@ -837,9 +851,7 @@ defmodule ApothecaryWeb.DashboardLive do
     task = socket.assigns.selected_task
 
     if task && Map.get(task, :pr_url) && task.status == "pr_open" do
-      socket
-      |> assign(:pending_action, {:merge, task.id, task.pr_url})
-      |> put_flash(:info, "Merge \"#{task.title}\"? Press m/y/Enter to confirm, Esc to cancel")
+      assign(socket, :pending_action, {:merge, task.id, task.pr_url})
     else
       socket
     end
@@ -1640,6 +1652,7 @@ defmodule ApothecaryWeb.DashboardLive do
         working_agent={@working_agent}
         agent_output={@agent_output}
         dev_server={@dev_servers[@selected_task_id]}
+        pending_action={@pending_action}
       />
 
       <.which_key_overlay

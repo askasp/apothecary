@@ -410,6 +410,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :working_agent, :map, default: nil
   attr :agent_output, :list, default: []
   attr :dev_server, :map, default: nil
+  attr :pending_action, :any, default: nil
 
   def task_detail_drawer(assigns) do
     ~H"""
@@ -435,6 +436,9 @@ defmodule ApothecaryWeb.DashboardComponents do
           </button>
         </div>
 
+        <%!-- Merge confirmation bar --%>
+        <.merge_confirmation :if={@pending_action} task={@task} />
+
         <%!-- Panel content --%>
         <.task_detail_panel
           task={@task}
@@ -444,6 +448,38 @@ defmodule ApothecaryWeb.DashboardComponents do
           agent_output={@agent_output}
           dev_server={@dev_server}
         />
+      </div>
+    </div>
+    """
+  end
+
+  # --- Merge Confirmation Bar ---
+
+  attr :task, :map, required: true
+
+  def merge_confirmation(assigns) do
+    ~H"""
+    <div class="bg-amber-400/10 border-b border-amber-400/30 px-3 py-3">
+      <div class="flex items-center gap-3">
+        <span class="text-amber-400 text-sm font-apothecary">Merge this PR?</span>
+        <span class="text-base-content/50 text-xs truncate flex-1">
+          "{@task.title}"
+        </span>
+      </div>
+      <div class="flex items-center gap-2 mt-2">
+        <button
+          phx-click="confirm-merge"
+          class="bg-green-500/20 hover:bg-green-500/30 text-green-400 px-3 py-1 rounded text-xs cursor-pointer transition-colors font-bold"
+        >
+          Merge
+        </button>
+        <button
+          phx-click="cancel-merge"
+          class="bg-base-content/5 hover:bg-base-content/10 text-base-content/50 px-3 py-1 rounded text-xs cursor-pointer transition-colors"
+        >
+          Cancel
+        </button>
+        <span class="text-base-content/30 text-xs ml-auto">m/y/Enter to confirm, Esc to cancel</span>
       </div>
     </div>
     """
