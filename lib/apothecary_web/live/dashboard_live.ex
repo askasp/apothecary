@@ -1369,7 +1369,11 @@ defmodule ApothecaryWeb.DashboardLive do
 
     cond do
       rest != "" ->
-        title = if String.length(first_line) > 80, do: String.slice(first_line, 0, 77) <> "...", else: first_line
+        title =
+          if String.length(first_line) > 80,
+            do: String.slice(first_line, 0, 77) <> "...",
+            else: first_line
+
         {title, rest}
 
       String.length(first_line) > 80 ->

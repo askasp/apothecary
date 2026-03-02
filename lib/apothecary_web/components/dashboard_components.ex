@@ -178,7 +178,7 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   def primary_input(assigns) do
     ~H"""
-    <div>
+    <div class="relative">
       <textarea
         id="primary-input"
         rows="5"
@@ -187,8 +187,40 @@ defmodule ApothecaryWeb.DashboardComponents do
         phx-focus="input-focus"
         phx-blur="input-blur"
         autocomplete="off"
-        class="bg-transparent border border-base-content/20 focus:border-primary outline-none px-3 py-2 text-sm w-full resize-none rounded-lg"
+        class="bg-transparent border border-base-content/20 focus:border-primary outline-none px-3 py-2 pr-12 text-sm w-full resize-none rounded-lg"
       ></textarea>
+      <button
+        id="primary-input-send"
+        phx-hook=".TextareaSend"
+        type="button"
+        class="absolute right-2 bottom-2 text-base-content/30 hover:text-primary cursor-pointer p-1.5 rounded hover:bg-base-content/10 transition-colors"
+        title="Send (Enter)"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          class="w-5 h-5"
+        >
+          <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" />
+        </svg>
+      </button>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".TextareaSend">
+        export default {
+          mounted() {
+            this.el.addEventListener("click", () => {
+              const textarea = document.getElementById("primary-input")
+              if (textarea) {
+                const text = textarea.value.trim()
+                if (text) {
+                  this.pushEvent("submit-input", { text })
+                  textarea.value = ""
+                }
+              }
+            })
+          }
+        }
+      </script>
     </div>
     """
   end
@@ -330,6 +362,20 @@ defmodule ApothecaryWeb.DashboardComponents do
             id={"card-input-#{@worktree.id}"}
             class="bg-transparent border border-base-content/10 focus:border-primary outline-none px-2 py-1.5 text-sm flex-1 min-w-0 rounded"
           />
+          <button
+            type="submit"
+            class="text-base-content/25 hover:text-primary cursor-pointer p-1 rounded hover:bg-base-content/10 transition-colors shrink-0"
+            title="Add ingredient"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              class="w-4 h-4"
+            >
+              <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+            </svg>
+          </button>
         </.form>
       </div>
 
@@ -485,7 +531,10 @@ defmodule ApothecaryWeb.DashboardComponents do
                 else: "bg-amber-400/15 text-amber-400"
               )
             ]}>
-              {if(String.starts_with?(to_string(@task.id), "wt-"), do: "concoction", else: "ingredient")}
+              {if(String.starts_with?(to_string(@task.id), "wt-"),
+                do: "concoction",
+                else: "ingredient"
+              )}
             </span>
             <span class="text-base-content/40 text-xs truncate">{@task.id}</span>
           </div>
@@ -585,7 +634,10 @@ defmodule ApothecaryWeb.DashboardComponents do
             class="bg-transparent border border-primary/30 focus:border-primary outline-none px-3 py-2 text-base w-full rounded"
           />
           <div class="flex items-center gap-2">
-            <button type="submit" class="bg-green-500/15 text-green-400 hover:bg-green-500/25 px-3 py-1 rounded text-xs cursor-pointer transition-colors">
+            <button
+              type="submit"
+              class="bg-green-500/15 text-green-400 hover:bg-green-500/25 px-3 py-1 rounded text-xs cursor-pointer transition-colors"
+            >
               Save
             </button>
             <button
@@ -627,7 +679,10 @@ defmodule ApothecaryWeb.DashboardComponents do
             class="bg-transparent border border-primary/30 focus:border-primary outline-none px-3 py-2 text-sm w-full rounded resize-none"
           >{@task.description || ""}</textarea>
           <div class="flex items-center gap-2">
-            <button type="submit" class="bg-green-500/15 text-green-400 hover:bg-green-500/25 px-3 py-1 rounded text-xs cursor-pointer transition-colors">
+            <button
+              type="submit"
+              class="bg-green-500/15 text-green-400 hover:bg-green-500/25 px-3 py-1 rounded text-xs cursor-pointer transition-colors"
+            >
               Save
             </button>
             <button
@@ -660,7 +715,11 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%!-- PR info --%>
       <div :if={@pr_url} class="flex items-center gap-2 text-sm">
         <span class="text-purple-400/60 shrink-0">PR</span>
-        <a href={@pr_url} target="_blank" class="text-purple-400 hover:text-purple-300 truncate text-xs">
+        <a
+          href={@pr_url}
+          target="_blank"
+          class="text-purple-400 hover:text-purple-300 truncate text-xs"
+        >
           {@pr_url}
         </a>
       </div>
@@ -703,7 +762,12 @@ defmodule ApothecaryWeb.DashboardComponents do
             No ingredients yet
           </div>
         </div>
-        <.form for={%{}} phx-submit="create-child" class="flex items-center gap-2 px-3" id="create-child-form">
+        <.form
+          for={%{}}
+          phx-submit="create-child"
+          class="flex items-center gap-2 px-3"
+          id="create-child-form"
+        >
           <input
             type="text"
             name="title"
