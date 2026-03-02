@@ -4,6 +4,12 @@
 # If you run "mix test --cover", coverage assets end up here.
 /cover/
 
+*.DCD
+*.DAT
+
+*LATEST.LOG
+
+Mnesia*
 # The directory Mix downloads your dependencies sources to.
 /deps/
 
