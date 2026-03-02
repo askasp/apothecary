@@ -118,7 +118,10 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp status_class("in_progress"), do: "badge-warning"
   defp status_class("done"), do: "badge-success"
   defp status_class("closed"), do: "badge-success"
+  defp status_class("merged"), do: "badge-success"
   defp status_class("blocked"), do: "badge-error"
+  defp status_class("pr_open"), do: "badge-secondary"
+  defp status_class("revision_needed"), do: "badge-warning"
   defp status_class(_), do: "badge-ghost"
 
   # Priority badge
@@ -204,6 +207,50 @@ defmodule ApothecaryWeb.DashboardComponents do
     </div>
     """
   end
+
+  # Lane column for kanban board
+
+  attr :title, :string, required: true
+  attr :count, :integer, default: 0
+  attr :color, :string, default: "base"
+  attr :collapsed, :boolean, default: false
+  attr :toggle_event, :string, default: nil
+
+  slot :inner_block, required: true
+
+  def lane_column(assigns) do
+    ~H"""
+    <div class="rounded-box bg-base-200/50 flex flex-col min-w-0">
+      <div
+        class={[
+          "flex items-center justify-between p-3 border-b border-base-300",
+          @toggle_event && "cursor-pointer hover:bg-base-200 transition-colors"
+        ]}
+        phx-click={@toggle_event}
+      >
+        <div class="flex items-center gap-2">
+          <span class={["size-2 rounded-full", lane_dot_class(@color)]}></span>
+          <h3 class="font-semibold text-sm">{@title}</h3>
+          <span class="badge badge-sm badge-ghost">{@count}</span>
+        </div>
+        <.icon
+          :if={@toggle_event}
+          name={if(@collapsed, do: "hero-chevron-right-mini", else: "hero-chevron-down-mini")}
+          class="size-4 opacity-50"
+        />
+      </div>
+      <div class={["p-2 flex-1", if(@collapsed, do: "hidden", else: "")]}>
+        {render_slot(@inner_block)}
+      </div>
+    </div>
+    """
+  end
+
+  defp lane_dot_class("info"), do: "bg-info"
+  defp lane_dot_class("warning"), do: "bg-warning"
+  defp lane_dot_class("secondary"), do: "bg-secondary"
+  defp lane_dot_class("success"), do: "bg-success"
+  defp lane_dot_class(_), do: "bg-base-content/30"
 
   # Create task form
 
