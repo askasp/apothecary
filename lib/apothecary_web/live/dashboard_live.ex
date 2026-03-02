@@ -1123,7 +1123,13 @@ defmodule ApothecaryWeb.DashboardLive do
           {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
       end
     else
-      case Ingredients.create_concoction(%{title: title, priority: 3}) do
+      {concoction_title, description} = split_title_description(title)
+
+      case Ingredients.create_concoction(%{
+             title: concoction_title,
+             description: description,
+             priority: 3
+           }) do
         {:ok, item} when not is_nil(item) ->
           {:noreply, put_flash(socket, :info, "Concoction created: #{item.id}")}
 
@@ -1352,6 +1358,26 @@ defmodule ApothecaryWeb.DashboardLive do
 
     title = input |> String.replace(~r/\s+/, " ") |> String.trim()
     {title, parent_id, dep_ids}
+  end
+
+  # Splits free-text input into a short title (first line, max 80 chars) and
+  # the rest as description. Single short lines return nil description.
+  defp split_title_description(text) do
+    lines = String.split(text, "\n", trim: false)
+    first_line = String.trim(List.first(lines) || "")
+    rest = lines |> Enum.drop(1) |> Enum.join("\n") |> String.trim()
+
+    cond do
+      rest != "" ->
+        title = if String.length(first_line) > 80, do: String.slice(first_line, 0, 77) <> "...", else: first_line
+        {title, rest}
+
+      String.length(first_line) > 80 ->
+        {String.slice(first_line, 0, 77) <> "...", first_line}
+
+      true ->
+        {first_line, nil}
+    end
   end
 
   defp entry_group(worktree, agents) do

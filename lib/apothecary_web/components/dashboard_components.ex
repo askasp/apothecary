@@ -290,7 +290,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         patch={~p"/?task=#{@worktree.id}"}
         class="px-3 pt-2 pb-1 cursor-pointer hover:bg-base-content/5"
       >
-        <div class={["text-sm font-bold", status_color(@worktree.status)]}>
+        <div class={["text-sm font-bold truncate", status_color(@worktree.status)]}>
           {@worktree.title || @worktree.id}
         </div>
         <div class="flex items-center gap-2 text-xs text-base-content/40 mt-0.5">
