@@ -173,13 +173,23 @@
 
 /* Gentle rock when brewing */
 .cauldron-brewing {
-  animation: cauldron-rock 3s ease-in-out infinite;
+  animation: cauldron-rock 4s ease-in-out infinite;
   transform-origin: center 70%;
 }
 @keyframes cauldron-rock {
   0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(-2deg); }
-  75% { transform: rotate(2deg); }
+  25% { transform: rotate(-1.5deg); }
+  75% { transform: rotate(1.5deg); }
+}
+
+/* Stirring ladle — rotates around center of cauldron mouth */
+@keyframes ladle-stir {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.cauldron-ladle {
+  transform-origin: 32px 28px;
+  animation: ladle-stir 2.5s linear infinite;
 }
 
 /* Bubbles rise and pop */

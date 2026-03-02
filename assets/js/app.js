@@ -37,7 +37,7 @@ let Hooks = {
       window.addEventListener("keydown", (e) => {
         const tag = e.target.tagName
         const isInput = tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable
-        if (isInput && e.key !== "Escape") {
+        if (isInput && e.key !== "Escape" && e.key !== "Enter") {
           e.stopPropagation()
         }
       }, true)

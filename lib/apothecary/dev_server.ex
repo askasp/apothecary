@@ -2,7 +2,7 @@ defmodule Apothecary.DevServer do
   @moduledoc """
   GenServer managing dev server processes for worktrees.
 
-  Reads `.apothecary/dev.yaml` from each worktree, allocates port slots,
+  Reads `.apothecary/preview.yml` from each worktree, allocates port slots,
   runs setup/command scripts, and tracks process lifecycle. Broadcasts
   status changes via PubSub for dashboard consumption.
   """

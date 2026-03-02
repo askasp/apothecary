@@ -28,9 +28,9 @@ defmodule ApothecaryWeb.DashboardLive do
 
     worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
 
-    project_name =
-      Application.get_env(:apothecary, :project_dir, File.cwd!())
-      |> Path.basename()
+    project_dir = Application.get_env(:apothecary, :project_dir, File.cwd!())
+    project_name = Path.basename(project_dir)
+    has_preview_config = File.exists?(Path.join(project_dir, ".apothecary/preview.yml"))
 
     socket =
       socket
@@ -49,6 +49,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:input_focused, false)
       |> assign(:orphan_count, compute_orphan_count(task_state.tasks, active_task_ids))
       |> assign(:dev_servers, dev_servers)
+      |> assign(:has_preview_config, has_preview_config)
       |> assign(:worktrees_by_status, worktrees_by_status)
       |> assign(:collapsed_done, true)
       |> assign(:card_ids, build_card_ids(worktrees_by_status))
@@ -105,7 +106,7 @@ defmodule ApothecaryWeb.DashboardLive do
       if MapSet.size(created) > 0 do
         new_ingredients = Enum.filter(state.tasks, &MapSet.member?(created, &1.id))
         names = Enum.map_join(new_ingredients, ", ", & &1.title)
-        put_flash(socket, :info, "Ingredient discovered: #{names}")
+        put_flash(socket, :info, "Ingredient added: #{names}")
       else
         socket
       end
@@ -376,7 +377,7 @@ defmodule ApothecaryWeb.DashboardLive do
         {:noreply, put_flash(socket, :info, "Preview starting for #{wt_id}")}
 
       {:error, :no_dev_config} ->
-        {:noreply, put_flash(socket, :error, "No .apothecary/dev.yaml found in worktree")}
+        {:noreply, put_flash(socket, :error, "No .apothecary/preview.yml found in worktree")}
 
       {:error, :already_running} ->
         {:noreply, put_flash(socket, :info, "Preview already running")}
@@ -940,7 +941,7 @@ defmodule ApothecaryWeb.DashboardLive do
         else
           case DevServer.start_server(wt.id) do
             {:ok, _} -> put_flash(socket, :info, "Starting preview for #{wt.id}")
-            {:error, :no_dev_config} -> put_flash(socket, :error, "No .apothecary/dev.yaml")
+            {:error, :no_dev_config} -> put_flash(socket, :error, "No .apothecary/preview.yml")
             {:error, reason} -> put_flash(socket, :error, "Preview error: #{inspect(reason)}")
           end
         end
@@ -1758,6 +1759,7 @@ defmodule ApothecaryWeb.DashboardLive do
         working_agent={@working_agent}
         agent_output={@agent_output}
         dev_server={@dev_servers[@selected_task_id]}
+        has_preview_config={@has_preview_config}
         pending_action={@pending_action}
       />
 
