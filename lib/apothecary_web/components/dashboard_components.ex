@@ -137,12 +137,12 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%= if @animating do %>
         <%!-- Stirring ladle --%>
         <g class="cauldron-ladle">
-          <%!-- Ladle handle (diagonal stick) --%>
+          <%!-- Ladle handle (near-vertical stick leaning slightly right) --%>
           <line
             x1="32"
             y1="28"
-            x2="46"
-            y2="8"
+            x2="38"
+            y2="6"
             stroke="#8B6914"
             stroke-width="2"
             stroke-linecap="round"
