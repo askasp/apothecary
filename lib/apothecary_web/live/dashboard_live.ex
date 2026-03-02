@@ -240,6 +240,11 @@ defmodule ApothecaryWeb.DashboardLive do
               active_count={@active_count}
             />
 
+            <div :if={@agents != []} class="space-y-2">
+              <h3 class="font-semibold">Active Agents</h3>
+              <.agent_card :for={agent <- @agents} agent={agent} />
+            </div>
+
             <div class="space-y-2">
               <button
                 phx-click="toggle-create-form"
@@ -255,11 +260,6 @@ defmodule ApothecaryWeb.DashboardLive do
                 {if(@show_create_form, do: "Cancel", else: "New Task")}
               </button>
               <.create_task_form :if={@show_create_form} />
-            </div>
-
-            <div :if={@agents != []} class="space-y-2">
-              <h3 class="font-semibold">Active Agents</h3>
-              <.agent_card :for={agent <- @agents} agent={agent} />
             </div>
 
             <div :if={@ready_tasks != []} class="bg-base-200 rounded-box p-4 space-y-2">
