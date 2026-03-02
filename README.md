@@ -15,6 +15,16 @@ Apothecary is a small Elixir app that runs multiple Claude Code agents in parall
 
 The whole thing is reactive via PubSub - no polling. State changes propagate and idle alchemists pick up work immediately.
 
+## What keeps it running
+
+Agents crash. They hang. They run out of memory. Two things handle this:
+
+**Watchdog** - Each alchemist has a 5-minute silence timer. If Claude stops producing output for that long, the watchdog kills the process, logs the last 30 lines of output and any in-progress ingredients, and releases the concoction back to the pool. An idle alchemist picks it up and tries again.
+
+**Notes** - Alchemists log progress notes as they work (what they tried, what worked, key decisions). These notes are stored in Mnesia and get included in the prompt when the next alchemist picks up the concoction. So if an agent crashes halfway through, the replacement doesn't start from scratch - it reads what happened and continues from there. Crash diagnostics get written to notes automatically too.
+
+Between the two, the system is self-healing. Stuck agents get recycled, and context survives across restarts.
+
 ## The naming
 
 | Term | What it is |
