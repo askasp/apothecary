@@ -320,6 +320,20 @@ defmodule Apothecary.Ingredients do
     end
   end
 
+  @doc "Clean up a cancelled concoction (PR closed without merge) — release disk, set cancelled."
+  def cleanup_cancelled_concoction(id) do
+    update_concoction(id, %{status: "cancelled", assigned_brewer_id: nil})
+
+    try do
+      Apothecary.DevServer.stop_server(id)
+    catch
+      :exit, reason ->
+        Logger.warning("cleanup_cancelled_concoction: DevServer.stop_server failed for #{id}: #{inspect(reason)}")
+    end
+
+    Apothecary.WorktreeManager.release(id)
+  end
+
   # --- Ingredient Operations ---
 
   def create_ingredient(attrs) do
