@@ -26,7 +26,10 @@ defmodule Mix.Tasks.Apothecary.Setup do
     Mix.shell().info("Setting up Apothecary for: #{dir}")
 
     # Check git
-    case System.cmd("git", ["rev-parse", "--is-inside-work-tree"], cd: dir, stderr_to_stdout: true) do
+    case System.cmd("git", ["rev-parse", "--is-inside-work-tree"],
+           cd: dir,
+           stderr_to_stdout: true
+         ) do
       {_, 0} -> :ok
       _ -> Mix.raise("#{dir} is not a git repository. Run `git init` first.")
     end
@@ -43,8 +46,13 @@ defmodule Mix.Tasks.Apothecary.Setup do
           Mix.shell().info("  Beads already initialized")
         else
           Mix.shell().info("  Initializing beads...")
-          {output, status} = System.cmd("bd", ["init", "--quiet"], cd: dir, stderr_to_stdout: true)
-          if status == 0, do: Mix.shell().info("  #{String.trim(output)}"), else: Mix.shell().error("  Failed: #{output}")
+
+          {output, status} =
+            System.cmd("bd", ["init", "--quiet"], cd: dir, stderr_to_stdout: true)
+
+          if status == 0,
+            do: Mix.shell().info("  #{String.trim(output)}"),
+            else: Mix.shell().error("  Failed: #{output}")
         end
     end
 

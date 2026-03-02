@@ -103,3 +103,35 @@
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
 /* This file is for your main application CSS */
+
+/* Stirring animation for simmering (in-progress) concoctions */
+@keyframes stir {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(3deg); }
+  75% { transform: rotate(-3deg); }
+}
+
+@keyframes bubble {
+  0%, 100% { opacity: 0.4; transform: translateY(0) scale(1); }
+  50% { opacity: 1; transform: translateY(-4px) scale(1.15); }
+}
+
+@keyframes simmer-glow {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(66% 0.179 58.318 / 0); }
+  50% { box-shadow: 0 0 12px 2px oklch(66% 0.179 58.318 / 0.15); }
+}
+
+.concoction-simmering {
+  animation: simmer-glow 3s ease-in-out infinite;
+}
+
+.stir-icon {
+  animation: stir 2s ease-in-out infinite;
+  display: inline-block;
+}
+
+.bubble-dot {
+  animation: bubble 2.5s ease-in-out infinite;
+}
+.bubble-dot:nth-child(2) { animation-delay: 0.4s; }
+.bubble-dot:nth-child(3) { animation-delay: 0.8s; }
