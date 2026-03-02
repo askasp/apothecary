@@ -1,7 +1,7 @@
 defmodule ApothecaryWeb.DashboardLive do
   use ApothecaryWeb, :live_view
 
-  alias Apothecary.{Brewer, DevServer, DiffParser, Git, Ingredients, Dispatcher}
+  alias Apothecary.{Brewer, DevServer, DiffParser, FileTree, Git, Ingredients, Dispatcher}
 
   @pubsub Apothecary.PubSub
 
@@ -75,6 +75,7 @@ defmodule ApothecaryWeb.DashboardLive do
         )
       )
       |> assign(:editing_recipe_id, nil)
+      |> assign(:project_files, load_project_files())
 
     {:ok, socket}
   end
@@ -254,6 +255,12 @@ defmodule ApothecaryWeb.DashboardLive do
   @impl true
   def handle_event("input-blur", _params, socket),
     do: {:noreply, assign(socket, :input_focused, false)}
+
+  @impl true
+  def handle_event("file-search", %{"query" => query}, socket) do
+    results = FileTree.search(query, socket.assigns.project_files)
+    {:reply, %{files: results}, socket}
+  end
 
   @impl true
   def handle_event("hotkey", %{"key" => key}, socket) do
@@ -1381,6 +1388,13 @@ defmodule ApothecaryWeb.DashboardLive do
 
       true ->
         {first_line, nil}
+    end
+  end
+
+  defp load_project_files do
+    case FileTree.list_files() do
+      {:ok, files} -> files
+      {:error, _} -> []
     end
   end
 
