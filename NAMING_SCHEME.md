@@ -1,118 +1,95 @@
 # Apothecary Naming Scheme
 
-> *Domain naming for the core concepts. OTP primitives (supervisors, registries, GenServers) keep their standard Elixir names.*
+> *Four domain names. Everything else keeps standard Elixir/OTP naming.*
 
 ## The Metaphor
 
-An **apothecary** brews concoctions from ingredients. Brewers do the work.
+An **apothecary** brews **concoctions** from **ingredients**. **Brewers** do the work.
 
 ---
 
-## Core Domain Names
+## The Four Domain Names
 
-| Concept | Apothecary Name | Current Name | What It Is |
+| Concept | Apothecary Name | Current Code Name | What It Is |
 |---|---|---|---|
-| The application | **Apothecary** | `Apothecary` | Already named. The shop where concoctions are brewed. |
-| Unit of work / PR | **Concoction** | `Worktree` | A concoction is what gets brewed — a self-contained piece of work with its own git worktree. Multiple ingredients combine into one concoction. |
-| Step within a concoction | **Ingredient** | `Task` | An ingredient is one part of a concoction — a specific step or sub-task. A concoction may need many ingredients combined in order. |
-| Agent worker | **Brewer** | `AgentWorker` | A brewer takes a concoction's recipe, gathers the ingredients, and does the actual brewing (runs Claude Code in a worktree). |
+| The application | **Apothecary** | `Apothecary` | The shop where concoctions are brewed. Already named. |
+| Unit of work / PR | **Concoction** | `Worktree` | A self-contained piece of work with its own git worktree. Multiple ingredients combine into one concoction. |
+| Step within a concoction | **Ingredient** | `Task` | One part of a concoction — a specific step or sub-task. Ingredients can depend on each other. |
+| Claude Code agent | **Brewer** | `AgentWorker` | Takes a concoction's recipe, gathers the ingredients, and does the actual brewing. |
+
+These four names are the entire naming scheme. Everything else stays as-is.
 
 ## What Stays the Same
 
-Standard Elixir/OTP naming is good naming. These keep their current names:
+Supervisors, registries, and GenServers are standard Elixir/OTP patterns — good naming already. No need to rename them.
 
-- **Supervisors** (`AgentSupervisor`, `DynamicSupervisor`) — standard OTP
+- **Supervisors** — `AgentSupervisor`, `DynamicSupervisor`
 - **Registries** — standard OTP
-- **GenServers** (`Store`, `Dispatcher`, `TaskManager`) — standard OTP pattern
+- **GenServers** — `Store`, `Dispatcher`, `TaskManager`
 - **PubSub** — standard Phoenix
 - **Application** — standard OTP
+- **CLI** — utility, not a domain concept
+- **MCP.Server** — infrastructure
 
-The apothecary names apply to the **domain concepts**, not the infrastructure.
+The apothecary names apply to **domain concepts only**, not infrastructure.
+
+---
 
 ## How It Maps
 
-### Concoctions (Worktrees)
+### Concoctions (currently Worktrees)
 
-A concoction is a unit of work that will become a PR. Each concoction gets its own isolated git worktree where a brewer can work without interfering with others.
+A concoction is a unit of work that becomes a PR. Each gets its own isolated git worktree.
 
 ```
 Concoction = recipe + ingredients + isolated workspace
 Worktree   = title  + tasks       + git worktree
 ```
 
-- ID prefix: `wt-` (kept — short, familiar, already in use)
-- Statuses: `open` / `in_progress` / `blocked` / `done`
-- A concoction is "done" when all its ingredients have been combined and the result is committed.
+- ID prefix: `wt-` (kept for brevity)
+- Statuses: `open` → `in_progress` → `done` (or `blocked`)
+- Done when all ingredients are combined and the result is committed
 
-### Ingredients (Tasks)
+### Ingredients (currently Tasks)
 
-An ingredient is a single step needed to complete a concoction. Ingredients can depend on other ingredients (you need to prepare the base before adding the active compound).
+An ingredient is a single step needed to complete a concoction. They can depend on each other — you prepare the base before adding the active compound.
 
 ```
 Ingredient = one step in the recipe
 Task       = one step in the worktree
 ```
 
-- ID prefix: `t-` (kept — short, already in use)
+- ID prefix: `t-` (kept for brevity)
 - Ordered by priority and dependencies
 - Created by brewers when they decompose complex concoctions
+- Renaming `Task` → `Ingredient` also eliminates the `Elixir.Task` name conflict
 
-### Brewers (Agents)
+### Brewers (currently AgentWorkers)
 
-A brewer is a Claude Code process running in a worktree. The dispatcher assigns concoctions to available brewers. Each brewer works on one concoction at a time.
+A brewer is a Claude Code process running in a worktree. The dispatcher assigns concoctions to available brewers. One concoction per brewer at a time.
 
 ```
 Brewer = Claude Code process + worktree assignment
 Agent  = AgentWorker + port + watchdog
 ```
 
-- Brewer states: `idle` / `starting` / `working` / `error`
-- Managed by the AgentSupervisor (standard DynamicSupervisor)
+- States: `idle` → `starting` → `working` (or `error`)
+- Managed by AgentSupervisor (standard DynamicSupervisor — keeps its name)
 
-## MCP Tools
+---
 
-The MCP tools are the brewer's interface to the apothecary. These could be renamed to fit the theme:
+## Module Renames
 
-| Current Tool | Themed Name | What It Does |
-|---|---|---|
-| `worktree_status` | `concoction_status` | View the concoction and all its ingredients |
-| `list_tasks` | `list_ingredients` | List ingredients (with optional status filter) |
-| `get_task` | `get_ingredient` | Examine a specific ingredient |
-| `create_task` | `add_ingredient` | Add a new ingredient to the concoction |
-| `complete_task` | `finish_ingredient` | Mark an ingredient as done |
-| `add_notes` | `add_notes` | Log progress notes (fine as-is) |
-| `add_dependency` | `add_dependency` | Wire ingredient ordering (fine as-is) |
+Only the domain structs/modules get renamed:
 
-## UI Labels
-
-The dashboard can use the themed names in its UI:
-
-- "Worktrees" section heading -> "Concoctions"
-- "Tasks" section heading -> "Ingredients"
-- "Agents" section heading -> "Brewers"
-- Status badges and cards can use the same terminology
-
-## Module Rename Plan
-
-Only the domain modules need renaming. OTP wrappers keep their names.
-
-| Current Module | New Module | Notes |
-|---|---|---|
-| `Apothecary.Worktree` | `Apothecary.Concoction` | Struct + Mnesia record helpers |
-| `Apothecary.Task` | `Apothecary.Ingredient` | Struct + Mnesia record helpers (also eliminates `Elixir.Task` name conflict) |
-| `Apothecary.AgentWorker` | `Apothecary.Brewer` | Port-based Claude process |
-| `Apothecary.WorktreeManager` | `Apothecary.ConcoctionManager` | Git worktree lifecycle |
-
-Modules that stay as they are:
-
-| Module | Why |
+| Current Module | New Module |
 |---|---|
-| `Apothecary.Store` | GenServer managing Mnesia — standard pattern |
-| `Apothecary.TaskManager` | GenServer for CRUD — standard OTP pattern |
-| `Apothecary.Dispatcher` | GenServer for dispatch — standard pattern |
-| `Apothecary.AgentSupervisor` | DynamicSupervisor — standard OTP |
-| `Apothecary.CLI` | Utility module — no domain concept |
-| `Apothecary.MCP.Server` | Infrastructure — standard naming |
+| `Apothecary.Worktree` | `Apothecary.Concoction` |
+| `Apothecary.Task` | `Apothecary.Ingredient` |
+| `Apothecary.AgentWorker` | `Apothecary.Brewer` |
+| `Apothecary.WorktreeManager` | `Apothecary.ConcoctionManager` |
+
+Everything else (`Store`, `TaskManager`, `Dispatcher`, `AgentSupervisor`, `CLI`, `MCP.*`) stays as-is.
 
 ## Mnesia Tables
 
@@ -121,21 +98,29 @@ Modules that stay as they are:
 | `apothecary_worktrees` | `apothecary_concoctions` |
 | `apothecary_tasks` | `apothecary_ingredients` |
 
+## UI & MCP Labels
+
+The themed names should appear in user-facing surfaces:
+
+- Dashboard headings: "Concoctions", "Ingredients", "Brewers"
+- MCP tool names can optionally adopt the theme (e.g. `list_ingredients` instead of `list_tasks`)
+- ID prefixes stay short: `wt-` and `t-`
+
 ## Glossary
 
 | Term | Meaning |
 |---|---|
 | **Apothecary** | The application — the shop where concoctions are brewed |
-| **Concoction** | A unit of work (worktree + PR). Composed of ingredients. |
+| **Concoction** | A unit of work (worktree + PR), composed of ingredients |
 | **Ingredient** | A single step/task within a concoction |
 | **Brewer** | A Claude Code agent that works on concoctions |
 | **Recipe** | The set of ingredients needed for a concoction (implicit, not a separate struct) |
 
 ---
 
-## Adoption
+## Adoption Order
 
-1. **UI labels first** — Update dashboard headings and card labels. Zero code risk.
-2. **MCP tool names** — Rename the 5 tools that map to domain concepts. Agents will adapt.
-3. **Structs and modules** — Rename `Worktree` -> `Concoction`, `Task` -> `Ingredient`, `AgentWorker` -> `Brewer`. This also fixes the `Elixir.Task` naming conflict.
-4. **Mnesia tables** — Rename tables with a migration. Do last since it touches persistence.
+1. **UI labels** — Update dashboard headings and card labels. Zero code risk.
+2. **Structs and modules** — Rename `Worktree` → `Concoction`, `Task` → `Ingredient`, `AgentWorker` → `Brewer`.
+3. **Mnesia tables** — Rename with a migration. Do last since it touches persistence.
+4. **MCP tools** — Optional. Rename the domain-facing tools to match the theme.
