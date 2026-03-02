@@ -6,21 +6,20 @@ Apothecary is a small Elixir app that runs multiple Claude Code agents in parall
 
 ## How it works
 
-1. You create a **concoction** (a feature branch with all its related work)
-2. The **dispatcher** assigns it to an idle **alchemist** (a Claude Code agent process)
-3. A git worktree gets created so the alchemist has its own branch
-4. Claude Code spawns, reads the task, and starts coding
-5. If the work is complex, the alchemist breaks it into **ingredients** (sub-tasks) on its own
-6. When it's done, the branch gets pushed and a PR opens
-7. If reviewers request changes, an alchemist gets re-dispatched to address them
+1. You create a **concoction** - each one gets its own git worktree, completely isolated from the others
+2. An idle **alchemist** picks it up automatically
+3. Claude Code spawns in the worktree, reads the task, and starts coding
+4. If the work is complex, the alchemist breaks it into **ingredients** (sub-tasks) on its own
+5. When it's done, the branch gets pushed and a PR opens
+6. If reviewers request changes, an alchemist gets re-dispatched to address them
 
-The whole thing is reactive via PubSub - no polling. State changes propagate and the dispatcher picks up work immediately.
+The whole thing is reactive via PubSub - no polling. State changes propagate and idle alchemists pick up work immediately.
 
 ## The naming
 
 | Term | What it is |
 |------|-----------|
-| **Concoction** | A feature and its worktree branch - everything needed for one PR (`wt-*` IDs) |
+| **Concoction** | A feature in its own isolated worktree - one concoction, one branch, one PR (`wt-*` IDs) |
 | **Ingredient** | A step within a concoction (`t-*` IDs) |
 | **Alchemist** | A Claude Code agent process that works on concoctions |
 | **Recipe** | A template for creating concoctions from issues |
