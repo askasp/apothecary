@@ -16,11 +16,6 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   def status_controls(assigns) do
     ~H"""
-    <div class="flex items-center gap-3 px-6 py-2 text-xs flex-wrap">
-      <span class="font-apothecary text-sm font-bold tracking-wide text-base-content/80">
-        Apothecary
-      </span>
-      <span class="text-base-content/30">│</span>
     <div class="flex items-center gap-3 px-2 py-2 text-xs flex-wrap">
       <span class="font-apothecary text-sm font-bold tracking-wide text-base-content/80">Apothecary</span>
 
@@ -63,11 +58,6 @@ defmodule ApothecaryWeb.DashboardComponents do
           +
         </button>
       </div>
-
-      <span class="text-base-content/20">│</span>
-      <span class="text-emerald-400">{@ready_count}rdy</span>
-      <span class="text-base-content/30">/</span>
-      <span class="text-base-content/50">{@task_count}tot</span>
 
       <span class="ml-auto text-base-content/30 cursor-pointer" phx-click="toggle-help">?</span>
     </div>
