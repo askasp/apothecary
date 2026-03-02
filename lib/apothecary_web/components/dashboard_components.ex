@@ -17,7 +17,9 @@ defmodule ApothecaryWeb.DashboardComponents do
   def status_controls(assigns) do
     ~H"""
     <div class="flex items-center gap-3 px-2 py-2 text-xs flex-wrap">
-      <span class="font-apothecary text-sm font-bold tracking-wide text-base-content/80">Apothecary</span>
+      <span class="font-apothecary text-sm font-bold tracking-wide text-base-content/80">
+        Apothecary
+      </span>
 
       <%= if @swarm_status == :running do %>
         <button
@@ -182,10 +184,12 @@ defmodule ApothecaryWeb.DashboardComponents do
         patch={~p"/?task=#{@worktree.id}"}
         class="px-3 pt-2 pb-1 cursor-pointer hover:bg-base-content/5"
       >
-        <div class="flex items-center gap-2">
-          <span class={["text-sm font-bold truncate flex-1", status_color(@worktree.status)]}>
-            {@worktree.title || @worktree.id}
-          </span>
+        <div class={["text-sm font-bold", status_color(@worktree.status)]}>
+          {@worktree.title || @worktree.id}
+        </div>
+        <div class="flex items-center gap-2 text-xs text-base-content/40 mt-0.5">
+          <span>{@worktree.id}</span>
+          <span :if={@worktree.git_branch} class="truncate">⎇ {@worktree.git_branch}</span>
           <span
             :if={@group}
             class={[
@@ -195,21 +199,9 @@ defmodule ApothecaryWeb.DashboardComponents do
           >
             {group_badge_label(@group)}
           </span>
-          <span :if={@agent} class="text-cyan-400 text-xs shrink-0">
+          <span :if={@agent} class="text-cyan-400 shrink-0">
             {agent_dot(@agent.status)}B{@agent.id}
           </span>
-          <span :if={@agent && @agent.status == :working} class="text-amber-400/60 text-xs shrink-0">
-            <span class="brew-cycle">
-              <span>concocting...</span>
-              <span>stirring...</span>
-              <span>bringing to boil...</span>
-              <span>simmering...</span>
-            </span>
-          </span>
-        </div>
-        <div class="flex items-center gap-2 text-xs text-base-content/40 mt-0.5">
-          <span>{@worktree.id}</span>
-          <span :if={@worktree.git_branch} class="truncate">⎇ {@worktree.git_branch}</span>
         </div>
       </.link>
 
@@ -243,19 +235,23 @@ defmodule ApothecaryWeb.DashboardComponents do
           phx-mounted={Phoenix.LiveView.JS.transition("ingredient-new")}
           class="flex items-center gap-1.5 py-0.5"
         >
-          <span class={
-            if task.status in ["done", "closed"], do: "text-green-400", else: "text-base-content/30"
-          }>
-            {if task.status in ["done", "closed"], do: "✓", else: "□"}
-          </span>
+          <%= cond do %>
+            <% task.status in ["done", "closed"] -> %>
+              <span class="text-green-400">✓</span>
+            <% task.status == "in_progress" -> %>
+              <span class="text-amber-400 cauldron-stir">&#x2697;</span>
+            <% true -> %>
+              <span class="text-base-content/30">□</span>
+          <% end %>
           <.link
             patch={~p"/?task=#{task.id}"}
             class={[
               "truncate hover:text-primary cursor-pointer",
-              if(task.status in ["done", "closed"],
-                do: "text-base-content/30 line-through",
-                else: "text-base-content/70"
-              )
+              cond do
+                task.status in ["done", "closed"] -> "text-base-content/30 line-through"
+                task.status == "in_progress" -> "text-amber-400"
+                true -> "text-base-content/70"
+              end
             ]}
           >
             {task.title}
