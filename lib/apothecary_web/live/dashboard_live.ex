@@ -117,9 +117,8 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:task_count, length(state.tasks))
       |> assign(:orphan_count, compute_orphan_count(state.tasks, active_task_ids))
       |> assign(:worktrees_by_status, worktrees_by_status)
-      |> assign(:card_ids, build_card_ids(worktrees_by_status))
       |> assign(:known_ingredient_ids, new_ids)
-      |> clamp_card_index()
+      |> rebuild_card_ids(worktrees_by_status)
 
     socket =
       if socket.assigns.selected_task_id do
@@ -138,12 +137,19 @@ defmodule ApothecaryWeb.DashboardLive do
 
     update_agent_subscriptions(old_agents, agents)
 
+    # Rebuild card groups since agent assignments affect which lane cards appear in
+    task_state = Ingredients.get_state()
+    dev_servers = socket.assigns.dev_servers
+    worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
+
     socket =
       socket
       |> assign(:swarm_status, status.status)
       |> assign(:target_count, status.target_count)
       |> assign(:active_count, status.active_count)
       |> assign(:agents, agents)
+      |> assign(:worktrees_by_status, worktrees_by_status)
+      |> rebuild_card_ids(worktrees_by_status)
 
     socket =
       if socket.assigns.selected_task_id do
@@ -175,8 +181,7 @@ defmodule ApothecaryWeb.DashboardLive do
       socket
       |> assign(:dev_servers, dev_servers)
       |> assign(:worktrees_by_status, worktrees_by_status)
-      |> assign(:card_ids, build_card_ids(worktrees_by_status))
-      |> clamp_card_index()
+      |> rebuild_card_ids(worktrees_by_status)
 
     {:noreply, socket}
   end
@@ -446,6 +451,28 @@ defmodule ApothecaryWeb.DashboardLive do
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed to requeue: #{inspect(reason)}")}
     end
+  end
+
+  @impl true
+  def handle_event("change-priority", %{"dir" => dir}, socket) do
+    id = socket.assigns.selected_task_id
+
+    if id do
+      task = socket.assigns.selected_task
+      current = (task && task.priority) || 3
+
+      new_priority =
+        case dir do
+          "up" -> max(current - 1, 0)
+          "down" -> min(current + 1, 4)
+        end
+
+      if new_priority != current do
+        Ingredients.update_priority(id, new_priority)
+      end
+    end
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -808,6 +835,38 @@ defmodule ApothecaryWeb.DashboardLive do
       socket
       |> assign(:pending_action, {:merge, task.id, task.pr_url})
       |> put_flash(:info, "Merge \"#{task.title}\"? Press m/y/Enter to confirm, Esc to cancel")
+    else
+      socket
+    end
+  end
+
+  defp handle_hotkey("ArrowUp", socket) do
+    if socket.assigns.selected_task_id do
+      task = socket.assigns.selected_task
+      current = (task && task.priority) || 3
+      new_priority = max(current - 1, 0)
+
+      if new_priority != current do
+        Ingredients.update_priority(socket.assigns.selected_task_id, new_priority)
+      end
+
+      socket
+    else
+      socket
+    end
+  end
+
+  defp handle_hotkey("ArrowDown", socket) do
+    if socket.assigns.selected_task_id do
+      task = socket.assigns.selected_task
+      current = (task && task.priority) || 3
+      new_priority = min(current + 1, 4)
+
+      if new_priority != current do
+        Ingredients.update_priority(socket.assigns.selected_task_id, new_priority)
+      end
+
+      socket
     else
       socket
     end
@@ -1285,10 +1344,22 @@ defmodule ApothecaryWeb.DashboardLive do
     stockroom ++ brewing ++ assaying ++ done
   end
 
-  defp clamp_card_index(socket) do
-    max_idx = max(length(socket.assigns.card_ids) - 1, 0)
-    idx = min(socket.assigns.selected_card, max_idx)
-    assign(socket, :selected_card, idx)
+  defp rebuild_card_ids(socket, worktrees_by_status) do
+    old_card_ids = socket.assigns.card_ids
+    old_selected_id = Enum.at(old_card_ids, socket.assigns.selected_card)
+    new_card_ids = build_card_ids(worktrees_by_status)
+
+    idx =
+      if old_selected_id do
+        Enum.find_index(new_card_ids, &(&1 == old_selected_id)) ||
+          min(socket.assigns.selected_card, max(length(new_card_ids) - 1, 0))
+      else
+        min(socket.assigns.selected_card, max(length(new_card_ids) - 1, 0))
+      end
+
+    socket
+    |> assign(:card_ids, new_card_ids)
+    |> assign(:selected_card, idx)
   end
 
   defp extract_ingredient_ids(tasks) do

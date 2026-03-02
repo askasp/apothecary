@@ -412,7 +412,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%!-- Status line --%>
       <div class="flex items-center gap-3 flex-wrap">
         <.status_badge status={@task.status} />
-        <.priority_badge priority={@task.priority} />
+        <.priority_controls priority={@task.priority} />
         <span :if={@task.type} class="text-base-content/40">{@task.type}</span>
         <span :if={@task.assigned_to} class="text-cyan-400">{@task.assigned_to}</span>
       </div>
@@ -796,6 +796,48 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
+  attr :priority, :any, default: nil
+
+  def priority_controls(assigns) do
+    ~H"""
+    <div class="flex items-center gap-0.5">
+      <button
+        phx-click="change-priority"
+        phx-value-dir="up"
+        disabled={(@priority || 3) <= 0}
+        class={[
+          "px-1.5 py-0.5 text-sm cursor-pointer rounded transition-colors",
+          if((@priority || 3) <= 0,
+            do: "text-base-content/15",
+            else: "text-base-content/40 hover:text-base-content hover:bg-base-content/10 active:bg-base-content/20"
+          )
+        ]}
+        title="Higher priority (↑)"
+      >
+        ▲
+      </button>
+      <span class={["text-sm min-w-6 text-center", priority_color(@priority || 3)]}>
+        P{@priority || 3}
+      </span>
+      <button
+        phx-click="change-priority"
+        phx-value-dir="down"
+        disabled={(@priority || 3) >= 4}
+        class={[
+          "px-1.5 py-0.5 text-sm cursor-pointer rounded transition-colors",
+          if((@priority || 3) >= 4,
+            do: "text-base-content/15",
+            else: "text-base-content/40 hover:text-base-content hover:bg-base-content/10 active:bg-base-content/20"
+          )
+        ]}
+        title="Lower priority (↓)"
+      >
+        ▼
+      </button>
+    </div>
+    """
+  end
+
   # --- Diff overlay (lazygit-style) ---
 
   attr :diff_view, :map, required: true
@@ -967,6 +1009,7 @@ defmodule ApothecaryWeb.DashboardComponents do
 
           <div :if={@has_selected_task} class="space-y-1">
             <div class="text-emerald-400 mb-1">when inspecting</div>
+            <.hk key="↑/↓" desc="change priority" />
             <.hk key="q" desc="requeue concoction" />
             <.hk key="x" desc="close concoction" />
             <.hk key="m" desc="merge PR (pr_open)" />
