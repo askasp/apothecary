@@ -16,7 +16,7 @@ defmodule Apothecary.MCP.Tools.AddDependency do
 
   @impl true
   def execute(%{blocked_id: blocked_id, blocker_id: blocker_id}, frame) do
-    concoction_id = frame.assigns[:concoction_id]
+    concoction_id = Apothecary.MCP.Server.concoction_id(frame)
 
     # Verify both ingredients belong to this concoction
     with {:blocked, {:ok, blocked}} <-

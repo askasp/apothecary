@@ -14,7 +14,7 @@ defmodule Apothecary.MCP.Tools.CompleteIngredient do
 
   @impl true
   def execute(%{ingredient_id: ingredient_id} = params, frame) do
-    concoction_id = frame.assigns[:concoction_id]
+    concoction_id = Apothecary.MCP.Server.concoction_id(frame)
 
     # Verify ingredient belongs to this brewer's concoction
     with {:ok, ingredient} <- Apothecary.Ingredients.get_ingredient(ingredient_id),

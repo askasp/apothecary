@@ -10,7 +10,7 @@ defmodule Apothecary.MCP.Tools.GetIngredient do
 
   @impl true
   def execute(%{ingredient_id: ingredient_id}, frame) do
-    concoction_id = frame.assigns[:concoction_id]
+    concoction_id = Apothecary.MCP.Server.concoction_id(frame)
 
     case Apothecary.Ingredients.get_ingredient(ingredient_id) do
       {:ok, ingredient} ->

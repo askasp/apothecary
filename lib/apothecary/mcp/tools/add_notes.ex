@@ -14,7 +14,7 @@ defmodule Apothecary.MCP.Tools.AddNotes do
 
   @impl true
   def execute(params, frame) do
-    concoction_id = frame.assigns[:concoction_id]
+    concoction_id = Apothecary.MCP.Server.concoction_id(frame)
     target_id = params[:ingredient_id] || concoction_id
 
     unless target_id do
