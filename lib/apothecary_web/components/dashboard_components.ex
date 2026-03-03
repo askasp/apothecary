@@ -1286,7 +1286,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         </button>
         <button
           :if={@task.status == "brew_done"}
-          phx-click="promote-to-assaying"
+          phx-click="promote-to-sampling"
           class="border border-purple-400/30 text-purple-400 hover:bg-purple-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors"
         >
           Create PR <span class="hidden sm:inline text-base-content/30 ml-1">p</span>
@@ -1906,7 +1906,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <div class="text-emerald-400 mb-1">lanes & tabs</div>
             <.hk key="1" desc="jump to stockroom" />
             <.hk key="2" desc="jump to concocting" />
-            <.hk key="3" desc="jump to assaying" />
+            <.hk key="3" desc="jump to sampling" />
             <.hk key="4" desc="jump to bottled" />
             <.hk key="w" desc="workbench tab" />
             <.hk key="e" desc="recurring concoctions" />
@@ -2054,7 +2054,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp group_badge_label("running"), do: "CONCOCTING"
   defp group_badge_label("ready"), do: "STOCKED"
   defp group_badge_label("blocked"), do: "MISSING"
-  defp group_badge_label("pr"), do: "ASSAYING"
+  defp group_badge_label("pr"), do: "SAMPLING"
   defp group_badge_label("done"), do: "BOTTLED"
   defp group_badge_label(_), do: ""
 
