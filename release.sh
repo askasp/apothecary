@@ -26,13 +26,21 @@ echo "==> Building release ${TAG} (was ${CURRENT})"
 
 # --- Bump version in mix.exs ---
 if [ "$VERSION" != "$CURRENT" ]; then
-  sed -i '' "s/version: \"${CURRENT}\"/version: \"${VERSION}\"/" "$MIX_FILE"
+  # Portable sed -i (macOS requires '' arg, Linux doesn't)
+  if [[ "$OSTYPE" == darwin* ]]; then
+    sed -i '' "s/version: \"${CURRENT}\"/version: \"${VERSION}\"/" "$MIX_FILE"
+  else
+    sed -i "s/version: \"${CURRENT}\"/version: \"${VERSION}\"/" "$MIX_FILE"
+  fi
   echo "==> Bumped version in mix.exs to ${VERSION}"
 fi
 
 # --- Clean build ---
 echo "==> Cleaning build artifacts..."
 rm -rf _build/prod burrito_out
+
+echo "==> Compiling (generates colocated hooks)..."
+MIX_ENV=prod mix compile
 
 echo "==> Building assets..."
 MIX_ENV=prod mix assets.deploy
