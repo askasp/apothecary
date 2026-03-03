@@ -26,8 +26,8 @@ defmodule Apothecary.Brewer do
   end
 
   @doc "Assign a concoction to this brewer."
-  def assign_concoction(pid, worktree, worktree_path, branch) do
-    GenServer.cast(pid, {:assign_concoction, worktree, worktree_path, branch})
+  def assign_concoction(pid, worktree, worktree_path, branch, project_dir) do
+    GenServer.cast(pid, {:assign_concoction, worktree, worktree_path, branch, project_dir})
   end
 
   @doc "Get the current state of this brewer."
@@ -58,7 +58,10 @@ defmodule Apothecary.Brewer do
   end
 
   @impl true
-  def handle_cast({:assign_concoction, worktree, worktree_path, branch}, %{agent: agent} = state) do
+  def handle_cast(
+        {:assign_concoction, worktree, worktree_path, branch, project_dir},
+        %{agent: agent} = state
+      ) do
     Logger.info("Brewer #{agent.id} assigned concoction #{worktree.id}: #{worktree.title}")
 
     agent = %{
@@ -67,7 +70,8 @@ defmodule Apothecary.Brewer do
         current_concoction: worktree,
         started_at: DateTime.utc_now(),
         worktree_path: worktree_path,
-        branch: branch
+        branch: branch,
+        project_dir: project_dir
     }
 
     broadcast_state(agent)
@@ -78,7 +82,7 @@ defmodule Apothecary.Brewer do
     # Write MCP config so Claude can communicate with the orchestrator
     # Include any per-concoction MCP servers alongside project-level ones
     extra_mcps = Map.get(worktree, :mcp_servers) || %{}
-    write_mcp_config(worktree_path, agent.id, worktree.id, extra_mcps)
+    write_mcp_config(worktree_path, agent.id, worktree.id, extra_mcps, project_dir)
 
     # Write apothecary CLAUDE.md to the worktree's .claude/ directory
     # so it doesn't conflict with the user's own CLAUDE.md in the repo root
@@ -215,6 +219,7 @@ defmodule Apothecary.Brewer do
       agent
       | status: :idle,
         current_concoction: nil,
+        project_dir: nil,
         worktree_path: nil,
         branch: nil
     }
@@ -339,14 +344,14 @@ defmodule Apothecary.Brewer do
       |> Enum.map(&"  - #{&1.id}: #{&1.title} (#{&1.status})")
 
     git_log =
-      case Apothecary.Git.worktree_log(agent.worktree_path, 10) do
+      case Apothecary.Git.worktree_log(agent.project_dir, agent.worktree_path, 10) do
         {:ok, log} when log != "" -> "\nCommits made:\n#{log}"
         _ -> ""
       end
 
     # Include diff stat so the next brewer sees total scope of changes
     diff_stat =
-      case Apothecary.Git.worktree_diff_stat(agent.worktree_path) do
+      case Apothecary.Git.worktree_diff_stat(agent.project_dir, agent.worktree_path) do
         {:ok, stat} when stat != "" -> "\nFiles changed (branch vs main):\n#{stat}"
         _ -> ""
       end
@@ -420,6 +425,7 @@ defmodule Apothecary.Brewer do
   # Private — Concoction finalization
 
   defp finalize_concoction(worktree_id, agent) do
+    project_dir = agent.project_dir
     worktree_path = agent.worktree_path
 
     # Check if this concoction already has a PR (revision cycle)
@@ -430,7 +436,7 @@ defmodule Apothecary.Brewer do
       end
 
     # Merge latest main into branch before pushing to catch conflicts early
-    case Apothecary.Git.merge_main_into(worktree_path) do
+    case Apothecary.Git.merge_main_into(project_dir, worktree_path) do
       :ok ->
         Logger.info("Merged latest main into branch for concoction #{worktree_id}")
 
@@ -463,7 +469,7 @@ defmodule Apothecary.Brewer do
 
           Apothecary.Git.auto_pr?() ->
             # Auto PR: create PR and set to pr_open
-            pr_result = create_pr_with_retry(worktree_id, worktree_path)
+            pr_result = create_pr_with_retry(worktree_id, worktree_path, project_dir)
 
             case pr_result do
               {:ok, _pr_url} ->
@@ -510,19 +516,19 @@ defmodule Apothecary.Brewer do
     end
   end
 
-  defp create_pr_with_retry(worktree_id, worktree_path, retries \\ 2) do
+  defp create_pr_with_retry(worktree_id, worktree_path, project_dir, retries \\ 2) do
     case Apothecary.Ingredients.get_concoction(worktree_id) do
       {:ok, worktree} ->
         title = "[#{worktree_id}] #{worktree.title}"
-        do_create_pr(worktree_id, worktree_path, title, retries)
+        do_create_pr(worktree_id, worktree_path, project_dir, title, retries)
 
       {:error, _} ->
         {:error, :concoction_not_found}
     end
   end
 
-  defp do_create_pr(worktree_id, worktree_path, title, retries_left) do
-    case Apothecary.Git.create_pr(worktree_path, title) do
+  defp do_create_pr(worktree_id, worktree_path, project_dir, title, retries_left) do
+    case Apothecary.Git.create_pr(project_dir, worktree_path, title) do
       {:ok, pr_url} ->
         Logger.info("Created PR for concoction #{worktree_id}: #{pr_url}")
 
@@ -540,7 +546,7 @@ defmodule Apothecary.Brewer do
         )
 
         Process.sleep(2_000)
-        do_create_pr(worktree_id, worktree_path, title, retries_left - 1)
+        do_create_pr(worktree_id, worktree_path, project_dir, title, retries_left - 1)
 
       {:error, reason} ->
         Logger.warning("Failed to create PR for concoction #{worktree_id}: #{inspect(reason)}")
@@ -550,8 +556,12 @@ defmodule Apothecary.Brewer do
 
   # Private — MCP config
 
-  defp write_mcp_config(worktree_path, agent_id, worktree_id, extra_mcps) do
-    config = Apothecary.McpConfig.build(agent_id, worktree_id, extra_mcps: extra_mcps)
+  defp write_mcp_config(worktree_path, agent_id, worktree_id, extra_mcps, project_dir) do
+    config =
+      Apothecary.McpConfig.build(agent_id, worktree_id,
+        extra_mcps: extra_mcps,
+        project_dir: project_dir
+      )
     merged = config["mcpServers"]
 
     mcp_path = Path.join(worktree_path, ".mcp.json")
@@ -654,7 +664,7 @@ defmodule Apothecary.Brewer do
   end
 
   defp build_prompt(worktree, tasks, worktree_path) do
-    project_dir = Application.get_env(:apothecary, :project_dir)
+    project_dir = worktree.project_id && lookup_project_dir(worktree.project_id)
 
     claude_md =
       case File.read(Path.join(project_dir, "CLAUDE.md")) do
@@ -693,10 +703,11 @@ defmodule Apothecary.Brewer do
         ""
       end
 
-    git_context = build_git_context(worktree_path)
+    git_context = build_git_context(project_dir, worktree_path)
 
     # Generate project structure digest so brewers don't need to explore from scratch
-    project_digest = Apothecary.ProjectDigest.generate()
+    project_digest =
+      if project_dir, do: Apothecary.ProjectDigest.generate(project_dir), else: ""
 
     """
     You are an autonomous coding agent working in: #{worktree_path}
@@ -772,16 +783,18 @@ defmodule Apothecary.Brewer do
     """
   end
 
-  defp build_git_context(worktree_path) do
+  defp build_git_context(nil, _worktree_path), do: ""
+
+  defp build_git_context(project_dir, worktree_path) do
     # Use log with stats so brewers see which files each commit touched
     log_section =
-      case Apothecary.Git.worktree_log_with_stats(worktree_path, 10) do
+      case Apothecary.Git.worktree_log_with_stats(project_dir, worktree_path, 10) do
         {:ok, log} when log != "" ->
           "### Commits on this branch (with files changed)\n```\n#{log}\n```"
 
         _ ->
           # Fallback to plain log
-          case Apothecary.Git.worktree_log(worktree_path) do
+          case Apothecary.Git.worktree_log(project_dir, worktree_path) do
             {:ok, log} when log != "" ->
               "### Commits on this branch\n```\n#{log}\n```"
 
@@ -792,7 +805,7 @@ defmodule Apothecary.Brewer do
 
     # Overall branch diff stat (total files changed, insertions, deletions)
     diff_stat_section =
-      case Apothecary.Git.worktree_diff_stat(worktree_path) do
+      case Apothecary.Git.worktree_diff_stat(project_dir, worktree_path) do
         {:ok, stat} when stat != "" ->
           "### Branch diff summary (vs main)\n```\n#{stat}\n```"
 
@@ -924,5 +937,12 @@ defmodule Apothecary.Brewer do
 
   defp report_state(agent) do
     GenServer.cast(Apothecary.Dispatcher, {:agent_update, self(), agent})
+  end
+
+  defp lookup_project_dir(project_id) do
+    case Apothecary.Projects.get(project_id) do
+      {:ok, project} -> project.path
+      _ -> nil
+    end
   end
 end

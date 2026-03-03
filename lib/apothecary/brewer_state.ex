@@ -5,6 +5,7 @@ defmodule Apothecary.BrewerState do
 
   @type t :: %__MODULE__{
           id: integer(),
+          project_dir: String.t() | nil,
           worktree_path: String.t() | nil,
           branch: String.t() | nil,
           current_concoction: Apothecary.Concoction.t() | nil,
@@ -16,6 +17,7 @@ defmodule Apothecary.BrewerState do
 
   defstruct [
     :id,
+    :project_dir,
     :worktree_path,
     :branch,
     :current_concoction,

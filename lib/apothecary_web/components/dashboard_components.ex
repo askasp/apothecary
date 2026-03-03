@@ -7,6 +7,113 @@ defmodule ApothecaryWeb.DashboardComponents do
     router: ApothecaryWeb.Router,
     statics: ApothecaryWeb.static_paths()
 
+  # --- Project Selector ---
+
+  attr :projects, :list, required: true
+  attr :current_project, :any, default: nil
+
+  def project_selector(assigns) do
+    ~H"""
+    <div class="flex items-center gap-1 min-w-0">
+      <%= if @projects != [] do %>
+        <.link
+          navigate={~p"/"}
+          class={[
+            "px-2 py-0.5 text-xs rounded transition-colors cursor-pointer whitespace-nowrap",
+            if(is_nil(@current_project),
+              do: "text-base-content bg-base-content/10 font-bold",
+              else: "text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5"
+            )
+          ]}
+        >
+          All
+        </.link>
+        <.link
+          :for={project <- @projects}
+          navigate={~p"/projects/#{project.id}"}
+          class={[
+            "px-2 py-0.5 text-xs rounded transition-colors cursor-pointer whitespace-nowrap truncate max-w-[120px]",
+            if(@current_project && @current_project.id == project.id,
+              do: "text-base-content bg-base-content/10 font-bold",
+              else: "text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5"
+            )
+          ]}
+          title={project.path}
+        >
+          {project.name}
+        </.link>
+      <% end %>
+      <button
+        phx-click="show-add-project"
+        class="px-1.5 py-0.5 text-xs text-base-content/30 hover:text-base-content/70 hover:bg-base-content/5 rounded transition-colors cursor-pointer"
+        title="Open existing project folder"
+      >
+        +
+      </button>
+      <button
+        phx-click="show-new-project"
+        class="px-1.5 py-0.5 text-[10px] text-base-content/30 hover:text-base-content/70 hover:bg-base-content/5 rounded transition-colors cursor-pointer"
+        title="Create new project from template"
+      >
+        new
+      </button>
+    </div>
+    """
+  end
+
+  # --- Add Project Modal ---
+
+  attr :error, :string, default: nil
+
+  def add_project_modal(assigns) do
+    ~H"""
+    <div
+      class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
+      phx-click="cancel-add-project"
+    >
+      <div
+        class="bg-base-100 rounded-lg shadow-xl p-6 w-full max-w-md mx-4"
+        phx-click-away="cancel-add-project"
+        phx-window-keydown="cancel-add-project"
+        phx-key="Escape"
+      >
+        <h3 class="text-lg font-apothecary font-semibold mb-4">Open Project</h3>
+        <form phx-submit="add-project" class="space-y-4">
+          <div>
+            <label class="block text-sm text-base-content/60 mb-1">Project path</label>
+            <input
+              type="text"
+              name="path"
+              placeholder="/home/user/my-project"
+              autofocus
+              class="w-full px-3 py-2 bg-base-200 border border-base-content/10 rounded text-sm focus:outline-none focus:border-primary/50"
+            />
+            <p :if={@error} class="text-error text-xs mt-1">{@error}</p>
+            <p class="text-base-content/30 text-xs mt-1">
+              Enter the absolute path to a git repository.
+            </p>
+          </div>
+          <div class="flex justify-end gap-2">
+            <button
+              type="button"
+              phx-click="cancel-add-project"
+              class="px-3 py-1.5 text-sm text-base-content/50 hover:text-base-content cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="px-4 py-1.5 text-sm bg-primary/20 text-primary hover:bg-primary/30 rounded transition-colors cursor-pointer"
+            >
+              Open
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+    """
+  end
+
   # --- Concoct Controls (above textarea area) ---
 
   attr :swarm_status, :atom, default: :paused
@@ -15,6 +122,104 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :working_count, :integer, default: 0
   attr :auto_pr, :boolean, default: false
   attr :gh_available, :boolean, default: false
+
+  # --- New Project (Bootstrap) Modal ---
+
+  attr :error, :string, default: nil
+  attr :progress, :string, default: nil
+
+  def new_project_modal(assigns) do
+    templates = Apothecary.Bootstrapper.templates()
+    assigns = assign(assigns, :templates, templates)
+
+    ~H"""
+    <div
+      class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
+      phx-click="cancel-new-project"
+    >
+      <div
+        class="bg-base-100 rounded-lg shadow-xl p-6 w-full max-w-md mx-4"
+        phx-click-away="cancel-new-project"
+        phx-window-keydown="cancel-new-project"
+        phx-key="Escape"
+      >
+        <h3 class="text-lg font-apothecary font-semibold mb-4">New Project</h3>
+        <form phx-submit="create-new-project" class="space-y-4">
+          <div>
+            <label class="block text-sm text-base-content/60 mb-1">Parent directory</label>
+            <input
+              type="text"
+              name="parent_dir"
+              placeholder="/home/user/projects"
+              value={System.get_env("HOME", "~")}
+              class="w-full px-3 py-2 bg-base-200 border border-base-content/10 rounded text-sm focus:outline-none focus:border-primary/50"
+            />
+          </div>
+          <div>
+            <label class="block text-sm text-base-content/60 mb-1">Project name</label>
+            <input
+              type="text"
+              name="name"
+              placeholder="my-app"
+              autofocus
+              class="w-full px-3 py-2 bg-base-200 border border-base-content/10 rounded text-sm focus:outline-none focus:border-primary/50"
+            />
+          </div>
+          <div>
+            <label class="block text-sm text-base-content/60 mb-1">Template</label>
+            <div class="space-y-2">
+              <label
+                :for={tmpl <- @templates}
+                class="flex items-center gap-3 p-2 bg-base-200/50 rounded cursor-pointer hover:bg-base-200"
+              >
+                <input
+                  type="radio"
+                  name="template"
+                  value={tmpl.id}
+                  checked={tmpl.id == :phoenix}
+                  class="radio radio-sm"
+                />
+                <div>
+                  <div class="text-sm font-medium">{tmpl.name}</div>
+                  <div class="text-xs text-base-content/40">{tmpl.description}</div>
+                </div>
+              </label>
+            </div>
+          </div>
+          <p :if={@error} class="text-error text-xs">{@error}</p>
+          <div
+            :if={@progress}
+            class="text-sm text-base-content/50 bg-base-200 rounded p-2 font-mono text-xs"
+          >
+            {@progress}
+          </div>
+          <div class="flex justify-end gap-2">
+            <button
+              type="button"
+              phx-click="cancel-new-project"
+              class="px-3 py-1.5 text-sm text-base-content/50 hover:text-base-content cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={@progress != nil}
+              class={[
+                "px-4 py-1.5 text-sm rounded transition-colors cursor-pointer",
+                if(@progress,
+                  do: "bg-base-content/10 text-base-content/30",
+                  else: "bg-primary/20 text-primary hover:bg-primary/30"
+                )
+              ]}
+            >
+              <%= if @progress, do: "Creating...", else: "Create" %>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+    """
+  end
 
   def concoct_controls(assigns) do
     ~H"""

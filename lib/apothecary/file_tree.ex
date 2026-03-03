@@ -1,16 +1,14 @@
 defmodule Apothecary.FileTree do
-  @moduledoc "Scans the project directory for tracked files using git ls-files."
+  @moduledoc "Scans a project directory for tracked files using git ls-files."
 
   alias Apothecary.CLI
 
   @doc """
-  Returns a list of relative file paths tracked by git in the project directory.
+  Returns a list of relative file paths tracked by git in the given project directory.
   Respects .gitignore automatically since git ls-files only returns tracked files.
   """
-  @spec list_files() :: {:ok, [String.t()]} | {:error, term()}
-  def list_files do
-    project_dir = Application.get_env(:apothecary, :project_dir, File.cwd!())
-
+  @spec list_files(String.t()) :: {:ok, [String.t()]} | {:error, term()}
+  def list_files(project_dir) do
     case CLI.run("git", ["ls-files"], cd: project_dir) do
       {:ok, output} ->
         files =
@@ -42,13 +40,9 @@ defmodule Apothecary.FileTree do
       basename = Path.basename(downcased)
 
       cond do
-        # Exact basename match gets highest priority
         basename == query -> {0, String.length(path)}
-        # Basename starts with query
         String.starts_with?(basename, query) -> {1, String.length(path)}
-        # Basename contains query
         String.contains?(basename, query) -> {2, String.length(path)}
-        # Path contains query
         true -> {3, String.length(path)}
       end
     end)

@@ -52,6 +52,11 @@ defmodule Apothecary.DevServer do
     GenServer.call(__MODULE__, {:server_ports, worktree_id})
   end
 
+  @doc "Check if a worktree has a dev config (explicit or auto-detected)."
+  def has_config?(worktree_id) do
+    GenServer.call(__MODULE__, {:has_config, worktree_id})
+  end
+
   # --- GenServer Callbacks ---
 
   @impl true
@@ -73,7 +78,7 @@ defmodule Apothecary.DevServer do
       _ ->
         case resolve_worktree_path(worktree_id) do
           {:ok, worktree_path} ->
-            case DevConfig.load(worktree_path) do
+            case load_or_detect_config(worktree_path) do
               {:ok, config} ->
                 {state, result} = do_start_server(worktree_id, worktree_path, config, state)
                 {:reply, result, state}
@@ -124,6 +129,23 @@ defmodule Apothecary.DevServer do
       _ ->
         {:reply, [], state}
     end
+  end
+
+  @impl true
+  def handle_call({:has_config, worktree_id}, _from, state) do
+    result =
+      case resolve_worktree_path(worktree_id) do
+        {:ok, path} ->
+          case load_or_detect_config(path) do
+            {:ok, _} -> true
+            _ -> false
+          end
+
+        _ ->
+          false
+      end
+
+    {:reply, result, state}
   end
 
   # Port data from dev server process
@@ -419,6 +441,22 @@ defmodule Apothecary.DevServer do
   end
 
   # --- Private: Helpers ---
+
+  defp load_or_detect_config(path) do
+    case DevConfig.load(path) do
+      {:ok, _} = ok ->
+        ok
+
+      :not_found ->
+        case DevConfig.detect(path) do
+          {:ok, _} = ok -> ok
+          :not_detected -> :not_found
+        end
+
+      {:error, _} = err ->
+        err
+    end
+  end
 
   defp resolve_worktree_path(worktree_id) do
     case Apothecary.WorktreeManager.get_worktree(worktree_id) do

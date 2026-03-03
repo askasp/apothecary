@@ -32,7 +32,7 @@ auto_pr =
 
 config :apothecary,
   port: port,
-  project_dir: System.get_env("APOTHECARY_PROJECT_DIR") || File.cwd!(),
+  project_dir: System.get_env("APOTHECARY_PROJECT_DIR"),
   poll_interval: String.to_integer(System.get_env("APOTHECARY_POLL_INTERVAL", "2000")),
   bd_path: System.get_env("APOTHECARY_BD_PATH", "bd"),
   claude_path: System.get_env("APOTHECARY_CLAUDE_PATH", "claude"),

@@ -1,7 +1,7 @@
 defmodule ApothecaryWeb.DashboardLive do
   use ApothecaryWeb, :live_view
 
-  alias Apothecary.{Brewer, DevServer, DiffParser, FileTree, Git, Ingredients, Dispatcher}
+  alias Apothecary.{Brewer, DevServer, DiffParser, FileTree, Git, Ingredients, Dispatcher, Projects}
 
   @pubsub Apothecary.PubSub
 
@@ -14,45 +14,33 @@ defmodule ApothecaryWeb.DashboardLive do
       Ingredients.subscribe_recipes()
       Dispatcher.subscribe()
       DevServer.subscribe()
+      Projects.subscribe()
     end
 
-    task_state = Ingredients.get_state()
     dispatcher_status = Dispatcher.status()
     agents = enrich_agents_with_pids(dispatcher_status.agents)
-    active_task_ids = active_task_ids(dispatcher_status)
     dev_servers = DevServer.list_servers()
 
     if connected?(socket) do
       subscribe_to_agents(agents)
     end
 
-    worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
-
-    project_dir = Application.get_env(:apothecary, :project_dir, File.cwd!())
-    project_name = Path.basename(project_dir)
-    has_preview_config = File.exists?(Path.join(project_dir, ".apothecary/preview.yml"))
+    projects = Projects.list_active()
 
     socket =
       socket
       |> assign(:page_title, "Dashboard")
-      |> assign(:project_name, project_name)
-      |> assign(:stats, task_state.stats)
-      |> assign(:ready_tasks, task_state.ready_tasks)
-      |> assign(:last_poll, task_state.last_poll)
-      |> assign(:error, task_state.error)
-      |> assign(:task_count, length(task_state.tasks))
+      |> assign(:projects, projects)
+      |> assign(:current_project, nil)
       |> assign(:swarm_status, dispatcher_status.status)
       |> assign(:target_count, max(dispatcher_status.target_count, 1))
       |> assign(:active_count, dispatcher_status.active_count)
       |> assign(:agents, agents)
       |> assign(:show_help, false)
       |> assign(:input_focused, false)
-      |> assign(:orphan_count, compute_orphan_count(task_state.tasks, active_task_ids))
       |> assign(:dev_servers, dev_servers)
-      |> assign(:has_preview_config, has_preview_config)
-      |> assign(:worktrees_by_status, worktrees_by_status)
+      |> assign(:has_preview_config, false)
       |> assign(:collapsed_done, true)
-      |> assign(:card_ids, build_card_ids(worktrees_by_status))
       |> assign(:selected_card, 0)
       # Panel state
       |> assign(:selected_task_id, nil)
@@ -63,7 +51,6 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:agent_output, [])
       |> assign(:diff_view, nil)
       |> assign(:pending_action, nil)
-      |> assign(:known_ingredient_ids, extract_ingredient_ids(task_state.tasks))
       # Tab navigation
       |> assign(:active_tab, :workbench)
       # Recipe state
@@ -76,31 +63,120 @@ defmodule ApothecaryWeb.DashboardLive do
         )
       )
       |> assign(:editing_recipe_id, nil)
-      |> assign(:project_files, load_project_files())
+      |> assign(:project_files, load_project_files(nil))
       # Auto PR
       |> assign(:auto_pr, Git.auto_pr?())
       |> assign(:gh_available, Git.gh_available?())
+      # Add project modal
+      |> assign(:show_add_project, false)
+      |> assign(:add_project_error, nil)
+      # New project (bootstrap) modal
+      |> assign(:show_new_project, false)
+      |> assign(:new_project_error, nil)
+      |> assign(:bootstrap_progress, nil)
+      # Load state (will be refined in handle_params)
+      |> load_dashboard_state(nil)
 
     {:ok, socket}
   end
 
   @impl true
+  def handle_params(%{"project_id" => project_id, "id" => id}, _uri, socket) do
+    socket = apply_project_scope(socket, project_id)
+    {:noreply, select_task(socket, id)}
+  end
+
+  def handle_params(%{"project_id" => project_id} = params, _uri, socket) do
+    socket = apply_project_scope(socket, project_id)
+    {:noreply, select_task(socket, params["task"])}
+  end
+
   def handle_params(%{"id" => id}, _uri, socket) do
+    socket = apply_project_scope(socket, nil)
     {:noreply, select_task(socket, id)}
   end
 
   def handle_params(%{"task" => id}, _uri, socket) do
+    # Don't reset project scope — task selection is within current view
     {:noreply, select_task(socket, id)}
   end
 
   def handle_params(_params, _uri, socket) do
+    socket = apply_project_scope(socket, nil)
     {:noreply, select_task(socket, nil)}
+  end
+
+  defp apply_project_scope(socket, project_id) do
+    current = socket.assigns.current_project
+
+    cond do
+      is_nil(project_id) && is_nil(current) ->
+        load_dashboard_state(socket, nil)
+
+      is_nil(project_id) && not is_nil(current) ->
+        socket
+        |> assign(:current_project, nil)
+        |> load_dashboard_state(nil)
+
+      not is_nil(project_id) && (is_nil(current) || current.id != project_id) ->
+        case Projects.get(project_id) do
+          {:ok, project} ->
+            socket
+            |> assign(:current_project, project)
+            |> load_dashboard_state(project)
+
+          {:error, _} ->
+            socket
+            |> put_flash(:error, "Project not found")
+            |> push_navigate(to: ~p"/")
+        end
+
+      true ->
+        socket
+    end
+  end
+
+  defp load_dashboard_state(socket, project) do
+    task_state =
+      if project do
+        Ingredients.get_state(project_id: project.id)
+      else
+        Ingredients.get_state()
+      end
+
+    agents = socket.assigns[:agents] || []
+    dev_servers = socket.assigns[:dev_servers] || %{}
+    active_task_ids = active_task_ids_from_agents(agents)
+    worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
+
+    project_name =
+      cond do
+        project -> project.name
+        socket.assigns[:projects] == [] -> "Apothecary"
+        true -> "All Projects"
+      end
+
+    socket
+    |> assign(:project_name, project_name)
+    |> assign(:stats, task_state.stats)
+    |> assign(:ready_tasks, task_state.ready_tasks)
+    |> assign(:last_poll, task_state.last_poll)
+    |> assign(:error, task_state.error)
+    |> assign(:task_count, length(task_state.tasks))
+    |> assign(:orphan_count, compute_orphan_count(task_state.tasks, active_task_ids))
+    |> assign(:worktrees_by_status, worktrees_by_status)
+    |> assign(:card_ids, build_card_ids(worktrees_by_status))
+    |> assign(:known_ingredient_ids, extract_ingredient_ids(task_state.tasks))
+    |> assign(:project_files, load_project_files(project))
   end
 
   # --- PubSub handlers ---
 
   @impl true
   def handle_info({:ingredients_update, state}, socket) do
+    # Re-filter state if scoped to a project
+    state = filter_state_for_project(state, socket.assigns.current_project)
+
     new_ids = extract_ingredient_ids(state.tasks)
     old_ids = socket.assigns.known_ingredient_ids
     created = MapSet.difference(new_ids, old_ids)
@@ -148,7 +224,7 @@ defmodule ApothecaryWeb.DashboardLive do
     update_agent_subscriptions(old_agents, agents)
 
     # Rebuild card groups since agent assignments affect which lane cards appear in
-    task_state = Ingredients.get_state()
+    task_state = scoped_get_state(socket)
     dev_servers = socket.assigns.dev_servers
     worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
 
@@ -183,7 +259,7 @@ defmodule ApothecaryWeb.DashboardLive do
       end
 
     # Rebuild groups with updated dev server info
-    task_state = Ingredients.get_state()
+    task_state = scoped_get_state(socket)
     agents = socket.assigns.agents
     worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
 
@@ -194,6 +270,13 @@ defmodule ApothecaryWeb.DashboardLive do
       |> rebuild_card_ids(worktrees_by_status)
 
     {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({event, _project}, socket)
+      when event in [:project_added, :project_updated, :project_deleted] do
+    projects = Projects.list_active()
+    {:noreply, assign(socket, :projects, projects)}
   end
 
   @impl true
@@ -248,6 +331,37 @@ defmodule ApothecaryWeb.DashboardLive do
   def handle_info({recipe_event, _recipe}, socket)
       when recipe_event in [:recipe_created, :recipe_updated, :recipe_toggled, :recipe_deleted] do
     {:noreply, assign(socket, :recipes, Ingredients.list_recipes())}
+  end
+
+  # Bootstrap PubSub handlers
+  @impl true
+  def handle_info({:bootstrap_progress, _name, message}, socket) do
+    {:noreply, assign(socket, :bootstrap_progress, message)}
+  end
+
+  @impl true
+  def handle_info({:bootstrap_complete, _name, {:ok, project}}, socket) do
+    projects = Projects.list_active()
+
+    {:noreply,
+     socket
+     |> assign(
+       projects: projects,
+       show_new_project: false,
+       bootstrap_progress: nil,
+       new_project_error: nil
+     )
+     |> put_flash(:info, "Project created: #{project.name}")
+     |> push_navigate(to: ~p"/projects/#{project.id}")}
+  end
+
+  @impl true
+  def handle_info({:bootstrap_complete, _name, {:error, reason}}, socket) do
+    {:noreply,
+     assign(socket,
+       bootstrap_progress: nil,
+       new_project_error: "Bootstrap failed: #{inspect(reason)}"
+     )}
   end
 
   # --- Event handlers ---
@@ -369,7 +483,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @impl true
   def handle_event("deselect-task", _params, socket) do
-    {:noreply, push_patch(socket, to: ~p"/")}
+    {:noreply, push_patch(socket, to: project_path(socket))}
   end
 
   @impl true
@@ -668,6 +782,140 @@ defmodule ApothecaryWeb.DashboardLive do
     {:noreply, assign(socket, :active_tab, active_tab)}
   end
 
+  # --- Project event handlers ---
+
+  @impl true
+  def handle_event("show-add-project", _params, socket) do
+    {:noreply, assign(socket, show_add_project: true, add_project_error: nil)}
+  end
+
+  @impl true
+  def handle_event("cancel-add-project", _params, socket) do
+    {:noreply, assign(socket, show_add_project: false, add_project_error: nil)}
+  end
+
+  @impl true
+  def handle_event("add-project", %{"path" => path}, socket) do
+    path = String.trim(path)
+
+    if path == "" do
+      {:noreply, assign(socket, :add_project_error, "Path cannot be empty")}
+    else
+      case Projects.validate_path(path) do
+        :ok ->
+          case Projects.add(path) do
+            {:ok, project} ->
+              projects = Projects.list_active()
+
+              {:noreply,
+               socket
+               |> assign(projects: projects, show_add_project: false, add_project_error: nil)
+               |> put_flash(:info, "Project added: #{project.name}")
+               |> push_navigate(to: ~p"/projects/#{project.id}")}
+
+            {:error, {:already_exists, existing}} ->
+              {:noreply,
+               socket
+               |> assign(show_add_project: false, add_project_error: nil)
+               |> push_navigate(to: ~p"/projects/#{existing.id}")}
+
+            {:error, reason} ->
+              {:noreply, assign(socket, :add_project_error, "Failed: #{inspect(reason)}")}
+          end
+
+        {:error, :not_a_directory} ->
+          {:noreply, assign(socket, :add_project_error, "Not a valid directory")}
+
+        {:error, :not_a_git_repo} ->
+          {:noreply, assign(socket, :add_project_error, "Not a git repository")}
+      end
+    end
+  end
+
+  @impl true
+  def handle_event("remove-project", %{"id" => project_id}, socket) do
+    case Projects.archive(project_id) do
+      {:ok, _} ->
+        projects = Projects.list_active()
+
+        socket =
+          if socket.assigns.current_project && socket.assigns.current_project.id == project_id do
+            socket
+            |> assign(current_project: nil, projects: projects)
+            |> push_navigate(to: ~p"/")
+          else
+            assign(socket, :projects, projects)
+          end
+
+        {:noreply, put_flash(socket, :info, "Project archived")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to archive project")}
+    end
+  end
+
+  # --- Bootstrap event handlers ---
+
+  @impl true
+  def handle_event("show-new-project", _params, socket) do
+    {:noreply,
+     assign(socket,
+       show_new_project: true,
+       new_project_error: nil,
+       bootstrap_progress: nil
+     )}
+  end
+
+  @impl true
+  def handle_event("cancel-new-project", _params, socket) do
+    {:noreply,
+     assign(socket,
+       show_new_project: false,
+       new_project_error: nil,
+       bootstrap_progress: nil
+     )}
+  end
+
+  @impl true
+  def handle_event(
+        "create-new-project",
+        %{"parent_dir" => parent_dir, "name" => name, "template" => template},
+        socket
+      ) do
+    name = String.trim(name)
+    parent_dir = String.trim(parent_dir)
+    template = String.to_existing_atom(template)
+
+    cond do
+      name == "" ->
+        {:noreply, assign(socket, :new_project_error, "Name cannot be empty")}
+
+      parent_dir == "" ->
+        {:noreply, assign(socket, :new_project_error, "Parent directory cannot be empty")}
+
+      not File.dir?(Path.expand(parent_dir)) ->
+        {:noreply, assign(socket, :new_project_error, "Parent directory does not exist")}
+
+      true ->
+        Apothecary.Bootstrapper.subscribe()
+
+        case Apothecary.Bootstrapper.create(parent_dir, name, template) do
+          {:ok, _task} ->
+            {:noreply,
+             assign(socket,
+               bootstrap_progress: "Starting...",
+               new_project_error: nil
+             )}
+
+          {:error, :already_exists} ->
+            {:noreply, assign(socket, :new_project_error, "Directory already exists")}
+
+          {:error, reason} ->
+            {:noreply, assign(socket, :new_project_error, "Failed: #{inspect(reason)}")}
+        end
+    end
+  end
+
   # --- Recipe event handlers ---
 
   @impl true
@@ -794,7 +1042,7 @@ defmodule ApothecaryWeb.DashboardLive do
         assign(socket, :show_help, false)
 
       socket.assigns.selected_task_id ->
-        push_patch(socket, to: ~p"/")
+        push_patch(socket, to: project_path(socket))
 
       true ->
         socket
@@ -828,13 +1076,13 @@ defmodule ApothecaryWeb.DashboardLive do
   defp handle_hotkey(key, socket) when key in ["Enter", "l"] do
     case Enum.at(socket.assigns.card_ids, socket.assigns.selected_card) do
       nil -> socket
-      id -> push_patch(socket, to: ~p"/?task=#{id}")
+      id -> push_patch(socket, to: project_path(socket) <> "?task=#{id}")
     end
   end
 
   defp handle_hotkey(key, socket) when key in ["Backspace", "h"] do
     if socket.assigns.selected_task_id do
-      push_patch(socket, to: ~p"/")
+      push_patch(socket, to: project_path(socket))
     else
       socket
     end
@@ -1084,7 +1332,9 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp execute_merge(socket, task_id, pr_url) do
-    case Git.merge_pr(pr_url) do
+    project_dir = resolve_project_dir_for_concoction(task_id)
+
+    case Git.merge_pr(project_dir, pr_url) do
       :ok ->
         Ingredients.add_note(task_id, "PR merged from dashboard: #{pr_url}")
         Ingredients.cleanup_merged_concoction(task_id)
@@ -1100,11 +1350,12 @@ defmodule ApothecaryWeb.DashboardLive do
   defp promote_to_assaying(socket, task) do
     task_id = task.id
     git_path = task.git_path
+    project_dir = resolve_project_dir_for_concoction(task_id)
 
     if git_path do
       title = "[#{task_id}] #{task.title}"
 
-      case Git.create_pr(git_path, title) do
+      case Git.create_pr(project_dir, git_path, title) do
         {:ok, pr_url} ->
           Ingredients.add_note(task_id, "PR created from dashboard: #{pr_url}")
 
@@ -1152,6 +1403,7 @@ defmodule ApothecaryWeb.DashboardLive do
     wt_id = wt.id
     pr_url = Map.get(wt, :pr_url)
     git_path = Map.get(wt, :git_path)
+    project_dir = resolve_project_dir_for_concoction(wt_id)
 
     diff_view = %{
       files: [],
@@ -1164,7 +1416,7 @@ defmodule ApothecaryWeb.DashboardLive do
     Elixir.Task.start(fn ->
       result =
         try do
-          fetch_diff(pr_url, git_path)
+          fetch_diff(pr_url, git_path, project_dir)
         rescue
           e -> {:error, Exception.message(e)}
         end
@@ -1175,28 +1427,28 @@ defmodule ApothecaryWeb.DashboardLive do
     assign(socket, :diff_view, diff_view)
   end
 
-  defp fetch_diff(pr_url, git_path) do
-    with {:error, _} <- try_pr_diff(pr_url),
-         {:error, _} <- try_worktree_diff(git_path) do
+  defp fetch_diff(pr_url, git_path, project_dir) do
+    with {:error, _} <- try_pr_diff(pr_url, project_dir),
+         {:error, _} <- try_worktree_diff(git_path, project_dir) do
       {:error, "No diff available (no PR URL or worktree path)"}
     end
   end
 
-  defp try_pr_diff(pr_url) when is_binary(pr_url) and pr_url != "" do
-    Git.pr_diff(pr_url)
+  defp try_pr_diff(pr_url, project_dir) when is_binary(pr_url) and pr_url != "" do
+    Git.pr_diff(project_dir, pr_url)
   end
 
-  defp try_pr_diff(_), do: {:error, :no_pr_url}
+  defp try_pr_diff(_, _), do: {:error, :no_pr_url}
 
-  defp try_worktree_diff(git_path) when is_binary(git_path) and git_path != "" do
+  defp try_worktree_diff(git_path, project_dir) when is_binary(git_path) and git_path != "" do
     if File.dir?(git_path) do
-      Git.worktree_diff(git_path)
+      Git.worktree_diff(project_dir, git_path)
     else
       {:error, :worktree_not_found}
     end
   end
 
-  defp try_worktree_diff(_), do: {:error, :no_git_path}
+  defp try_worktree_diff(_, _), do: {:error, :no_git_path}
 
   # --- Input handlers ---
 
@@ -1231,10 +1483,14 @@ defmodule ApothecaryWeb.DashboardLive do
     else
       {concoction_title, description} = split_title_description(title)
 
+      project_id =
+        if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
+
       case Ingredients.create_concoction(%{
              title: concoction_title,
              description: description,
-             priority: 3
+             priority: 3,
+             project_id: project_id
            }) do
         {:ok, item} when not is_nil(item) ->
           {:noreply, put_flash(socket, :info, "Concoction created: #{item.id}")}
@@ -1266,7 +1522,7 @@ defmodule ApothecaryWeb.DashboardLive do
         {:noreply,
          socket
          |> put_flash(:info, "Ingredient added: #{item.id}")
-         |> push_patch(to: ~p"/")}
+         |> push_patch(to: project_path(socket))}
 
       {:ok, nil} ->
         {:noreply, put_flash(socket, :error, "Failed to add ingredient")}
@@ -1315,6 +1571,17 @@ defmodule ApothecaryWeb.DashboardLive do
 
     {:ok, children} = Ingredients.children(id)
 
+    has_preview =
+      if String.starts_with?(to_string(id), "wt-") do
+        try do
+          DevServer.has_config?(id)
+        catch
+          :exit, _ -> false
+        end
+      else
+        false
+      end
+
     socket
     |> assign(:selected_task_id, id)
     |> assign(:selected_task, task)
@@ -1322,6 +1589,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:editing_field, nil)
     |> assign(:working_agent, nil)
     |> assign(:agent_output, [])
+    |> assign(:has_preview_config, has_preview)
     |> assign(:page_title, "Task #{id}")
     |> find_working_agent()
   end
@@ -1491,10 +1759,74 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  defp load_project_files do
-    case FileTree.list_files() do
+  defp load_project_files(nil) do
+    case Projects.list_active() do
+      [project | _] ->
+        case FileTree.list_files(project.path) do
+          {:ok, files} -> files
+          {:error, _} -> []
+        end
+
+      [] ->
+        []
+    end
+  end
+
+  defp load_project_files(%{path: path}) do
+    case FileTree.list_files(path) do
       {:ok, files} -> files
       {:error, _} -> []
+    end
+  end
+
+  defp scoped_get_state(socket) do
+    case socket.assigns.current_project do
+      nil -> Ingredients.get_state()
+      project -> Ingredients.get_state(project_id: project.id)
+    end
+  end
+
+  defp project_path(socket, extra \\ "") do
+    case socket.assigns.current_project do
+      nil -> "/" <> extra
+      project -> "/projects/#{project.id}" <> if(extra != "", do: "/" <> extra, else: "")
+    end
+  end
+
+  defp filter_state_for_project(state, nil), do: state
+
+  defp filter_state_for_project(state, project) do
+    # Get project's concoction IDs
+    project_concoction_ids =
+      state.tasks
+      |> Enum.filter(fn item ->
+        String.starts_with?(to_string(item.id), "wt-") and
+          Map.get(item, :project_id) == project.id
+      end)
+      |> MapSet.new(& &1.id)
+
+    tasks =
+      Enum.filter(state.tasks, fn item ->
+        if String.starts_with?(to_string(item.id), "wt-") do
+          MapSet.member?(project_concoction_ids, item.id)
+        else
+          MapSet.member?(project_concoction_ids, item.concoction_id)
+        end
+      end)
+
+    %{state | tasks: tasks}
+  end
+
+  defp resolve_project_dir_for_concoction(concoction_id) do
+    case Ingredients.get_concoction(concoction_id) do
+      {:ok, %{project_id: project_id}} when not is_nil(project_id) ->
+        case Apothecary.Projects.get(project_id) do
+          {:ok, project} -> project.path
+          _ -> nil
+        end
+
+      _ ->
+        nil
     end
   end
 
@@ -1591,14 +1923,6 @@ defmodule ApothecaryWeb.DashboardLive do
     end)
   end
 
-  defp active_task_ids(dispatcher_status) do
-    dispatcher_status.agents
-    |> Map.values()
-    |> Enum.flat_map(fn a ->
-      if a.current_concoction, do: [a.current_concoction.id], else: []
-    end)
-  end
-
   defp active_task_ids_from_agents(agents) do
     Enum.flat_map(agents, fn a ->
       if Map.get(a, :current_concoction), do: [a.current_concoction.id], else: []
@@ -1649,12 +1973,16 @@ defmodule ApothecaryWeb.DashboardLive do
         phx-throttle="100"
         class="flex flex-col h-screen outline-none"
       >
-        <%!-- Top bar: branding + tabs on one line --%>
+        <%!-- Top bar: branding + project selector + tabs --%>
         <div class="flex items-center gap-1 sm:gap-3 px-2 py-2 text-xs min-w-0">
-          <span class="font-apothecary text-sm font-bold tracking-wide text-base-content/80 shrink-0">
+          <.link navigate={~p"/"} class="font-apothecary text-sm font-bold tracking-wide text-base-content/80 shrink-0 hover:text-base-content transition-colors">
             <span class="hidden sm:inline">Apothecary</span>
             <span class="sm:hidden">&#x2697;</span>
-          </span>
+          </.link>
+          <.project_selector
+            projects={@projects}
+            current_project={@current_project}
+          />
           <.tab_navigation active_tab={@active_tab} />
           <span
             class="ml-auto text-base-content/30 cursor-pointer shrink-0 p-1"
@@ -1684,6 +2012,30 @@ defmodule ApothecaryWeb.DashboardLive do
                 <div class="text-base-content/30 text-xs tracking-wider uppercase mb-1 font-apothecary">
                   {@project_name}
                 </div>
+                <%= if @projects == [] and is_nil(@current_project) do %>
+                  <div class="py-8 text-center">
+                    <h2 class="text-base-content/50 text-lg font-semibold mb-3 font-apothecary">
+                      No projects yet
+                    </h2>
+                    <p class="text-base-content/30 text-sm mb-4">
+                      Open a git repository to get started.
+                    </p>
+                    <div class="flex gap-3">
+                      <button
+                        phx-click="show-add-project"
+                        class="px-4 py-2 text-sm font-apothecary bg-primary/20 text-primary hover:bg-primary/30 rounded transition-colors cursor-pointer"
+                      >
+                        Open Project
+                      </button>
+                      <button
+                        phx-click="show-new-project"
+                        class="px-4 py-2 text-sm font-apothecary bg-base-content/10 text-base-content/50 hover:text-base-content/70 hover:bg-base-content/15 rounded transition-colors cursor-pointer"
+                      >
+                        New Project
+                      </button>
+                    </div>
+                  </div>
+                <% else %>
                 <h2 class="text-base-content/50 text-lg font-semibold mb-2 font-apothecary">
                   What shall we concoct?
                 </h2>
@@ -1698,6 +2050,7 @@ defmodule ApothecaryWeb.DashboardLive do
                 />
                 <.primary_input input_focused={@input_focused} />
                 <.activity_ticker agents={@agents} />
+                <% end %>
               </div>
 
               <%!-- Lane: STOCKROOM — ready + blocked --%>
@@ -1872,6 +2225,17 @@ defmodule ApothecaryWeb.DashboardLive do
       />
 
       <.diff_overlay :if={@diff_view} diff_view={@diff_view} />
+
+      <.add_project_modal
+        :if={@show_add_project}
+        error={@add_project_error}
+      />
+
+      <.new_project_modal
+        :if={@show_new_project}
+        error={@new_project_error}
+        progress={@bootstrap_progress}
+      />
     </Layouts.app>
     """
   end

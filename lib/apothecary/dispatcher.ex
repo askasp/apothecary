@@ -293,8 +293,11 @@ defmodule Apothecary.Dispatcher do
     # Atomically claim the concoction
     case Apothecary.Ingredients.claim_concoction(concoction.id, brewer_id) do
       {:ok, claimed} ->
+        # Look up the project directory for this concoction
+        project_dir = resolve_project_dir(concoction)
+
         # Create/get git worktree
-        case ensure_git_worktree(concoction) do
+        case ensure_git_worktree(concoction, project_dir) do
           {:ok, path, branch} ->
             # Update concoction record with git info
             Apothecary.Ingredients.update_concoction(concoction.id, %{
@@ -304,7 +307,7 @@ defmodule Apothecary.Dispatcher do
 
             # Assign to brewer
             [_ | rest_idle] = state.idle_agents
-            Apothecary.Brewer.assign_concoction(brewer_pid, claimed, path, branch)
+            Apothecary.Brewer.assign_concoction(brewer_pid, claimed, path, branch, project_dir)
             %{state | idle_agents: rest_idle}
 
           {:error, reason} ->
@@ -319,19 +322,28 @@ defmodule Apothecary.Dispatcher do
     end
   end
 
-  defp ensure_git_worktree(%{git_path: path, git_branch: branch})
+  defp ensure_git_worktree(%{git_path: path, git_branch: branch}, project_dir)
        when not is_nil(path) and not is_nil(branch) do
     if File.dir?(path) do
       {:ok, path, branch}
     else
       # Git worktree was removed, recreate
-      Apothecary.WorktreeManager.checkout(path)
+      Apothecary.WorktreeManager.checkout(project_dir, path)
     end
   end
 
-  defp ensure_git_worktree(concoction) do
-    Apothecary.WorktreeManager.checkout(concoction.id)
+  defp ensure_git_worktree(concoction, project_dir) do
+    Apothecary.WorktreeManager.checkout(project_dir, concoction.id)
   end
+
+  defp resolve_project_dir(%{project_id: project_id}) when not is_nil(project_id) do
+    case Apothecary.Projects.get(project_id) do
+      {:ok, project} -> project.path
+      _ -> nil
+    end
+  end
+
+  defp resolve_project_dir(_), do: nil
 
   defp record_failure(state, slot_id) do
     now = System.monotonic_time(:millisecond)
