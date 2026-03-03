@@ -2,7 +2,7 @@ defmodule Apothecary.WorktreeManager do
   @moduledoc """
   Manages git worktrees for work units across multiple projects.
 
-  Creates one worktree per work unit under <project_dir>-worktrees/<id>/
+  Creates one worktree per work unit under ~/.apothecary/worktrees/<project-hash>/<id>/
   with a stable branch name `worktree/<id>`. Supports dependency chains
   where a child worktree branches from its parent's branch.
 
@@ -39,7 +39,13 @@ defmodule Apothecary.WorktreeManager do
 
   @doc "Get the worktrees base directory for a project."
   def worktrees_dir(project_dir) do
-    "#{project_dir}-worktrees"
+    # Use a short hash of the expanded path to avoid collisions between
+    # projects with the same directory name in different locations.
+    expanded = Path.expand(project_dir)
+    hash = :crypto.hash(:sha256, expanded) |> Base.encode16(case: :lower) |> binary_part(0, 8)
+    dir_name = "#{Path.basename(expanded)}-#{hash}"
+
+    Path.join([System.user_home!(), ".apothecary", "worktrees", dir_name])
   end
 
   # Server
@@ -150,8 +156,11 @@ defmodule Apothecary.WorktreeManager do
       end
 
     Enum.reduce(projects, %{}, fn project, acc ->
-      base_dir = worktrees_dir(project.path)
-      recover_worktrees_from_dir(base_dir, project.path, acc)
+      # Check new location (~/.apothecary/worktrees/)
+      acc = recover_worktrees_from_dir(worktrees_dir(project.path), project.path, acc)
+      # Check legacy location (<project_dir>-worktrees/) for backwards compat
+      legacy_dir = "#{project.path}-worktrees"
+      recover_worktrees_from_dir(legacy_dir, project.path, acc)
     end)
   end
 
