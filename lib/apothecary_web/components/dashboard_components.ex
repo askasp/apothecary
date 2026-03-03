@@ -1,11 +1,56 @@
 defmodule ApothecaryWeb.DashboardComponents do
   @moduledoc "Card-based function components for the swarm dashboard."
   use Phoenix.Component
+  import ApothecaryWeb.CoreComponents, only: [icon: 1]
 
   use Phoenix.VerifiedRoutes,
     endpoint: ApothecaryWeb.Endpoint,
     router: ApothecaryWeb.Router,
     statics: ApothecaryWeb.static_paths()
+
+  # --- Copy to clipboard button ---
+
+  attr :target, :string, required: true, doc: "CSS selector of the element whose text to copy"
+  attr :class, :string, default: ""
+
+  def copy_button(assigns) do
+    ~H"""
+    <button
+      id={"copy-btn-" <> String.replace(@target, ~r/[^a-zA-Z0-9]/, "")}
+      phx-hook=".CopyText"
+      data-copy-target={@target}
+      class={[
+        "text-base-content/30 hover:text-base-content/60 cursor-pointer transition-colors text-xs",
+        @class
+      ]}
+      title="Copy to clipboard"
+    >
+      [copy]
+    </button>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".CopyText">
+      export default {
+        mounted() {
+          this.el.addEventListener("click", (e) => {
+            e.stopPropagation()
+            const target = document.querySelector(this.el.dataset.copyTarget)
+            if (!target) return
+
+            const text = target.innerText || target.textContent
+            navigator.clipboard.writeText(text).then(() => {
+              const original = this.el.textContent
+              this.el.textContent = "[copied!]"
+              this.el.classList.add("text-green-400")
+              setTimeout(() => {
+                this.el.textContent = original
+                this.el.classList.remove("text-green-400")
+              }, 1500)
+            })
+          })
+        }
+      }
+    </script>
+    """
+  end
 
   # --- Project Selector ---
 
@@ -13,52 +58,97 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :current_project, :any, default: nil
 
   def project_selector(assigns) do
+    display_name =
+      cond do
+        assigns.current_project -> assigns.current_project.name
+        assigns.projects != [] -> "Select Project"
+        true -> "Apothecary"
+      end
+
+    assigns = assign(assigns, :display_name, display_name)
+
     ~H"""
-    <div class="flex items-center gap-1 min-w-0">
-      <%= if @projects != [] do %>
-        <.link
-          navigate={~p"/"}
-          class={[
-            "px-2 py-0.5 text-xs rounded transition-colors cursor-pointer whitespace-nowrap",
-            if(is_nil(@current_project),
-              do: "text-base-content bg-base-content/10 font-bold",
-              else: "text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5"
-            )
-          ]}
-        >
-          All
-        </.link>
+    <div class="relative min-w-0" id="project-dropdown" phx-hook=".ProjectDropdown">
+      <button
+        class="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-base-content/5 transition-colors cursor-pointer min-w-0"
+        phx-click={toggle_dropdown()}
+        type="button"
+      >
+        <span class="font-apothecary font-bold text-sm sm:text-base text-base-content truncate max-w-[200px] sm:max-w-[300px]">
+          {@display_name}
+        </span>
+        <.icon name="hero-chevron-down" class="w-4 h-4 text-base-content/40 shrink-0" />
+      </button>
+      <div
+        id="project-dropdown-menu"
+        class="hidden absolute left-0 top-full mt-1 bg-base-100 border border-base-content/10 rounded-lg shadow-xl z-50 min-w-[220px] max-w-[320px] py-1"
+      >
         <.link
           :for={project <- @projects}
           navigate={~p"/projects/#{project.id}"}
           class={[
-            "px-2 py-0.5 text-xs rounded transition-colors cursor-pointer whitespace-nowrap truncate max-w-[120px]",
+            "flex items-center gap-2 px-3 py-2 text-sm hover:bg-base-content/5 transition-colors cursor-pointer",
             if(@current_project && @current_project.id == project.id,
-              do: "text-base-content bg-base-content/10 font-bold",
-              else: "text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5"
+              do: "text-base-content font-semibold bg-base-content/5",
+              else: "text-base-content/70"
             )
           ]}
           title={project.path}
         >
-          {project.name}
+          <span class="truncate">{project.name}</span>
+          <span
+            :if={@current_project && @current_project.id == project.id}
+            class="ml-auto text-primary text-xs shrink-0"
+          >
+            &#x2713;
+          </span>
         </.link>
-      <% end %>
-      <button
-        phx-click="show-add-project"
-        class="px-1.5 py-0.5 text-xs text-base-content/30 hover:text-base-content/70 hover:bg-base-content/5 rounded transition-colors cursor-pointer"
-        title="Open existing project folder"
-      >
-        +
-      </button>
-      <button
-        phx-click="show-new-project"
-        class="px-1.5 py-0.5 text-[10px] text-base-content/30 hover:text-base-content/70 hover:bg-base-content/5 rounded transition-colors cursor-pointer"
-        title="Create new project from template"
-      >
-        new
-      </button>
+        <div :if={@projects != []} class="border-t border-base-content/10 my-1" />
+        <button
+          phx-click="show-add-project"
+          class="flex items-center gap-2 w-full px-3 py-2 text-sm text-base-content/50 hover:text-base-content/70 hover:bg-base-content/5 transition-colors cursor-pointer"
+        >
+          <.icon name="hero-folder-open" class="w-4 h-4" />
+          <span>Open Project</span>
+        </button>
+        <button
+          phx-click="show-new-project"
+          class="flex items-center gap-2 w-full px-3 py-2 text-sm text-base-content/50 hover:text-base-content/70 hover:bg-base-content/5 transition-colors cursor-pointer"
+        >
+          <.icon name="hero-plus" class="w-4 h-4" />
+          <span>New Project</span>
+        </button>
+      </div>
     </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".ProjectDropdown">
+      export default {
+        mounted() {
+          this.menu = this.el.querySelector("#project-dropdown-menu")
+          this.closeHandler = (e) => {
+            if (!this.el.contains(e.target)) {
+              this.menu.classList.add("hidden")
+            }
+          }
+          document.addEventListener("click", this.closeHandler)
+          // Close on navigation
+          this.handleEvent("close-dropdown", () => {
+            this.menu.classList.add("hidden")
+          })
+        },
+        destroyed() {
+          document.removeEventListener("click", this.closeHandler)
+        }
+      }
+    </script>
     """
+  end
+
+  defp toggle_dropdown do
+    Phoenix.LiveView.JS.toggle(
+      to: "#project-dropdown-menu",
+      in: {"ease-out duration-100", "opacity-0 scale-95", "opacity-100 scale-100"},
+      out: {"ease-in duration-75", "opacity-100 scale-100", "opacity-0 scale-95"}
+    )
   end
 
   # --- Add Project Modal ---
@@ -104,10 +194,14 @@ defmodule ApothecaryWeb.DashboardComponents do
               phx-value-path={s.path}
               class="w-full text-left px-3 py-1.5 text-sm hover:bg-base-content/10 flex items-center gap-2 cursor-pointer"
             >
-              <span :if={s.is_git} class="text-emerald-400 text-xs shrink-0" title="git repo">&#x25CF;</span>
+              <span :if={s.is_git} class="text-emerald-400 text-xs shrink-0" title="git repo">
+                &#x25CF;
+              </span>
               <span :if={!s.is_git} class="text-base-content/20 text-xs shrink-0">&#x25CB;</span>
               <span class="truncate">{s.name}</span>
-              <span class="ml-auto text-base-content/20 text-xs shrink-0 truncate max-w-[180px]">{s.path}</span>
+              <span class="ml-auto text-base-content/20 text-xs shrink-0 truncate max-w-[180px]">
+                {s.path}
+              </span>
             </button>
           </div>
           <div class="flex justify-end gap-2">
@@ -158,7 +252,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         phx-key="Escape"
       >
         <h3 class="text-lg font-apothecary font-semibold mb-4">New Project</h3>
-        <form phx-submit="create-new-project" class="space-y-4">
+        <form phx-submit="create-new-project" id="new-project-form" class="space-y-4">
           <div>
             <label class="block text-sm text-base-content/60 mb-1">Parent directory</label>
             <input
@@ -174,10 +268,13 @@ defmodule ApothecaryWeb.DashboardComponents do
             <input
               type="text"
               name="name"
-              placeholder="my-app"
+              placeholder="my_app"
               autofocus
               class="w-full px-3 py-2 bg-base-200 border border-base-content/10 rounded text-sm focus:outline-none focus:border-primary/50"
             />
+            <p class="text-base-content/30 text-xs mt-1">
+              Lowercase letters, numbers, and underscores only (e.g. my_app)
+            </p>
           </div>
           <div>
             <label class="block text-sm text-base-content/60 mb-1">Template</label>
@@ -190,7 +287,7 @@ defmodule ApothecaryWeb.DashboardComponents do
                   type="radio"
                   name="template"
                   value={tmpl.id}
-                  checked={tmpl.id == :phoenix}
+                  checked={tmpl.id == :phoenix_no_ecto}
                   class="radio radio-sm"
                 />
                 <div>
@@ -226,11 +323,87 @@ defmodule ApothecaryWeb.DashboardComponents do
                 )
               ]}
             >
-              <%= if @progress, do: "Creating...", else: "Create" %>
+              {if @progress, do: "Creating...", else: "Create"}
             </button>
           </div>
         </form>
       </div>
+    </div>
+    """
+  end
+
+  # --- Project Preview ---
+
+  attr :project, :any, required: true
+  attr :dev_server, :any, default: nil
+
+  def project_preview(assigns) do
+    ~H"""
+    <div class="mb-4">
+      <%= cond do %>
+        <% @dev_server && @dev_server.status in [:starting, :running] -> %>
+          <div class="rounded-lg border border-base-content/10 overflow-hidden">
+            <div class="flex items-center justify-between px-3 py-2 bg-base-200/50">
+              <div class="flex items-center gap-2">
+                <span class={[
+                  "w-2 h-2 rounded-full",
+                  if(@dev_server.status == :running,
+                    do: "bg-green-400",
+                    else: "bg-amber-400 animate-pulse"
+                  )
+                ]} />
+                <span class="text-xs text-base-content/60 font-apothecary">
+                  {if @dev_server.status == :running, do: "Running", else: "Starting..."}
+                </span>
+                <%= for port_info <- @dev_server.ports || [] do %>
+                  <a
+                    href={"http://localhost:#{port_info.port}"}
+                    target="_blank"
+                    class="text-xs text-primary hover:text-primary/80 transition-colors"
+                  >
+                    :{port_info.port}
+                  </a>
+                <% end %>
+              </div>
+              <button
+                phx-click="stop-project-dev"
+                class="text-xs text-base-content/40 hover:text-error transition-colors cursor-pointer"
+              >
+                Stop
+              </button>
+            </div>
+            <%= if @dev_server.status == :running do %>
+              <% port = List.first(@dev_server.ports || []) %>
+              <%= if port do %>
+                <iframe
+                  src={"http://localhost:#{port.port}"}
+                  class="w-full h-[300px] sm:h-[400px] border-t border-base-content/10 bg-white"
+                  title={"#{@project.name} preview"}
+                />
+              <% end %>
+            <% end %>
+          </div>
+        <% @dev_server && @dev_server.status == :error -> %>
+          <div class="rounded-lg border border-error/20 p-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-error/70">{@dev_server.error || "Server error"}</span>
+              <button
+                phx-click="start-project-dev"
+                class="text-xs text-primary hover:text-primary/80 transition-colors cursor-pointer"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        <% true -> %>
+          <button
+            phx-click="start-project-dev"
+            class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-dashed border-base-content/15 hover:border-base-content/30 text-base-content/40 hover:text-base-content/60 transition-colors cursor-pointer"
+          >
+            <.icon name="hero-play" class="w-4 h-4" />
+            <span class="text-sm font-apothecary">Start Preview</span>
+          </button>
+      <% end %>
     </div>
     """
   end
@@ -301,7 +474,10 @@ defmodule ApothecaryWeb.DashboardComponents do
       />
       <span class={[
         "text-xs transition-colors",
-        if(@auto_pr, do: "text-base-content/70", else: "text-base-content/40 group-hover:text-base-content/60")
+        if(@auto_pr,
+          do: "text-base-content/70",
+          else: "text-base-content/40 group-hover:text-base-content/60"
+        )
       ]}>
         Auto PR
       </span>
@@ -628,7 +804,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         patch={~p"/?task=#{@worktree.id}"}
         class="px-3 pt-2 pb-1 cursor-pointer hover:bg-base-content/5"
       >
-        <div class={["text-sm font-bold truncate", status_color(@worktree.status)]}>
+        <div class={["text-sm font-bold truncate", lane_color(@group)]}>
           {@worktree.title || @worktree.id}
         </div>
         <div class="flex items-center gap-2 text-xs text-base-content/40 mt-0.5">
@@ -849,7 +1025,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         <%!-- Scrollable content --%>
         <div class="flex-1 overflow-y-auto">
           <%!-- Merge confirmation bar --%>
-          <.merge_confirmation :if={@pending_action} task={@task} />
+          <.merge_confirmation :if={@pending_action} task={@task} pending_action={@pending_action} />
 
           <%!-- Panel content --%>
           <.task_detail_panel
@@ -870,13 +1046,16 @@ defmodule ApothecaryWeb.DashboardComponents do
   # --- Merge Confirmation Bar ---
 
   attr :task, :map, required: true
+  attr :pending_action, :any, required: true
 
   def merge_confirmation(assigns) do
+    assigns = assign(assigns, :direct?, match?({:direct_merge, _, _}, assigns.pending_action))
+
     ~H"""
     <div class="bg-amber-400/10 border-b border-amber-400/30 px-3 py-3">
       <div class="flex items-center gap-3">
         <span class="text-amber-400 text-sm font-apothecary">
-          Merge this PR?
+          {if @direct?, do: "Merge directly?", else: "Merge this PR?"}
         </span>
         <span class="text-base-content/50 text-xs truncate flex-1">
           "{@task.title}"
@@ -887,7 +1066,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           phx-click="confirm-merge"
           class="bg-green-500/20 hover:bg-green-500/30 text-green-400 px-3 py-1 rounded text-xs cursor-pointer transition-colors font-bold"
         >
-          Merge PR
+          {if @direct?, do: "Create PR & Merge", else: "Merge PR"}
         </button>
         <button
           phx-click="cancel-merge"
@@ -1049,10 +1228,24 @@ defmodule ApothecaryWeb.DashboardComponents do
         </button>
         <button
           :if={@task.status == "brew_done"}
+          phx-click="direct-merge"
+          class="border border-green-400/30 text-green-400 hover:bg-green-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors font-bold"
+        >
+          Merge <span class="hidden sm:inline text-base-content/30 ml-1">m</span>
+        </button>
+        <button
+          :if={@task.status == "brew_done"}
           phx-click="promote-to-assaying"
-          class="border border-purple-400/30 text-purple-400 hover:bg-purple-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors font-bold"
+          class="border border-purple-400/30 text-purple-400 hover:bg-purple-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors"
         >
           Create PR <span class="hidden sm:inline text-base-content/30 ml-1">p</span>
+        </button>
+        <button
+          :if={@task.status == "merge_conflict"}
+          phx-click="approve-merge-fix"
+          class="border border-orange-400/30 text-orange-400 hover:bg-orange-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors font-bold"
+        >
+          Approve Merge Fix
         </button>
       </div>
 
@@ -1092,8 +1285,14 @@ defmodule ApothecaryWeb.DashboardComponents do
 
       <%!-- Notes --%>
       <div :if={@task.notes && @task.notes != ""} class="space-y-2">
-        <.section label="notes" />
-        <div class="text-base-content/50 whitespace-pre-wrap text-xs px-3 py-2 bg-base-content/3 rounded">
+        <div class="flex items-center gap-2">
+          <div class="flex-1"><.section label="notes" /></div>
+          <.copy_button target="#task-notes" />
+        </div>
+        <div
+          id="task-notes"
+          class="text-base-content/50 whitespace-pre-wrap text-xs px-3 py-2 bg-base-content/3 rounded"
+        >
           {@task.notes}
         </div>
       </div>
@@ -1266,7 +1465,12 @@ defmodule ApothecaryWeb.DashboardComponents do
   def agent_output_panel(assigns) do
     ~H"""
     <div class="space-y-1">
-      <.section label={"alchemist-#{@working_agent.id} output"} />
+      <div class="flex items-center gap-2">
+        <div class="flex-1">
+          <.section label={"alchemist-#{@working_agent.id} output"} />
+        </div>
+        <.copy_button :if={@agent_output != []} target="#agent-output" />
+      </div>
       <div
         id="agent-output"
         phx-hook="ScrollBottom"
@@ -1375,17 +1579,20 @@ defmodule ApothecaryWeb.DashboardComponents do
         >
           [retry]
         </button>
+        <.copy_button :if={@dev_server.error || @dev_server.output != []} target="#dev-error-output" />
       </div>
-      <div :if={@dev_server.error} class="text-red-400/70 text-xs">{@dev_server.error}</div>
-      <div
-        :if={@dev_server.output != []}
-        class="bg-base-200/50 p-2 text-xs max-h-40 overflow-y-auto"
-      >
+      <div id="dev-error-output">
+        <div :if={@dev_server.error} class="text-red-400/70 text-xs">{@dev_server.error}</div>
         <div
-          :for={line <- @dev_server.output}
-          class="text-base-content/50 whitespace-pre-wrap break-all"
+          :if={@dev_server.output != []}
+          class="bg-base-200/50 p-2 text-xs max-h-40 overflow-y-auto"
         >
-          {line}
+          <div
+            :for={line <- @dev_server.output}
+            class="text-base-content/50 whitespace-pre-wrap break-all"
+          >
+            {line}
+          </div>
         </div>
       </div>
     </div>
@@ -1517,8 +1724,11 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%!-- Error state --%>
       <div :if={@diff.error && !@diff.loading} class="flex-1 flex items-center justify-center">
         <div class="text-center space-y-2">
-          <div class="text-red-400 text-sm">{@diff.error}</div>
-          <div class="text-base-content/30 text-xs">press esc to close</div>
+          <div id="diff-error-text" class="text-red-400 text-sm">{@diff.error}</div>
+          <div class="flex items-center justify-center gap-3">
+            <.copy_button target="#diff-error-text" />
+            <span class="text-base-content/30 text-xs">press esc to close</span>
+          </div>
         </div>
       </div>
 
@@ -1734,8 +1944,16 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp status_abbrev("done"), do: "DONE"
   defp status_abbrev("closed"), do: "DONE"
   defp status_abbrev("blocked"), do: "BLK"
+  defp status_abbrev("merge_conflict"), do: "CONFLICT"
   defp status_abbrev(nil), do: "???"
   defp status_abbrev(_), do: "???"
+
+  defp lane_color("ready"), do: "text-emerald-400"
+  defp lane_color("blocked"), do: "text-emerald-400"
+  defp lane_color("running"), do: "text-amber-400"
+  defp lane_color("pr"), do: "text-purple-400"
+  defp lane_color("done"), do: "text-green-400/70"
+  defp lane_color(_), do: "text-base-content/50"
 
   defp status_color("open"), do: "text-emerald-400"
   defp status_color("ready"), do: "text-emerald-400"
@@ -1748,6 +1966,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp status_color("done"), do: "text-green-400/70"
   defp status_color("closed"), do: "text-green-400/70"
   defp status_color("blocked"), do: "text-red-400"
+  defp status_color("merge_conflict"), do: "text-orange-400"
   defp status_color(_), do: "text-base-content/30"
 
   defp priority_color(0), do: "text-red-400"
@@ -1804,6 +2023,19 @@ defmodule ApothecaryWeb.DashboardComponents do
       </button>
       <button
         phx-click="switch-tab"
+        phx-value-tab="oracle"
+        class={[
+          "px-2 sm:px-3 py-1 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer whitespace-nowrap",
+          if(@active_tab == :oracle,
+            do: "text-base-content bg-base-content/10 font-bold",
+            else: "text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5"
+          )
+        ]}
+      >
+        Oracle
+      </button>
+      <button
+        phx-click="switch-tab"
         phx-value-tab="recipes"
         class={[
           "px-2 sm:px-3 py-1 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer whitespace-nowrap",
@@ -1818,6 +2050,86 @@ defmodule ApothecaryWeb.DashboardComponents do
       </button>
     </div>
     """
+  end
+
+  # --- Oracle View (Questions) ---
+
+  attr :questions, :list, required: true
+  attr :agents, :list, default: []
+
+  def oracle_view(assigns) do
+    active_wt_ids =
+      assigns.agents
+      |> Enum.flat_map(fn a ->
+        if a.current_concoction, do: [to_string(a.current_concoction.id)], else: []
+      end)
+      |> MapSet.new()
+
+    sorted =
+      assigns.questions
+      |> Enum.sort_by(fn q -> q.created_at || "" end, :desc)
+
+    assigns = assign(assigns, sorted: sorted, active_wt_ids: active_wt_ids)
+
+    ~H"""
+    <div class="max-w-2xl mx-auto pt-3 sm:pt-6 pb-2 px-1 sm:px-0">
+      <h2 class="text-base-content/50 text-lg font-semibold mb-2 font-apothecary">
+        Ask the Oracle
+      </h2>
+      <p class="text-base-content/30 text-xs mb-3">
+        Type <code class="text-primary/60">? your question</code>
+        in the input on the Workbench tab to ask about the codebase.
+      </p>
+    </div>
+    <div class="max-w-2xl mx-auto px-1 sm:px-0 space-y-3 pb-8">
+      <%= if @sorted == [] do %>
+        <div class="py-8 text-center text-base-content/30 text-sm">
+          No questions yet.
+        </div>
+      <% end %>
+      <div :for={q <- @sorted} class="border border-base-content/10 rounded-lg overflow-hidden">
+        <div class="px-4 py-3 flex items-start gap-3">
+          <.question_status_dot status={q.status} active={MapSet.member?(@active_wt_ids, q.id)} />
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-base-content/80">{q.title}</div>
+            <div class="text-xs text-base-content/30 mt-0.5">{q.id}</div>
+          </div>
+        </div>
+        <%= if q.notes && q.notes != "" do %>
+          <div class="border-t border-base-content/10 px-4 py-3 bg-base-200/50">
+            <div class="text-xs text-base-content/60 whitespace-pre-wrap font-mono leading-relaxed">
+              {format_question_answer(q.notes)}
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
+
+  defp question_status_dot(assigns) do
+    ~H"""
+    <%= cond do %>
+      <% @active -> %>
+        <span class="mt-1 flex h-2.5 w-2.5 shrink-0">
+          <span class="absolute inline-flex h-2.5 w-2.5 animate-ping rounded-full bg-amber-400 opacity-75">
+          </span>
+          <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+        </span>
+      <% @status == "done" -> %>
+        <span class="mt-1 h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+      <% true -> %>
+        <span class="mt-1 h-2.5 w-2.5 rounded-full bg-base-content/20 shrink-0"></span>
+    <% end %>
+    """
+  end
+
+  defp format_question_answer(notes) do
+    # Extract the answer portion from notes (after "Answer:" marker)
+    case String.split(notes, "Answer:\n", parts: 2) do
+      [_before, answer] -> String.trim(answer)
+      _ -> notes
+    end
   end
 
   # --- Recipe List ---

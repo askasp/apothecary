@@ -77,16 +77,19 @@ defmodule Apothecary.Brewer do
     broadcast_state(agent)
 
     agent = %{agent | status: :working, output: []}
-    tasks = Apothecary.Ingredients.list_ingredients(concoction_id: worktree.id)
+    is_question = worktree.kind == "question"
 
-    # Write MCP config so Claude can communicate with the orchestrator
-    # Include any per-concoction MCP servers alongside project-level ones
-    extra_mcps = Map.get(worktree, :mcp_servers) || %{}
-    write_mcp_config(worktree_path, agent.id, worktree.id, extra_mcps, project_dir)
-
-    # Write apothecary CLAUDE.md to the worktree's .claude/ directory
-    # so it doesn't conflict with the user's own CLAUDE.md in the repo root
-    write_claude_md(worktree_path)
+    tasks =
+      if is_question do
+        []
+      else
+        # Write MCP config so Claude can communicate with the orchestrator
+        extra_mcps = Map.get(worktree, :mcp_servers) || %{}
+        write_mcp_config(worktree_path, agent.id, worktree.id, extra_mcps, project_dir)
+        # Write apothecary CLAUDE.md to the worktree's .claude/ directory
+        write_claude_md(worktree_path)
+        Apothecary.Ingredients.list_ingredients(concoction_id: worktree.id)
+      end
 
     case spawn_claude(agent, worktree, tasks) do
       {:ok, port} ->
@@ -205,12 +208,18 @@ defmodule Apothecary.Brewer do
     Logger.info("Brewer #{agent.id} completed concoction #{state.worktree_id}")
 
     worktree_id = state.worktree_id
+    concoction = agent.current_concoction
 
-    # Record session summary on clean exit
-    add_session_summary(worktree_id, agent)
-
-    # Finalize the concoction (push, PR, close)
-    finalize_concoction(worktree_id, agent)
+    if concoction && concoction.kind == "question" do
+      # Questions: save the response as notes and close — no push/PR
+      response = Enum.join(output, "\n")
+      Apothecary.Ingredients.add_note(worktree_id, "Answer:\n#{response}")
+      Apothecary.Ingredients.close_concoction(worktree_id)
+    else
+      # Tasks: record session summary, push, and create PR
+      add_session_summary(worktree_id, agent)
+      finalize_concoction(worktree_id, agent)
+    end
 
     # Trigger refresh and go idle
     Apothecary.Ingredients.force_refresh()
@@ -436,9 +445,22 @@ defmodule Apothecary.Brewer do
       end
 
     # Merge latest main into branch before pushing to catch conflicts early
-    case Apothecary.Git.merge_main_into(project_dir, worktree_path) do
+    merge_result = Apothecary.Git.merge_main_into(project_dir, worktree_path)
+
+    case merge_result do
       :ok ->
         Logger.info("Merged latest main into branch for concoction #{worktree_id}")
+
+      {:error, {:merge_conflict, output}} ->
+        # Abort the failed merge so the worktree is clean for a future fix attempt
+        Apothecary.Git.abort_merge(worktree_path)
+        conflict_files = Apothecary.Git.conflict_files(output)
+
+        Logger.warning(
+          "Merge conflict for #{worktree_id} in files: #{inspect(conflict_files)}"
+        )
+
+        handle_merge_conflict(worktree_id, conflict_files, output)
 
       {:error, reason} ->
         Logger.warning("Failed to merge main into branch for #{worktree_id}: #{inspect(reason)}")
@@ -448,6 +470,18 @@ defmodule Apothecary.Brewer do
           "Merge main failed: #{inspect(reason)}. Pushing branch as-is."
         )
     end
+
+    # If we hit a merge conflict, don't proceed to push — the concoction needs user approval
+    if match?({:error, {:merge_conflict, _}}, merge_result) do
+      :merge_conflict
+    else
+      push_and_finalize(worktree_id, agent, existing_pr_url)
+    end
+  end
+
+  defp push_and_finalize(worktree_id, agent, existing_pr_url) do
+    worktree_path = agent.worktree_path
+    project_dir = agent.project_dir
 
     # Push the branch
     case Apothecary.Git.push_branch(worktree_path) do
@@ -511,9 +545,52 @@ defmodule Apothecary.Brewer do
 
         Apothecary.Ingredients.add_note(
           worktree_id,
-          "Push failed: #{inspect(reason)}. Work may be lost — check concoction."
+          "Push failed: #{inspect(reason)}. Branch is ready — retry push from the dashboard."
         )
+
+        # Set to brew_done so the concoction appears in the assaying lane
+        # for manual retry, instead of staying stuck in "in_progress"
+        Apothecary.Ingredients.update_concoction(worktree_id, %{
+          status: "brew_done",
+          assigned_brewer_id: nil
+        })
     end
+  end
+
+  defp handle_merge_conflict(worktree_id, conflict_files, _output) do
+    files_list =
+      case conflict_files do
+        [] -> "unknown files"
+        files -> Enum.join(files, ", ")
+      end
+
+    Apothecary.Ingredients.add_note(
+      worktree_id,
+      "Merge conflict detected with main branch in: #{files_list}.\n" <>
+        "A 'Fix merge conflicts' ingredient has been created.\n" <>
+        "Approve it from the dashboard to dispatch a brewer to resolve the conflicts."
+    )
+
+    # Create a fix-merge-conflicts ingredient on this concoction
+    Apothecary.Ingredients.create_ingredient(%{
+      concoction_id: worktree_id,
+      title: "Fix merge conflicts with main",
+      priority: 0,
+      description:
+        "Merge conflicts detected when merging main into this branch.\n" <>
+          "Conflicting files: #{files_list}\n\n" <>
+          "Steps to resolve:\n" <>
+          "1. Run `git merge origin/main --no-edit` to reproduce the conflicts\n" <>
+          "2. Resolve conflicts in the affected files\n" <>
+          "3. `git add` the resolved files and `git commit` to complete the merge",
+      status: "blocked"
+    })
+
+    # Set status to merge_conflict so it shows up distinctly on the dashboard
+    Apothecary.Ingredients.update_concoction(worktree_id, %{
+      status: "merge_conflict",
+      assigned_brewer_id: nil
+    })
   end
 
   defp create_pr_with_retry(worktree_id, worktree_path, project_dir, retries \\ 2) do
@@ -562,6 +639,7 @@ defmodule Apothecary.Brewer do
         extra_mcps: extra_mcps,
         project_dir: project_dir
       )
+
     merged = config["mcpServers"]
 
     mcp_path = Path.join(worktree_path, ".mcp.json")
@@ -612,7 +690,10 @@ defmodule Apothecary.Brewer do
     unless claude_exe do
       {:error, "Claude Code executable not found: #{claude_path}"}
     else
-      prompt = build_prompt(worktree, tasks, agent.worktree_path)
+      prompt =
+        if worktree.kind == "question",
+          do: build_question_prompt(worktree, agent.worktree_path),
+          else: build_prompt(worktree, tasks, agent.worktree_path)
 
       Logger.info(
         "Brewer #{agent.id} spawning claude (#{byte_size(prompt)} byte prompt) " <>
@@ -661,6 +742,29 @@ defmodule Apothecary.Brewer do
           {:error, Exception.message(e)}
       end
     end
+  end
+
+  defp build_question_prompt(worktree, project_dir) do
+    project_digest =
+      if project_dir, do: Apothecary.ProjectDigest.generate(project_dir), else: ""
+
+    """
+    You are a codebase expert answering a question about the project in: #{project_dir}
+
+    ## Question
+    #{worktree.title}
+    #{if worktree.description && worktree.description != worktree.title, do: "\n#{worktree.description}", else: ""}
+
+    ## Project Structure
+    #{project_digest}
+
+    ## Rules
+    - This is a READ-ONLY inquiry. Do NOT modify any files.
+    - Do NOT create commits, branches, or PRs.
+    - Do NOT run destructive commands.
+    - Answer the question thoroughly by reading relevant source files.
+    - Be concise but complete. Use code references (file:line) where helpful.
+    """
   end
 
   defp build_prompt(worktree, tasks, worktree_path) do

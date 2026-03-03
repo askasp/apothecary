@@ -453,40 +453,54 @@ defmodule Apothecary.Dispatcher do
         # Atomically claim the concoction
         case Apothecary.Ingredients.claim_concoction(concoction.id, brewer_id) do
           {:ok, claimed} ->
-            # Look up the project directory for this concoction
             project_dir = resolve_project_dir(concoction)
 
-            # Create/get git worktree
-            case ensure_git_worktree(concoction, project_dir) do
-              {:ok, path, branch} ->
-                # Update concoction record with git info
-                Apothecary.Ingredients.update_concoction(concoction.id, %{
-                  git_path: path,
-                  git_branch: branch
-                })
+            if concoction.kind == "question" do
+              # Questions run read-only against the project directory — no worktree needed
+              [_ | rest_idle] = pool.idle_agents
+              pool = %{pool | idle_agents: rest_idle}
+              state = put_pool(state, project_id, pool)
 
-                # Assign to brewer
-                [_ | rest_idle] = pool.idle_agents
-                pool = %{pool | idle_agents: rest_idle}
-                state = put_pool(state, project_id, pool)
+              Apothecary.Brewer.assign_concoction(
+                brewer_pid,
+                claimed,
+                project_dir,
+                nil,
+                project_dir
+              )
 
-                Apothecary.Brewer.assign_concoction(
-                  brewer_pid,
-                  claimed,
-                  path,
-                  branch,
-                  project_dir
-                )
+              state
+            else
+              # Task concoctions get their own git worktree
+              case ensure_git_worktree(concoction, project_dir) do
+                {:ok, path, branch} ->
+                  Apothecary.Ingredients.update_concoction(concoction.id, %{
+                    git_path: path,
+                    git_branch: branch
+                  })
 
-                state
+                  [_ | rest_idle] = pool.idle_agents
+                  pool = %{pool | idle_agents: rest_idle}
+                  state = put_pool(state, project_id, pool)
 
-              {:error, reason} ->
-                Logger.error(
-                  "Failed to create git worktree for #{concoction.id}: #{inspect(reason)}"
-                )
+                  Apothecary.Brewer.assign_concoction(
+                    brewer_pid,
+                    claimed,
+                    path,
+                    branch,
+                    project_dir
+                  )
 
-                Apothecary.Ingredients.release_concoction(concoction.id)
-                dispatch_remaining(rest, state, project_id)
+                  state
+
+                {:error, reason} ->
+                  Logger.error(
+                    "Failed to create git worktree for #{concoction.id}: #{inspect(reason)}"
+                  )
+
+                  Apothecary.Ingredients.release_concoction(concoction.id)
+                  dispatch_remaining(rest, state, project_id)
+              end
             end
 
           {:error, _} ->

@@ -3,7 +3,7 @@ defmodule Apothecary.Bootstrapper do
   Creates new projects from templates.
 
   Supports:
-  - Phoenix (with or without Ecto)
+  - Phoenix (with or without Ecto) — uses curl installer (auto-installs phx_new)
   - React (via bun)
 
   Each bootstrap runs as an async task, streaming progress via PubSub.
@@ -18,8 +18,35 @@ defmodule Apothecary.Bootstrapper do
 
   @type template :: :phoenix | :phoenix_no_ecto | :react
 
+  # Phoenix project names must be valid Elixir module names
+  @phoenix_name_regex ~r/^[a-z][a-z0-9_]*$/
+
   def subscribe do
     Phoenix.PubSub.subscribe(@pubsub, @topic)
+  end
+
+  @doc """
+  Validate a Phoenix project name.
+
+  Phoenix names must start with a lowercase letter and contain only
+  lowercase letters, digits, and underscores.
+  """
+  @spec validate_phoenix_name(String.t()) :: :ok | {:error, String.t()}
+  def validate_phoenix_name(name) do
+    cond do
+      name == "" ->
+        {:error, "Name cannot be empty"}
+
+      not Regex.match?(@phoenix_name_regex, name) ->
+        {:error,
+         "Must start with a lowercase letter and contain only lowercase letters, numbers, and underscores (e.g. my_app)"}
+
+      name in ~w(elixir test) ->
+        {:error, "\"#{name}\" is a reserved name"}
+
+      true ->
+        :ok
+    end
   end
 
   @doc """
@@ -31,25 +58,48 @@ defmodule Apothecary.Bootstrapper do
   def create(parent_dir, name, template, opts \\ []) do
     path = Path.join(Path.expand(parent_dir), name)
 
-    if File.exists?(path) do
-      {:error, :already_exists}
-    else
-      task =
-        Task.async(fn ->
-          result = do_create(parent_dir, name, path, template, opts)
-          broadcast({:bootstrap_complete, name, result})
-          result
-        end)
+    cond do
+      File.exists?(path) ->
+        {:error, :already_exists}
 
-      {:ok, task}
+      template in [:phoenix, :phoenix_no_ecto] ->
+        case validate_phoenix_name(name) do
+          :ok ->
+            start_bootstrap(parent_dir, name, path, template, opts)
+
+          {:error, _} = err ->
+            err
+        end
+
+      true ->
+        start_bootstrap(parent_dir, name, path, template, opts)
     end
+  end
+
+  defp start_bootstrap(parent_dir, name, path, template, opts) do
+    task =
+      Task.async(fn ->
+        result = do_create(parent_dir, name, path, template, opts)
+        broadcast({:bootstrap_complete, name, result})
+        result
+      end)
+
+    {:ok, task}
   end
 
   @doc "List available templates with descriptions."
   def templates do
     [
-      %{id: :phoenix, name: "Phoenix", description: "Full-stack Elixir web app with Ecto"},
-      %{id: :phoenix_no_ecto, name: "Phoenix (no DB)", description: "Phoenix app without Ecto/database"},
+      %{
+        id: :phoenix,
+        name: "Phoenix",
+        description: "Full-stack Elixir web app with Ecto (requires PostgreSQL)"
+      },
+      %{
+        id: :phoenix_no_ecto,
+        name: "Phoenix (no DB)",
+        description: "Phoenix app without database — no PostgreSQL needed"
+      },
       %{id: :react, name: "React", description: "React app via bun create"}
     ]
   end
@@ -84,10 +134,13 @@ defmodule Apothecary.Bootstrapper do
     end
   end
 
+  # Phoenix uses the curl installer which auto-installs phx_new if needed.
+  # Only requirement is that curl and mix are available.
   defp check_prerequisites(:phoenix) do
-    case System.find_executable("mix") do
-      nil -> {:error, :mix_not_found}
-      _ -> :ok
+    cond do
+      is_nil(System.find_executable("curl")) -> {:error, :curl_not_found}
+      is_nil(System.find_executable("mix")) -> {:error, :mix_not_found}
+      true -> :ok
     end
   end
 
@@ -100,21 +153,26 @@ defmodule Apothecary.Bootstrapper do
     end
   end
 
+  # Use curl installer: automatically installs phx_new archive if not present
   defp run_template(parent_dir, name, _path, :phoenix, _opts) do
-    broadcast({:bootstrap_progress, name, "Running mix phx.new #{name}..."})
+    broadcast({:bootstrap_progress, name, "Downloading and running Phoenix installer..."})
 
-    CLI.run("mix", ["phx.new", name, "--install"],
+    CLI.run("sh", ["-c", "curl -fsSL https://new.phoenixframework.org/#{name} | sh"],
       cd: parent_dir,
-      timeout: 120_000
+      timeout: 180_000
     )
   end
 
   defp run_template(parent_dir, name, _path, :phoenix_no_ecto, _opts) do
-    broadcast({:bootstrap_progress, name, "Running mix phx.new #{name} --no-ecto..."})
+    broadcast(
+      {:bootstrap_progress, name, "Downloading and running Phoenix installer (no database)..."}
+    )
 
-    CLI.run("mix", ["phx.new", name, "--no-ecto", "--install"],
+    CLI.run(
+      "sh",
+      ["-c", "curl -fsSL https://new.phoenixframework.org/#{name} | sh -s -- --no-ecto"],
       cd: parent_dir,
-      timeout: 120_000
+      timeout: 180_000
     )
   end
 
