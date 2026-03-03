@@ -804,7 +804,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         patch={~p"/?task=#{@worktree.id}"}
         class="px-3 pt-2 pb-1 cursor-pointer hover:bg-base-content/5"
       >
-        <div class={["text-sm font-bold truncate", status_color(@worktree.status)]}>
+        <div class={["text-sm font-bold truncate", lane_color(@group)]}>
           {@worktree.title || @worktree.id}
         </div>
         <div class="flex items-center gap-2 text-xs text-base-content/40 mt-0.5">
@@ -1025,7 +1025,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         <%!-- Scrollable content --%>
         <div class="flex-1 overflow-y-auto">
           <%!-- Merge confirmation bar --%>
-          <.merge_confirmation :if={@pending_action} task={@task} />
+          <.merge_confirmation :if={@pending_action} task={@task} pending_action={@pending_action} />
 
           <%!-- Panel content --%>
           <.task_detail_panel
@@ -1046,13 +1046,16 @@ defmodule ApothecaryWeb.DashboardComponents do
   # --- Merge Confirmation Bar ---
 
   attr :task, :map, required: true
+  attr :pending_action, :any, required: true
 
   def merge_confirmation(assigns) do
+    assigns = assign(assigns, :direct?, match?({:direct_merge, _, _}, assigns.pending_action))
+
     ~H"""
     <div class="bg-amber-400/10 border-b border-amber-400/30 px-3 py-3">
       <div class="flex items-center gap-3">
         <span class="text-amber-400 text-sm font-apothecary">
-          Merge this PR?
+          {if @direct?, do: "Merge directly?", else: "Merge this PR?"}
         </span>
         <span class="text-base-content/50 text-xs truncate flex-1">
           "{@task.title}"
@@ -1063,7 +1066,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           phx-click="confirm-merge"
           class="bg-green-500/20 hover:bg-green-500/30 text-green-400 px-3 py-1 rounded text-xs cursor-pointer transition-colors font-bold"
         >
-          Merge PR
+          {if @direct?, do: "Create PR & Merge", else: "Merge PR"}
         </button>
         <button
           phx-click="cancel-merge"
@@ -1225,8 +1228,15 @@ defmodule ApothecaryWeb.DashboardComponents do
         </button>
         <button
           :if={@task.status == "brew_done"}
+          phx-click="direct-merge"
+          class="border border-green-400/30 text-green-400 hover:bg-green-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors font-bold"
+        >
+          Merge <span class="hidden sm:inline text-base-content/30 ml-1">m</span>
+        </button>
+        <button
+          :if={@task.status == "brew_done"}
           phx-click="promote-to-assaying"
-          class="border border-purple-400/30 text-purple-400 hover:bg-purple-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors font-bold"
+          class="border border-purple-400/30 text-purple-400 hover:bg-purple-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors"
         >
           Create PR <span class="hidden sm:inline text-base-content/30 ml-1">p</span>
         </button>
@@ -1930,6 +1940,13 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp status_abbrev(nil), do: "???"
   defp status_abbrev(_), do: "???"
 
+  defp lane_color("ready"), do: "text-emerald-400"
+  defp lane_color("blocked"), do: "text-emerald-400"
+  defp lane_color("running"), do: "text-amber-400"
+  defp lane_color("pr"), do: "text-purple-400"
+  defp lane_color("done"), do: "text-green-400/70"
+  defp lane_color(_), do: "text-base-content/50"
+
   defp status_color("open"), do: "text-emerald-400"
   defp status_color("ready"), do: "text-emerald-400"
   defp status_color("in_progress"), do: "text-amber-400"
@@ -1997,6 +2014,19 @@ defmodule ApothecaryWeb.DashboardComponents do
       </button>
       <button
         phx-click="switch-tab"
+        phx-value-tab="oracle"
+        class={[
+          "px-2 sm:px-3 py-1 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer whitespace-nowrap",
+          if(@active_tab == :oracle,
+            do: "text-base-content bg-base-content/10 font-bold",
+            else: "text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5"
+          )
+        ]}
+      >
+        Oracle
+      </button>
+      <button
+        phx-click="switch-tab"
         phx-value-tab="recipes"
         class={[
           "px-2 sm:px-3 py-1 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer whitespace-nowrap",
@@ -2011,6 +2041,86 @@ defmodule ApothecaryWeb.DashboardComponents do
       </button>
     </div>
     """
+  end
+
+  # --- Oracle View (Questions) ---
+
+  attr :questions, :list, required: true
+  attr :agents, :list, default: []
+
+  def oracle_view(assigns) do
+    active_wt_ids =
+      assigns.agents
+      |> Enum.flat_map(fn a ->
+        if a.current_concoction, do: [to_string(a.current_concoction.id)], else: []
+      end)
+      |> MapSet.new()
+
+    sorted =
+      assigns.questions
+      |> Enum.sort_by(fn q -> q.created_at || "" end, :desc)
+
+    assigns = assign(assigns, sorted: sorted, active_wt_ids: active_wt_ids)
+
+    ~H"""
+    <div class="max-w-2xl mx-auto pt-3 sm:pt-6 pb-2 px-1 sm:px-0">
+      <h2 class="text-base-content/50 text-lg font-semibold mb-2 font-apothecary">
+        Ask the Oracle
+      </h2>
+      <p class="text-base-content/30 text-xs mb-3">
+        Type <code class="text-primary/60">? your question</code>
+        in the input on the Workbench tab to ask about the codebase.
+      </p>
+    </div>
+    <div class="max-w-2xl mx-auto px-1 sm:px-0 space-y-3 pb-8">
+      <%= if @sorted == [] do %>
+        <div class="py-8 text-center text-base-content/30 text-sm">
+          No questions yet.
+        </div>
+      <% end %>
+      <div :for={q <- @sorted} class="border border-base-content/10 rounded-lg overflow-hidden">
+        <div class="px-4 py-3 flex items-start gap-3">
+          <.question_status_dot status={q.status} active={MapSet.member?(@active_wt_ids, q.id)} />
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-base-content/80">{q.title}</div>
+            <div class="text-xs text-base-content/30 mt-0.5">{q.id}</div>
+          </div>
+        </div>
+        <%= if q.notes && q.notes != "" do %>
+          <div class="border-t border-base-content/10 px-4 py-3 bg-base-200/50">
+            <div class="text-xs text-base-content/60 whitespace-pre-wrap font-mono leading-relaxed">
+              {format_question_answer(q.notes)}
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
+
+  defp question_status_dot(assigns) do
+    ~H"""
+    <%= cond do %>
+      <% @active -> %>
+        <span class="mt-1 flex h-2.5 w-2.5 shrink-0">
+          <span class="absolute inline-flex h-2.5 w-2.5 animate-ping rounded-full bg-amber-400 opacity-75">
+          </span>
+          <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+        </span>
+      <% @status == "done" -> %>
+        <span class="mt-1 h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+      <% true -> %>
+        <span class="mt-1 h-2.5 w-2.5 rounded-full bg-base-content/20 shrink-0"></span>
+    <% end %>
+    """
+  end
+
+  defp format_question_answer(notes) do
+    # Extract the answer portion from notes (after "Answer:" marker)
+    case String.split(notes, "Answer:\n", parts: 2) do
+      [_before, answer] -> String.trim(answer)
+      _ -> notes
+    end
   end
 
   # --- Recipe List ---

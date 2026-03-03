@@ -164,7 +164,15 @@ defmodule ApothecaryWeb.DashboardLive do
     agents = socket.assigns[:agents] || []
     dev_servers = socket.assigns[:dev_servers] || %{}
     active_task_ids = active_task_ids_from_agents(agents)
-    worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
+
+    # Separate questions from task concoctions
+    {questions, task_items} =
+      Enum.split_with(task_state.tasks, fn item ->
+        String.starts_with?(to_string(item.id), "wt-") and
+          Map.get(item, :kind) == "question"
+      end)
+
+    worktrees_by_status = build_worktree_groups(task_items, agents, dev_servers)
 
     socket
     |> assign(:stats, task_state.stats)
@@ -177,6 +185,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:card_ids, build_card_ids(worktrees_by_status))
     |> assign(:known_ingredient_ids, extract_ingredient_ids(task_state.tasks))
     |> assign(:project_files, load_project_files(project))
+    |> assign(:questions, questions)
   end
 
   # --- PubSub handlers ---
@@ -201,7 +210,14 @@ defmodule ApothecaryWeb.DashboardLive do
 
     agents = socket.assigns.agents
     active_task_ids = active_task_ids_from_agents(agents)
-    worktrees_by_status = build_worktree_groups(state.tasks, agents, socket.assigns.dev_servers)
+
+    {questions, task_items} =
+      Enum.split_with(state.tasks, fn item ->
+        String.starts_with?(to_string(item.id), "wt-") and
+          Map.get(item, :kind) == "question"
+      end)
+
+    worktrees_by_status = build_worktree_groups(task_items, agents, socket.assigns.dev_servers)
 
     socket =
       socket
@@ -213,6 +229,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:orphan_count, compute_orphan_count(state.tasks, active_task_ids))
       |> assign(:worktrees_by_status, worktrees_by_status)
       |> assign(:known_ingredient_ids, new_ids)
+      |> assign(:questions, questions)
       |> rebuild_card_ids(worktrees_by_status)
 
     socket =
@@ -235,7 +252,14 @@ defmodule ApothecaryWeb.DashboardLive do
     # Rebuild card groups since agent assignments affect which lane cards appear in
     task_state = scoped_get_state(socket)
     dev_servers = socket.assigns.dev_servers
-    worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
+
+    {questions, task_items} =
+      Enum.split_with(task_state.tasks, fn item ->
+        String.starts_with?(to_string(item.id), "wt-") and
+          Map.get(item, :kind) == "question"
+      end)
+
+    worktrees_by_status = build_worktree_groups(task_items, agents, dev_servers)
 
     socket =
       socket
@@ -244,6 +268,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:active_count, status.active_count)
       |> assign(:agents, agents)
       |> assign(:worktrees_by_status, worktrees_by_status)
+      |> assign(:questions, questions)
       |> rebuild_card_ids(worktrees_by_status)
 
     socket =
@@ -635,6 +660,10 @@ defmodule ApothecaryWeb.DashboardLive do
         socket = assign(socket, :pending_action, nil)
         {:noreply, execute_merge(socket, task_id, pr_url)}
 
+      {:direct_merge, task_id, git_path} ->
+        socket = assign(socket, :pending_action, nil)
+        {:noreply, execute_direct_merge(socket, task_id, git_path)}
+
       _ ->
         {:noreply, assign(socket, :pending_action, nil)}
     end
@@ -643,6 +672,22 @@ defmodule ApothecaryWeb.DashboardLive do
   @impl true
   def handle_event("cancel-merge", _params, socket) do
     {:noreply, assign(socket, :pending_action, nil)}
+  end
+
+  @impl true
+  def handle_event("direct-merge", _params, socket) do
+    task = socket.assigns.selected_task
+
+    cond do
+      is_nil(task) || task.status != "brew_done" ->
+        {:noreply, put_flash(socket, :error, "Concoction is not ready for merge")}
+
+      is_nil(task.git_path) ->
+        {:noreply, put_flash(socket, :error, "No git path found for this concoction")}
+
+      true ->
+        {:noreply, assign(socket, :pending_action, {:direct_merge, task.id, task.git_path})}
+    end
   end
 
   @impl true
@@ -1267,11 +1312,14 @@ defmodule ApothecaryWeb.DashboardLive do
     task = socket.assigns.selected_task
 
     cond do
-      is_nil(task) || task.status != "pr_open" ->
+      is_nil(task) ->
         socket
 
-      Map.get(task, :pr_url) ->
+      task.status == "pr_open" && Map.get(task, :pr_url) ->
         assign(socket, :pending_action, {:merge, task.id, task.pr_url})
+
+      task.status == "brew_done" && task.git_path ->
+        assign(socket, :pending_action, {:direct_merge, task.id, task.git_path})
 
       true ->
         socket
@@ -1359,9 +1407,10 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:collapsed_done, false)
   end
 
-  # Tab switching: w=workbench, e=recipes
+  # Tab switching: w=workbench, e=recipes, o=oracle
   defp handle_hotkey("w", socket), do: assign(socket, :active_tab, :workbench)
   defp handle_hotkey("e", socket), do: assign(socket, :active_tab, :recipes)
+  defp handle_hotkey("o", socket), do: assign(socket, :active_tab, :oracle)
 
   defp handle_hotkey(_key, socket), do: socket
 
@@ -1398,6 +1447,10 @@ defmodule ApothecaryWeb.DashboardLive do
         socket = assign(socket, :pending_action, nil)
         execute_merge(socket, task_id, pr_url)
 
+      {:direct_merge, task_id, git_path} ->
+        socket = assign(socket, :pending_action, nil)
+        execute_direct_merge(socket, task_id, git_path)
+
       _ ->
         assign(socket, :pending_action, nil)
     end
@@ -1426,6 +1479,28 @@ defmodule ApothecaryWeb.DashboardLive do
 
       {:error, reason} ->
         put_flash(socket, :error, "Merge failed: #{inspect(reason)}")
+    end
+  end
+
+  defp execute_direct_merge(socket, task_id, git_path) do
+    project_dir = resolve_project_dir_for_concoction(task_id)
+    task = socket.assigns.selected_task
+    title = "[#{task_id}] #{(task && task.title) || task_id}"
+
+    with {:ok, pr_url} <- Git.create_pr(project_dir, git_path, title),
+         :ok <- Git.merge_pr(project_dir, pr_url) do
+      Ingredients.add_note(
+        task_id,
+        "Direct merge from dashboard (PR created and merged): #{pr_url}"
+      )
+
+      Ingredients.update_concoction(task_id, %{pr_url: pr_url})
+      Ingredients.cleanup_merged_concoction(task_id)
+      put_flash(socket, :info, "PR created and merged: #{pr_url}")
+    else
+      {:error, reason} ->
+        Ingredients.add_note(task_id, "Direct merge failed: #{inspect(reason)}")
+        put_flash(socket, :error, "Direct merge failed: #{inspect(reason)}")
     end
   end
 
@@ -1537,6 +1612,40 @@ defmodule ApothecaryWeb.DashboardLive do
   # --- Input handlers ---
 
   defp create_from_input(text, socket) do
+    # Detect question prefix: "? question text"
+    if String.starts_with?(text, "?") do
+      question_text = text |> String.trim_leading("?") |> String.trim()
+      create_question(question_text, socket)
+    else
+      create_task_from_input(text, socket)
+    end
+  end
+
+  defp create_question(text, socket) do
+    project_id =
+      if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
+
+    case Ingredients.create_concoction(%{
+           title: text,
+           kind: "question",
+           priority: 2,
+           project_id: project_id
+         }) do
+      {:ok, item} when not is_nil(item) ->
+        {:noreply,
+         socket
+         |> assign(:active_tab, :oracle)
+         |> put_flash(:info, "Question submitted")}
+
+      {:ok, nil} ->
+        {:noreply, put_flash(socket, :error, "Failed to submit question")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
+    end
+  end
+
+  defp create_task_from_input(text, socket) do
     {title, parent_id, dep_ids} = parse_smart_input(text)
 
     if parent_id do
@@ -1675,7 +1784,15 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:agent_output, [])
     |> assign(:has_preview_config, has_preview)
     |> assign(:page_title, "Task #{id}")
+    |> sync_selected_card(id)
     |> find_working_agent()
+  end
+
+  defp sync_selected_card(socket, id) do
+    case Enum.find_index(socket.assigns.card_ids, &(&1 == id)) do
+      nil -> socket
+      idx -> assign(socket, :selected_card, idx)
+    end
   end
 
   defp refresh_selected_task(socket) do
@@ -2130,8 +2247,15 @@ defmodule ApothecaryWeb.DashboardLive do
         phx-throttle="100"
         class="flex flex-col h-screen outline-none"
       >
-        <%!-- Top bar: project selector + tabs --%>
-        <div class="flex items-center gap-1 sm:gap-3 px-2 py-1.5 min-w-0">
+        <%!-- Top bar: branding + project selector + tabs --%>
+        <div class="flex items-center gap-1 sm:gap-3 px-2 py-2 text-xs min-w-0">
+          <.link
+            navigate={~p"/"}
+            class="font-apothecary text-sm font-bold tracking-wide text-base-content/80 shrink-0 hover:text-base-content transition-colors"
+          >
+            <span class="hidden sm:inline">Apothecary</span>
+            <span class="sm:hidden">&#x2697;</span>
+          </.link>
           <.project_selector
             projects={@projects}
             current_project={@current_project}
@@ -2151,6 +2275,11 @@ defmodule ApothecaryWeb.DashboardLive do
 
         <%!-- Scrollable content --%>
         <div class="flex-1 overflow-y-auto">
+          <%= if @active_tab == :oracle and @current_project do %>
+            <div class="mx-auto px-2">
+              <.oracle_view questions={@questions} agents={@agents} />
+            </div>
+          <% end %>
           <%= if @active_tab == :recipes and @current_project do %>
             <div class="mx-auto px-2">
               <.recipe_list
@@ -2160,7 +2289,8 @@ defmodule ApothecaryWeb.DashboardLive do
                 editing_recipe_id={@editing_recipe_id}
               />
             </div>
-          <% else %>
+          <% end %>
+          <%= if @active_tab == :workbench or is_nil(@current_project) do %>
             <div class="mx-auto px-2">
               <%!-- Primary input — centered, narrower --%>
               <div class="max-w-2xl mx-auto pt-3 sm:pt-6 pb-2 px-1 sm:px-0">
@@ -2211,6 +2341,9 @@ defmodule ApothecaryWeb.DashboardLive do
                       gh_available={@gh_available}
                     />
                     <.primary_input input_focused={@input_focused} />
+                    <div class="text-base-content/20 text-[10px] mt-1 px-1">
+                      Start with <span class="text-primary/40">?</span> to ask about the codebase
+                    </div>
                     <.activity_ticker agents={@agents} />
                   <% end %>
                 <% end %>
@@ -2360,7 +2493,7 @@ defmodule ApothecaryWeb.DashboardLive do
         <div class="border-t border-base-content/10 px-2 py-1 text-xs flex items-center justify-between">
           <div class="flex items-center gap-3 text-base-content/30">
             <span class="hidden sm:inline">
-              j/k:nav  1-4:lanes  enter:inspect  w/e:tabs  s:concoct
+              j/k:nav  1-4:lanes  enter:inspect  w/e/o:tabs  s:concoct
             </span>
             <span class="sm:hidden">tap card to inspect</span>
             <button
