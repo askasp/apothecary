@@ -1622,7 +1622,15 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:agent_output, [])
     |> assign(:has_preview_config, has_preview)
     |> assign(:page_title, "Task #{id}")
+    |> sync_selected_card(id)
     |> find_working_agent()
+  end
+
+  defp sync_selected_card(socket, id) do
+    case Enum.find_index(socket.assigns.card_ids, &(&1 == id)) do
+      nil -> socket
+      idx -> assign(socket, :selected_card, idx)
+    end
   end
 
   defp refresh_selected_task(socket) do
