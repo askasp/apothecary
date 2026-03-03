@@ -76,7 +76,9 @@ defmodule Apothecary.Brewer do
     tasks = Apothecary.Ingredients.list_ingredients(concoction_id: worktree.id)
 
     # Write MCP config so Claude can communicate with the orchestrator
-    write_mcp_config(worktree_path, agent.id, worktree.id)
+    # Include any per-concoction MCP servers alongside project-level ones
+    extra_mcps = Map.get(worktree, :mcp_servers) || %{}
+    write_mcp_config(worktree_path, agent.id, worktree.id, extra_mcps)
 
     case spawn_claude(agent, worktree, tasks) do
       {:ok, port} ->
@@ -622,23 +624,21 @@ defmodule Apothecary.Brewer do
 
   # Private — MCP config
 
-  defp write_mcp_config(worktree_path, agent_id, worktree_id) do
-    port = Application.get_env(:apothecary, :port, 4000)
-
-    config = %{
-      "mcpServers" => %{
-        "apothecary" => %{
-          "type" => "http",
-          "url" =>
-            "http://localhost:#{port}/mcp?brewer_id=#{agent_id}&concoction_id=#{worktree_id}"
-        }
-      }
-    }
+  defp write_mcp_config(worktree_path, agent_id, worktree_id, extra_mcps) do
+    config = Apothecary.McpConfig.build(agent_id, worktree_id, extra_mcps: extra_mcps)
+    merged = config["mcpServers"]
 
     mcp_path = Path.join(worktree_path, ".mcp.json")
 
     case File.write(mcp_path, Jason.encode!(config, pretty: true)) do
       :ok ->
+        extra_count = map_size(merged) - 1
+
+        if extra_count > 0 do
+          extra_names = merged |> Map.keys() |> List.delete("apothecary") |> Enum.join(", ")
+          Logger.info("MCP config: apothecary + #{extra_count} passthrough(s): #{extra_names}")
+        end
+
         :ok
 
       {:error, reason} ->

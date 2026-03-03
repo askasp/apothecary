@@ -618,6 +618,53 @@ defmodule ApothecaryWeb.DashboardLive do
     {:noreply, socket}
   end
 
+  @impl true
+  def handle_event("add-mcp", %{"mcp_name" => name, "mcp_url" => url}, socket) do
+    name = String.trim(name)
+    url = String.trim(url)
+
+    if name != "" and url != "" do
+      task_id = socket.assigns.selected_task_id
+
+      existing =
+        case Ingredients.get_concoction(task_id) do
+          {:ok, wt} -> wt.mcp_servers || %{}
+          _ -> %{}
+        end
+
+      # Detect if url looks like a command (no :// scheme) vs HTTP URL
+      server_config =
+        if String.contains?(url, "://") do
+          %{"type" => "http", "url" => url}
+        else
+          # Treat as stdio command
+          %{"type" => "stdio", "command" => url}
+        end
+
+      updated = Map.put(existing, name, server_config)
+      Ingredients.update_concoction(task_id, %{mcp_servers: updated})
+    end
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("remove-mcp", %{"name" => name}, socket) do
+    task_id = socket.assigns.selected_task_id
+
+    case Ingredients.get_concoction(task_id) do
+      {:ok, wt} ->
+        updated = Map.delete(wt.mcp_servers || %{}, name)
+        mcp_servers = if updated == %{}, do: nil, else: updated
+        Ingredients.update_concoction(task_id, %{mcp_servers: mcp_servers})
+
+      _ ->
+        :ok
+    end
+
+    {:noreply, socket}
+  end
+
   # Context-sensitive primary input submit
   @impl true
   def handle_event("submit-input", %{"text" => text}, socket) do

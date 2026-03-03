@@ -176,6 +176,7 @@ defmodule Apothecary.Ingredients do
          description: attrs[:description],
          notes: nil,
          pr_url: nil,
+         mcp_servers: attrs[:mcp_servers],
          created_at: now,
          updated_at: now,
          blockers: [],
@@ -1005,6 +1006,7 @@ defmodule Apothecary.Ingredients do
       |> maybe_put(:description, changes[:description])
       |> maybe_put(:notes, changes[:notes])
       |> maybe_put(:pr_url, changes[:pr_url])
+      |> maybe_put(:mcp_servers, changes[:mcp_servers])
       |> maybe_put(:blockers, changes[:blockers])
       |> maybe_put(:dependents, changes[:dependents])
       |> Map.put(:updated_at, now)

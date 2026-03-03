@@ -989,6 +989,65 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </div>
 
+      <%!-- MCP servers section (concoctions only) --%>
+      <div :if={String.starts_with?(to_string(@task.id), "wt-")} class="space-y-2">
+        <.section label="mcp servers" />
+        <div class="space-y-1">
+          <%= for {name, config} <- Map.get(@task, :mcp_servers) || %{} do %>
+            <div class="flex items-center gap-2 px-3 group">
+              <span class="text-sm text-violet-400">{name}</span>
+              <span class="text-xs text-base-content/30 truncate flex-1">
+                {config["url"] || config["command"] || "configured"}
+              </span>
+              <button
+                phx-click="remove-mcp"
+                phx-value-name={name}
+                class="text-base-content/25 hover:text-red-400 cursor-pointer p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                &times;
+              </button>
+            </div>
+          <% end %>
+          <div
+            :if={Map.get(@task, :mcp_servers) == nil or Map.get(@task, :mcp_servers) == %{}}
+            class="text-base-content/25 px-3 text-xs italic"
+          >
+            No extra MCPs — project-level MCPs are inherited automatically
+          </div>
+        </div>
+        <.form
+          for={%{}}
+          phx-submit="add-mcp"
+          class="flex items-center gap-2 px-3"
+          id="add-mcp-form"
+        >
+          <input
+            type="text"
+            name="mcp_name"
+            placeholder="Name (e.g. figma)"
+            phx-focus="input-focus"
+            phx-blur="input-blur"
+            autocomplete="off"
+            class="bg-transparent border border-base-content/15 focus:border-primary outline-none px-3 py-1.5 text-sm w-24 rounded"
+          />
+          <input
+            type="text"
+            name="mcp_url"
+            placeholder="URL or command"
+            phx-focus="input-focus"
+            phx-blur="input-blur"
+            autocomplete="off"
+            class="bg-transparent border border-base-content/15 focus:border-primary outline-none px-3 py-1.5 text-sm flex-1 min-w-0 rounded"
+          />
+          <button
+            type="submit"
+            class="bg-base-content/5 hover:bg-base-content/10 text-base-content/50 hover:text-base-content/70 px-2.5 py-1.5 rounded text-xs cursor-pointer transition-colors shrink-0"
+          >
+            +
+          </button>
+        </.form>
+      </div>
+
       <%!-- Preview & shortcuts section --%>
       <div :if={String.starts_with?(to_string(@task.id), "wt-")} class="space-y-2">
         <.section label="preview" />
