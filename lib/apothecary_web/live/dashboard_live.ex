@@ -102,8 +102,15 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   def handle_params(_params, _uri, socket) do
-    socket = apply_project_scope(socket, nil)
-    {:noreply, select_task(socket, nil)}
+    # Auto-select first project when none is selected
+    case socket.assigns.projects do
+      [first | _] when is_nil(socket.assigns.current_project) ->
+        {:noreply, push_navigate(socket, to: ~p"/projects/#{first.id}")}
+
+      _ ->
+        socket = apply_project_scope(socket, nil)
+        {:noreply, select_task(socket, nil)}
+    end
   end
 
   defp apply_project_scope(socket, project_id) do
@@ -149,15 +156,7 @@ defmodule ApothecaryWeb.DashboardLive do
     active_task_ids = active_task_ids_from_agents(agents)
     worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
 
-    project_name =
-      cond do
-        project -> project.name
-        socket.assigns[:projects] == [] -> "Apothecary"
-        true -> "All Projects"
-      end
-
     socket
-    |> assign(:project_name, project_name)
     |> assign(:stats, task_state.stats)
     |> assign(:ready_tasks, task_state.ready_tasks)
     |> assign(:last_poll, task_state.last_poll)
@@ -1976,23 +1975,21 @@ defmodule ApothecaryWeb.DashboardLive do
         phx-throttle="100"
         class="flex flex-col h-screen outline-none"
       >
-        <%!-- Top bar: branding + project selector + tabs --%>
-        <div class="flex items-center gap-1 sm:gap-3 px-2 py-2 text-xs min-w-0">
-          <.link navigate={~p"/"} class="font-apothecary text-sm font-bold tracking-wide text-base-content/80 shrink-0 hover:text-base-content transition-colors">
-            <span class="hidden sm:inline">Apothecary</span>
-            <span class="sm:hidden">&#x2697;</span>
-          </.link>
+        <%!-- Top bar: project selector + tabs --%>
+        <div class="flex items-center gap-1 sm:gap-3 px-2 py-1.5 min-w-0">
           <.project_selector
             projects={@projects}
             current_project={@current_project}
           />
-          <.tab_navigation active_tab={@active_tab} />
-          <span
-            class="ml-auto text-base-content/30 cursor-pointer shrink-0 p-1"
-            phx-click="toggle-help"
-          >
-            ?
-          </span>
+          <div class="ml-auto flex items-center gap-1">
+            <.tab_navigation active_tab={@active_tab} />
+            <span
+              class="text-base-content/30 cursor-pointer shrink-0 p-1 text-xs"
+              phx-click="toggle-help"
+            >
+              ?
+            </span>
+          </div>
         </div>
 
         <div class="border-b border-base-content/10" />
@@ -2012,9 +2009,6 @@ defmodule ApothecaryWeb.DashboardLive do
             <div class="mx-auto px-2">
               <%!-- Primary input — centered, narrower --%>
               <div class="max-w-2xl mx-auto pt-3 sm:pt-6 pb-2 px-1 sm:px-0">
-                <div class="text-base-content/30 text-xs tracking-wider uppercase mb-1 font-apothecary">
-                  {@project_name}
-                </div>
                 <%= if @projects == [] and is_nil(@current_project) do %>
                   <div class="py-8 text-center">
                     <h2 class="text-base-content/50 text-lg font-semibold mb-3 font-apothecary">

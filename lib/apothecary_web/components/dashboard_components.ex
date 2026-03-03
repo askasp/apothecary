@@ -1,6 +1,7 @@
 defmodule ApothecaryWeb.DashboardComponents do
   @moduledoc "Card-based function components for the swarm dashboard."
   use Phoenix.Component
+  import ApothecaryWeb.CoreComponents, only: [icon: 1]
 
   use Phoenix.VerifiedRoutes,
     endpoint: ApothecaryWeb.Endpoint,
@@ -13,52 +14,97 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :current_project, :any, default: nil
 
   def project_selector(assigns) do
+    display_name =
+      cond do
+        assigns.current_project -> assigns.current_project.name
+        assigns.projects != [] -> "Select Project"
+        true -> "Apothecary"
+      end
+
+    assigns = assign(assigns, :display_name, display_name)
+
     ~H"""
-    <div class="flex items-center gap-1 min-w-0">
-      <%= if @projects != [] do %>
-        <.link
-          navigate={~p"/"}
-          class={[
-            "px-2 py-0.5 text-xs rounded transition-colors cursor-pointer whitespace-nowrap",
-            if(is_nil(@current_project),
-              do: "text-base-content bg-base-content/10 font-bold",
-              else: "text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5"
-            )
-          ]}
-        >
-          All
-        </.link>
+    <div class="relative min-w-0" id="project-dropdown" phx-hook=".ProjectDropdown">
+      <button
+        class="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-base-content/5 transition-colors cursor-pointer min-w-0"
+        phx-click={toggle_dropdown()}
+        type="button"
+      >
+        <span class="font-apothecary font-bold text-sm sm:text-base text-base-content truncate max-w-[200px] sm:max-w-[300px]">
+          {@display_name}
+        </span>
+        <.icon name="hero-chevron-down" class="w-4 h-4 text-base-content/40 shrink-0" />
+      </button>
+      <div
+        id="project-dropdown-menu"
+        class="hidden absolute left-0 top-full mt-1 bg-base-100 border border-base-content/10 rounded-lg shadow-xl z-50 min-w-[220px] max-w-[320px] py-1"
+      >
         <.link
           :for={project <- @projects}
           navigate={~p"/projects/#{project.id}"}
           class={[
-            "px-2 py-0.5 text-xs rounded transition-colors cursor-pointer whitespace-nowrap truncate max-w-[120px]",
+            "flex items-center gap-2 px-3 py-2 text-sm hover:bg-base-content/5 transition-colors cursor-pointer",
             if(@current_project && @current_project.id == project.id,
-              do: "text-base-content bg-base-content/10 font-bold",
-              else: "text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5"
+              do: "text-base-content font-semibold bg-base-content/5",
+              else: "text-base-content/70"
             )
           ]}
           title={project.path}
         >
-          {project.name}
+          <span class="truncate">{project.name}</span>
+          <span
+            :if={@current_project && @current_project.id == project.id}
+            class="ml-auto text-primary text-xs shrink-0"
+          >
+            &#x2713;
+          </span>
         </.link>
-      <% end %>
-      <button
-        phx-click="show-add-project"
-        class="px-1.5 py-0.5 text-xs text-base-content/30 hover:text-base-content/70 hover:bg-base-content/5 rounded transition-colors cursor-pointer"
-        title="Open existing project folder"
-      >
-        +
-      </button>
-      <button
-        phx-click="show-new-project"
-        class="px-1.5 py-0.5 text-[10px] text-base-content/30 hover:text-base-content/70 hover:bg-base-content/5 rounded transition-colors cursor-pointer"
-        title="Create new project from template"
-      >
-        new
-      </button>
+        <div :if={@projects != []} class="border-t border-base-content/10 my-1" />
+        <button
+          phx-click="show-add-project"
+          class="flex items-center gap-2 w-full px-3 py-2 text-sm text-base-content/50 hover:text-base-content/70 hover:bg-base-content/5 transition-colors cursor-pointer"
+        >
+          <.icon name="hero-folder-open" class="w-4 h-4" />
+          <span>Open Project</span>
+        </button>
+        <button
+          phx-click="show-new-project"
+          class="flex items-center gap-2 w-full px-3 py-2 text-sm text-base-content/50 hover:text-base-content/70 hover:bg-base-content/5 transition-colors cursor-pointer"
+        >
+          <.icon name="hero-plus" class="w-4 h-4" />
+          <span>New Project</span>
+        </button>
+      </div>
     </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".ProjectDropdown">
+      export default {
+        mounted() {
+          this.menu = this.el.querySelector("#project-dropdown-menu")
+          this.closeHandler = (e) => {
+            if (!this.el.contains(e.target)) {
+              this.menu.classList.add("hidden")
+            }
+          }
+          document.addEventListener("click", this.closeHandler)
+          // Close on navigation
+          this.handleEvent("close-dropdown", () => {
+            this.menu.classList.add("hidden")
+          })
+        },
+        destroyed() {
+          document.removeEventListener("click", this.closeHandler)
+        }
+      }
+    </script>
     """
+  end
+
+  defp toggle_dropdown do
+    Phoenix.LiveView.JS.toggle(
+      to: "#project-dropdown-menu",
+      in: {"ease-out duration-100", "opacity-0 scale-95", "opacity-100 scale-100"},
+      out: {"ease-in duration-75", "opacity-100 scale-100", "opacity-0 scale-95"}
+    )
   end
 
   # --- Add Project Modal ---

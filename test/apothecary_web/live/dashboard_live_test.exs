@@ -16,7 +16,8 @@ defmodule ApothecaryWeb.DashboardLiveTest do
 
   test "renders dashboard with stockroom tab active by default", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/")
-    assert html =~ "primary-input"
+    # No projects = empty state shown
+    assert html =~ "No projects yet"
     assert html =~ "Workbench"
     assert html =~ "Recurring Concoctions"
   end
@@ -179,10 +180,11 @@ defmodule ApothecaryWeb.DashboardLiveTest do
     # Go to recipes
     view |> element("button", "Recurring Concoctions") |> render_click()
     html = render(view)
-    refute html =~ "primary-input"
+    refute html =~ "No projects yet"
 
     # Go back to stockroom
     html = view |> element("button", "Workbench") |> render_click()
-    assert html =~ "primary-input"
+    # No projects = empty state shown
+    assert html =~ "No projects yet"
   end
 end
