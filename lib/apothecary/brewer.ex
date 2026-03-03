@@ -80,6 +80,10 @@ defmodule Apothecary.Brewer do
     extra_mcps = Map.get(worktree, :mcp_servers) || %{}
     write_mcp_config(worktree_path, agent.id, worktree.id, extra_mcps)
 
+    # Write apothecary CLAUDE.md to the worktree's .claude/ directory
+    # so it doesn't conflict with the user's own CLAUDE.md in the repo root
+    write_claude_md(worktree_path)
+
     case spawn_claude(agent, worktree, tasks) do
       {:ok, port} ->
         watchdog = schedule_watchdog()
@@ -645,6 +649,24 @@ defmodule Apothecary.Brewer do
         Logger.warning(
           "Failed to write MCP config to #{mcp_path}: #{inspect(reason)}. " <>
             "Brewer will run without MCP tools."
+        )
+    end
+  end
+
+  defp write_claude_md(worktree_path) do
+    claude_dir = Path.join(worktree_path, ".claude")
+    File.mkdir_p!(claude_dir)
+
+    claude_md_path = Path.join(claude_dir, "CLAUDE.md")
+
+    case File.write(claude_md_path, Apothecary.Startup.default_claude_md()) do
+      :ok ->
+        Logger.info("Wrote apothecary CLAUDE.md to #{claude_md_path}")
+
+      {:error, reason} ->
+        Logger.warning(
+          "Failed to write CLAUDE.md to #{claude_md_path}: #{inspect(reason)}. " <>
+            "Brewer will still receive instructions via prompt."
         )
     end
   end

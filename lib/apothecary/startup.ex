@@ -13,8 +13,7 @@ defmodule Apothecary.Startup do
     with :ok <- validate_project_dir(project_dir),
          :ok <- validate_git_repo(project_dir),
          :ok <- check_claude_binary(),
-         :ok <- check_gh_binary(),
-         :ok <- maybe_write_claude_md(project_dir) do
+         :ok <- check_gh_binary() do
       Logger.info("Apothecary started for project: #{project_dir}")
       :ok
     else
@@ -58,18 +57,6 @@ defmodule Apothecary.Startup do
     else
       {:warn,
        "gh (GitHub CLI) not found in PATH. PR creation will fail after agents finish work."}
-    end
-  end
-
-  defp maybe_write_claude_md(dir) do
-    claude_md_path = Path.join(dir, "CLAUDE.md")
-
-    if File.exists?(claude_md_path) do
-      :ok
-    else
-      Logger.info("Writing default CLAUDE.md to #{dir}")
-      File.write!(claude_md_path, default_claude_md())
-      :ok
     end
   end
 

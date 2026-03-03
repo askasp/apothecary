@@ -2,8 +2,7 @@ defmodule Mix.Tasks.Apothecary.Setup do
   @moduledoc """
   Sets up a project directory for use with Apothecary swarm agents.
 
-  Initializes beads, starts the Dolt server, and writes a CLAUDE.md
-  with swarm instructions if one doesn't already exist.
+  Initializes beads and starts the Dolt server.
 
   ## Usage
 
@@ -13,7 +12,7 @@ defmodule Mix.Tasks.Apothecary.Setup do
   """
   use Mix.Task
 
-  @shortdoc "Initialize beads and write CLAUDE.md for a project"
+  @shortdoc "Initialize beads for a project"
 
   @impl true
   def run(args) do
@@ -74,30 +73,16 @@ defmodule Mix.Tasks.Apothecary.Setup do
       {output, _} -> Mix.shell().error("  Warning: dolt start failed: #{String.trim(output)}")
     end
 
-    # Write CLAUDE.md
-    claude_md_path = Path.join(dir, "CLAUDE.md")
-
-    if File.exists?(claude_md_path) do
-      Mix.shell().info("  CLAUDE.md already exists — appending beads section if missing")
-      existing = File.read!(claude_md_path)
-
-      unless String.contains?(existing, "Issue Tracking") do
-        File.write!(claude_md_path, existing <> "\n\n" <> Apothecary.Startup.default_claude_md())
-        Mix.shell().info("  Appended beads workflow section to CLAUDE.md")
-      end
-    else
-      Mix.shell().info("  Writing CLAUDE.md...")
-      File.write!(claude_md_path, Apothecary.Startup.default_claude_md())
-      Mix.shell().info("  Created CLAUDE.md with beads workflow instructions")
-    end
-
     # Post-setup instructions
     Mix.shell().info("")
     Mix.shell().info("Setup complete!")
     Mix.shell().info("")
     Mix.shell().info("Files to commit to your main branch:")
-    Mix.shell().info("  git add .beads/.gitignore .beads/config.yaml CLAUDE.md")
+    Mix.shell().info("  git add .beads/.gitignore .beads/config.yaml")
     Mix.shell().info("  git commit -m \"Add beads task tracking\"")
+    Mix.shell().info("")
+    Mix.shell().info("Recommended .gitignore additions:")
+    Mix.shell().info("  Mnesia.*    # Apothecary database files")
     Mix.shell().info("")
     Mix.shell().info("Start Apothecary with:")
     Mix.shell().info("  APOTHECARY_PROJECT_DIR=#{dir} mix phx.server")
