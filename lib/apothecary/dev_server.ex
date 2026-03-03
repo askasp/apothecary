@@ -65,13 +65,17 @@ defmodule Apothecary.DevServer do
   @doc "Check if a path has a dev config (explicit or auto-detected)."
   def has_config_for_path?(path) do
     case DevConfig.load(path) do
-      {:ok, _} -> true
+      {:ok, _} ->
+        true
+
       :not_found ->
         case DevConfig.detect(path) do
           {:ok, _} -> true
           _ -> false
         end
-      _ -> false
+
+      _ ->
+        false
     end
   end
 

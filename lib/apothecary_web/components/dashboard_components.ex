@@ -261,7 +261,7 @@ defmodule ApothecaryWeb.DashboardComponents do
                 )
               ]}
             >
-              <%= if @progress, do: "Creating...", else: "Create" %>
+              {if @progress, do: "Creating...", else: "Create"}
             </button>
           </div>
         </form>
@@ -285,10 +285,13 @@ defmodule ApothecaryWeb.DashboardComponents do
               <div class="flex items-center gap-2">
                 <span class={[
                   "w-2 h-2 rounded-full",
-                  if(@dev_server.status == :running, do: "bg-green-400", else: "bg-amber-400 animate-pulse")
+                  if(@dev_server.status == :running,
+                    do: "bg-green-400",
+                    else: "bg-amber-400 animate-pulse"
+                  )
                 ]} />
                 <span class="text-xs text-base-content/60 font-apothecary">
-                  <%= if @dev_server.status == :running, do: "Running", else: "Starting..." %>
+                  {if @dev_server.status == :running, do: "Running", else: "Starting..."}
                 </span>
                 <%= for port_info <- @dev_server.ports || [] do %>
                   <a
@@ -338,7 +341,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <.icon name="hero-play" class="w-4 h-4" />
             <span class="text-sm font-apothecary">Start Preview</span>
           </button>
-        <% end %>
+      <% end %>
     </div>
     """
   end
@@ -409,7 +412,10 @@ defmodule ApothecaryWeb.DashboardComponents do
       />
       <span class={[
         "text-xs transition-colors",
-        if(@auto_pr, do: "text-base-content/70", else: "text-base-content/40 group-hover:text-base-content/60")
+        if(@auto_pr,
+          do: "text-base-content/70",
+          else: "text-base-content/40 group-hover:text-base-content/60"
+        )
       ]}>
         Auto PR
       </span>

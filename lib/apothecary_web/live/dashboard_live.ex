@@ -1,7 +1,16 @@
 defmodule ApothecaryWeb.DashboardLive do
   use ApothecaryWeb, :live_view
 
-  alias Apothecary.{Brewer, DevServer, DiffParser, FileTree, Git, Ingredients, Dispatcher, Projects}
+  alias Apothecary.{
+    Brewer,
+    DevServer,
+    DiffParser,
+    FileTree,
+    Git,
+    Ingredients,
+    Dispatcher,
+    Projects
+  }
 
   @pubsub Apothecary.PubSub
 
@@ -533,7 +542,8 @@ defmodule ApothecaryWeb.DashboardLive do
           {:noreply, put_flash(socket, :info, "Starting dev server for #{project.name}")}
 
         {:error, :no_dev_config} ->
-          {:noreply, put_flash(socket, :error, "Could not detect dev server config for this project")}
+          {:noreply,
+           put_flash(socket, :error, "Could not detect dev server config for this project")}
 
         {:error, :already_running} ->
           {:noreply, put_flash(socket, :info, "Dev server already running")}
@@ -2074,20 +2084,20 @@ defmodule ApothecaryWeb.DashboardLive do
                     </div>
                   </div>
                 <% else %>
-                <h2 class="text-base-content/50 text-lg font-semibold mb-2 font-apothecary">
-                  What shall we concoct?
-                </h2>
-                <%!-- Concoct + alchemist controls --%>
-                <.concoct_controls
-                  swarm_status={@swarm_status}
-                  target_count={@target_count}
-                  active_count={@active_count}
-                  working_count={Enum.count(@agents, &(&1.status == :working))}
-                  auto_pr={@auto_pr}
-                  gh_available={@gh_available}
-                />
-                <.primary_input input_focused={@input_focused} />
-                <.activity_ticker agents={@agents} />
+                  <h2 class="text-base-content/50 text-lg font-semibold mb-2 font-apothecary">
+                    What shall we concoct?
+                  </h2>
+                  <%!-- Concoct + alchemist controls --%>
+                  <.concoct_controls
+                    swarm_status={@swarm_status}
+                    target_count={@target_count}
+                    active_count={@active_count}
+                    working_count={Enum.count(@agents, &(&1.status == :working))}
+                    auto_pr={@auto_pr}
+                    gh_available={@gh_available}
+                  />
+                  <.primary_input input_focused={@input_focused} />
+                  <.activity_ticker agents={@agents} />
                 <% end %>
               </div>
 

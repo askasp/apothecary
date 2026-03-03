@@ -4,8 +4,13 @@ defmodule Apothecary.Store do
   use GenServer
   require Logger
 
-  @tables [:apothecary_projects, :apothecary_concoctions, :apothecary_ingredients,
-           :apothecary_recipes, :apothecary_settings]
+  @tables [
+    :apothecary_projects,
+    :apothecary_concoctions,
+    :apothecary_ingredients,
+    :apothecary_recipes,
+    :apothecary_settings
+  ]
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)

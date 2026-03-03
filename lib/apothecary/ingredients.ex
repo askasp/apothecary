@@ -222,9 +222,7 @@ defmodule Apothecary.Ingredients do
   end
 
   def list_concoctions do
-    :mnesia.dirty_match_object(
-      {:apothecary_concoctions, :_, :_, :_, :_, :_, :_, :_, :_, :_, :_}
-    )
+    :mnesia.dirty_match_object({:apothecary_concoctions, :_, :_, :_, :_, :_, :_, :_, :_, :_, :_})
     |> Enum.map(&Apothecary.Concoction.from_record/1)
   end
 

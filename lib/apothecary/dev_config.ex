@@ -170,7 +170,8 @@ defmodule Apothecary.DevConfig do
 
             cond do
               Map.has_key?(scripts, "dev") ->
-                runner = if File.exists?(Path.join(project_dir, "bun.lockb")), do: "bun", else: "npm"
+                runner =
+                  if File.exists?(Path.join(project_dir, "bun.lockb")), do: "bun", else: "npm"
 
                 {:ok,
                  %__MODULE__{
@@ -183,7 +184,8 @@ defmodule Apothecary.DevConfig do
                  }}
 
               Map.has_key?(scripts, "start") ->
-                runner = if File.exists?(Path.join(project_dir, "bun.lockb")), do: "bun", else: "npm"
+                runner =
+                  if File.exists?(Path.join(project_dir, "bun.lockb")), do: "bun", else: "npm"
 
                 {:ok,
                  %__MODULE__{

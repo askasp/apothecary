@@ -38,7 +38,8 @@ defmodule Apothecary.Bootstrapper do
         {:error, "Name cannot be empty"}
 
       not Regex.match?(@phoenix_name_regex, name) ->
-        {:error, "Must start with a lowercase letter and contain only lowercase letters, numbers, and underscores (e.g. my_app)"}
+        {:error,
+         "Must start with a lowercase letter and contain only lowercase letters, numbers, and underscores (e.g. my_app)"}
 
       name in ~w(elixir test) ->
         {:error, "\"#{name}\" is a reserved name"}
@@ -163,9 +164,13 @@ defmodule Apothecary.Bootstrapper do
   end
 
   defp run_template(parent_dir, name, _path, :phoenix_no_ecto, _opts) do
-    broadcast({:bootstrap_progress, name, "Downloading and running Phoenix installer (no database)..."})
+    broadcast(
+      {:bootstrap_progress, name, "Downloading and running Phoenix installer (no database)..."}
+    )
 
-    CLI.run("sh", ["-c", "curl -fsSL https://new.phoenixframework.org/#{name} | sh -s -- --no-ecto"],
+    CLI.run(
+      "sh",
+      ["-c", "curl -fsSL https://new.phoenixframework.org/#{name} | sh -s -- --no-ecto"],
       cd: parent_dir,
       timeout: 180_000
     )

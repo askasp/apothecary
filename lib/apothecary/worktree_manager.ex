@@ -206,7 +206,9 @@ defmodule Apothecary.WorktreeManager do
     end
 
     case Apothecary.Git.pull_main(project_dir) do
-      {:ok, _} -> :ok
+      {:ok, _} ->
+        :ok
+
       {:error, reason} ->
         Logger.warning(
           "Failed to pull main before creating worktree #{worktree_id}: #{inspect(reason)}"
