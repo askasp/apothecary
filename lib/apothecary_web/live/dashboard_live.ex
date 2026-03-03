@@ -762,7 +762,7 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
-  def handle_event("promote-to-assaying", _params, socket) do
+  def handle_event("promote-to-sampling", _params, socket) do
     task = socket.assigns.selected_task
 
     cond do
@@ -770,7 +770,7 @@ defmodule ApothecaryWeb.DashboardLive do
         {:noreply, put_flash(socket, :error, "Concoction is not ready for promotion")}
 
       true ->
-        {:noreply, promote_to_assaying(socket, task)}
+        {:noreply, promote_to_sampling(socket, task)}
     end
   end
 
@@ -1447,7 +1447,7 @@ defmodule ApothecaryWeb.DashboardLive do
     task = socket.assigns.selected_task
 
     if task && task.status == "brew_done" do
-      promote_to_assaying(socket, task)
+      promote_to_sampling(socket, task)
     else
       socket
     end
@@ -1513,7 +1513,7 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  # Lane jumps: 1=stockroom, 2=concocting, 3=assaying, 4=bottled
+  # Lane jumps: 1=stockroom, 2=concocting, 3=sampling, 4=bottled
   defp handle_hotkey("1", socket), do: jump_to_lane(socket, ~w(ready blocked))
   defp handle_hotkey("2", socket), do: jump_to_lane(socket, ~w(running))
   defp handle_hotkey("3", socket), do: jump_to_lane(socket, ~w(pr))
@@ -1621,9 +1621,9 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  # --- Promote brew_done to assaying (create PR) ---
+  # --- Promote brew_done to sampling (create PR) ---
 
-  defp promote_to_assaying(socket, task) do
+  defp promote_to_sampling(socket, task) do
     task_id = task.id
     git_path = task.git_path
     project_dir = resolve_project_dir_for_concoction(task_id)
@@ -2272,14 +2272,14 @@ defmodule ApothecaryWeb.DashboardLive do
     brewing =
       (worktrees_by_status["running"] || []) |> sort_by_priority.()
 
-    assaying =
+    sampling =
       (worktrees_by_status["pr"] || []) |> sort_by_priority.()
 
     done =
       (worktrees_by_status["done"] || [])
       |> Enum.map(fn e -> e.worktree.id end)
 
-    stockroom ++ brewing ++ assaying ++ done
+    stockroom ++ brewing ++ sampling ++ done
   end
 
   defp rebuild_card_ids(socket, worktrees_by_status) do
@@ -2573,23 +2573,23 @@ defmodule ApothecaryWeb.DashboardLive do
                   <% end %>
                 </div>
 
-                <%!-- Lane: ASSAYING — pr --%>
-                <% assaying_entries =
+                <%!-- Lane: SAMPLING — pr --%>
+                <% sampling_entries =
                   (@worktrees_by_status["pr"] || [])
                   |> Enum.sort_by(fn e -> e.worktree.priority || 99 end) %>
                 <div class="pb-2">
                   <div class="flex items-center gap-2 py-1.5">
                     <span class="uppercase text-xs tracking-wider font-bold text-purple-400 font-apothecary">
-                      ASSAYING
+                      SAMPLING
                     </span>
-                    <span class="text-base-content/30 text-xs">({length(assaying_entries)})</span>
+                    <span class="text-base-content/30 text-xs">({length(sampling_entries)})</span>
                     <span class="text-base-content/15 text-[10px] ml-1">3</span>
                   </div>
-                  <%= if assaying_entries != [] do %>
-                    <div class="overflow-x-auto pb-2 scroll-smooth scroll-lane" id="assaying-lane">
+                  <%= if sampling_entries != [] do %>
+                    <div class="overflow-x-auto pb-2 scroll-smooth scroll-lane" id="sampling-lane">
                       <div class="flex flex-nowrap gap-3 min-w-0">
                         <.worktree_card
-                          :for={entry <- assaying_entries}
+                          :for={entry <- sampling_entries}
                           worktree={entry.worktree}
                           tasks={entry.tasks}
                           agent={entry.agent}

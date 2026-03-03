@@ -548,7 +548,7 @@ defmodule Apothecary.Brewer do
           "Push failed: #{inspect(reason)}. Branch is ready — retry push from the dashboard."
         )
 
-        # Set to brew_done so the concoction appears in the assaying lane
+        # Set to brew_done so the concoction appears in the sampling lane
         # for manual retry, instead of staying stuck in "in_progress"
         Apothecary.Ingredients.update_concoction(worktree_id, %{
           status: "brew_done",

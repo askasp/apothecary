@@ -154,7 +154,7 @@ defmodule Apothecary.MergeConflictTest do
       # Drain broadcasts
       Process.sleep(100)
 
-      # Verify concoction is in brew_done (assaying lane) and not stuck in in_progress
+      # Verify concoction is in brew_done (sampling lane) and not stuck in in_progress
       {:ok, fetched} = Ingredients.get_concoction(concoction.id)
       assert fetched.status == "brew_done"
       assert fetched.assigned_brewer_id == nil

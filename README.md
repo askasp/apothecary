@@ -67,7 +67,7 @@ Concoctions are laid out in four lanes:
 |------|-------------|
 | **Stockroom** | Ready and waiting for an alchemist |
 | **Concocting** | Currently being worked on |
-| **Assaying** | PR is open, under review |
+| **Sampling** | PR is open, under review |
 | **Bottled** | Done and merged |
 
 Each card shows the title, which alchemist is working on it, a progress bar of completed ingredients, and a preview indicator if a dev server is running. Click a card (or press `Enter`) to open the detail drawer where you can edit titles, adjust priorities, manage ingredients and dependencies, read agent notes, and watch the agent's live output stream.

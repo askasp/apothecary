@@ -131,7 +131,7 @@ For each segment:
 **Title card:** "Merge & see the result"
 
 1. Cmd+Tab to dashboard.
-2. A concoction should be in ASSAYING lane (PR open). Select it.
+2. A concoction should be in SAMPLING lane (PR open). Select it.
 3. Show the PR URL in the detail drawer. Optionally click through to GitHub briefly.
 4. Press `m` — merge confirmation bar appears.
 5. Confirm merge. Card slides to BOTTLED lane.
