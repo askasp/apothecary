@@ -70,6 +70,10 @@ defmodule ApothecaryWeb.DashboardLive do
       # Add project modal
       |> assign(:show_add_project, false)
       |> assign(:add_project_error, nil)
+      # New project (bootstrap) modal
+      |> assign(:show_new_project, false)
+      |> assign(:new_project_error, nil)
+      |> assign(:bootstrap_progress, nil)
       # Load state (will be refined in handle_params)
       |> load_dashboard_state(nil)
 
@@ -327,6 +331,37 @@ defmodule ApothecaryWeb.DashboardLive do
   def handle_info({recipe_event, _recipe}, socket)
       when recipe_event in [:recipe_created, :recipe_updated, :recipe_toggled, :recipe_deleted] do
     {:noreply, assign(socket, :recipes, Ingredients.list_recipes())}
+  end
+
+  # Bootstrap PubSub handlers
+  @impl true
+  def handle_info({:bootstrap_progress, _name, message}, socket) do
+    {:noreply, assign(socket, :bootstrap_progress, message)}
+  end
+
+  @impl true
+  def handle_info({:bootstrap_complete, _name, {:ok, project}}, socket) do
+    projects = Projects.list_active()
+
+    {:noreply,
+     socket
+     |> assign(
+       projects: projects,
+       show_new_project: false,
+       bootstrap_progress: nil,
+       new_project_error: nil
+     )
+     |> put_flash(:info, "Project created: #{project.name}")
+     |> push_navigate(to: ~p"/projects/#{project.id}")}
+  end
+
+  @impl true
+  def handle_info({:bootstrap_complete, _name, {:error, reason}}, socket) do
+    {:noreply,
+     assign(socket,
+       bootstrap_progress: nil,
+       new_project_error: "Bootstrap failed: #{inspect(reason)}"
+     )}
   end
 
   # --- Event handlers ---
@@ -840,6 +875,68 @@ defmodule ApothecaryWeb.DashboardLive do
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to archive project")}
+    end
+  end
+
+  # --- Bootstrap event handlers ---
+
+  @impl true
+  def handle_event("show-new-project", _params, socket) do
+    {:noreply,
+     assign(socket,
+       show_new_project: true,
+       new_project_error: nil,
+       bootstrap_progress: nil
+     )}
+  end
+
+  @impl true
+  def handle_event("cancel-new-project", _params, socket) do
+    {:noreply,
+     assign(socket,
+       show_new_project: false,
+       new_project_error: nil,
+       bootstrap_progress: nil
+     )}
+  end
+
+  @impl true
+  def handle_event(
+        "create-new-project",
+        %{"parent_dir" => parent_dir, "name" => name, "template" => template},
+        socket
+      ) do
+    name = String.trim(name)
+    parent_dir = String.trim(parent_dir)
+    template = String.to_existing_atom(template)
+
+    cond do
+      name == "" ->
+        {:noreply, assign(socket, :new_project_error, "Name cannot be empty")}
+
+      parent_dir == "" ->
+        {:noreply, assign(socket, :new_project_error, "Parent directory cannot be empty")}
+
+      not File.dir?(Path.expand(parent_dir)) ->
+        {:noreply, assign(socket, :new_project_error, "Parent directory does not exist")}
+
+      true ->
+        Apothecary.Bootstrapper.subscribe()
+
+        case Apothecary.Bootstrapper.create(parent_dir, name, template) do
+          {:ok, _task} ->
+            {:noreply,
+             assign(socket,
+               bootstrap_progress: "Starting...",
+               new_project_error: nil
+             )}
+
+          {:error, :already_exists} ->
+            {:noreply, assign(socket, :new_project_error, "Directory already exists")}
+
+          {:error, reason} ->
+            {:noreply, assign(socket, :new_project_error, "Failed: #{inspect(reason)}")}
+        end
     end
   end
 
@@ -1981,12 +2078,20 @@ defmodule ApothecaryWeb.DashboardLive do
                     <p class="text-base-content/30 text-sm mb-4">
                       Open a git repository to get started.
                     </p>
-                    <button
-                      phx-click="show-add-project"
-                      class="px-4 py-2 text-sm font-apothecary bg-primary/20 text-primary hover:bg-primary/30 rounded transition-colors cursor-pointer"
-                    >
-                      Open Project
-                    </button>
+                    <div class="flex gap-3">
+                      <button
+                        phx-click="show-add-project"
+                        class="px-4 py-2 text-sm font-apothecary bg-primary/20 text-primary hover:bg-primary/30 rounded transition-colors cursor-pointer"
+                      >
+                        Open Project
+                      </button>
+                      <button
+                        phx-click="show-new-project"
+                        class="px-4 py-2 text-sm font-apothecary bg-base-content/10 text-base-content/50 hover:text-base-content/70 hover:bg-base-content/15 rounded transition-colors cursor-pointer"
+                      >
+                        New Project
+                      </button>
+                    </div>
                   </div>
                 <% else %>
                 <h2 class="text-base-content/50 text-lg font-semibold mb-2 font-apothecary">
@@ -2183,6 +2288,12 @@ defmodule ApothecaryWeb.DashboardLive do
       <.add_project_modal
         :if={@show_add_project}
         error={@add_project_error}
+      />
+
+      <.new_project_modal
+        :if={@show_new_project}
+        error={@new_project_error}
+        progress={@bootstrap_progress}
       />
     </Layouts.app>
     """
