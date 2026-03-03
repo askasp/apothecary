@@ -1585,6 +1585,45 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp execute_direct_merge(socket, task_id, git_path) do
+    case Git.merge_mode() do
+      :git -> execute_git_merge(socket, task_id)
+      :github -> execute_github_direct_merge(socket, task_id, git_path)
+    end
+  end
+
+  defp execute_git_merge(socket, task_id) do
+    project_dir = resolve_project_dir_for_concoction(task_id)
+    task = socket.assigns.selected_task
+    branch = task && task.git_branch
+
+    if is_nil(branch) do
+      put_flash(socket, :error, "No branch found for this concoction")
+    else
+      case Git.merge_branch(project_dir, branch) do
+        :ok ->
+          Ingredients.add_note(task_id, "Merged branch #{branch} into main from dashboard")
+          Ingredients.cleanup_merged_concoction(task_id)
+          put_flash(socket, :info, "Branch #{branch} merged into main")
+
+        {:error, {:merge_conflict, output}} ->
+          conflict_files = Git.conflict_files(output)
+          files_str = Enum.join(conflict_files, ", ")
+
+          Ingredients.add_note(
+            task_id,
+            "Merge conflict when merging into main: #{files_str}"
+          )
+
+          put_flash(socket, :error, "Merge conflict in: #{files_str}")
+
+        {:error, reason} ->
+          Ingredients.add_note(task_id, "Merge failed: #{inspect(reason)}")
+          put_flash(socket, :error, "Merge failed: #{inspect(reason)}")
+      end
+    end
+  end
+
+  defp execute_github_direct_merge(socket, task_id, git_path) do
     project_dir = resolve_project_dir_for_concoction(task_id)
     task = socket.assigns.selected_task
     title = "[#{task_id}] #{(task && task.title) || task_id}"

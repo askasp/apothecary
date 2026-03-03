@@ -984,6 +984,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :dev_server, :map, default: nil
   attr :has_preview_config, :boolean, default: false
   attr :pending_action, :any, default: nil
+  attr :gh_available, :boolean, default: false
 
   def task_detail_drawer(assigns) do
     ~H"""
@@ -1036,6 +1037,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             agent_output={@agent_output}
             dev_server={@dev_server}
             has_preview_config={@has_preview_config}
+            gh_available={@gh_available}
           />
         </div>
       </div>
@@ -1049,13 +1051,20 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :pending_action, :any, required: true
 
   def merge_confirmation(assigns) do
-    assigns = assign(assigns, :direct?, match?({:direct_merge, _, _}, assigns.pending_action))
+    assigns =
+      assigns
+      |> assign(:direct?, match?({:direct_merge, _, _}, assigns.pending_action))
+      |> assign(:git_mode?, Apothecary.Git.merge_mode() == :git)
 
     ~H"""
     <div class="bg-amber-400/10 border-b border-amber-400/30 px-3 py-3">
       <div class="flex items-center gap-3">
         <span class="text-amber-400 text-sm font-apothecary">
-          {if @direct?, do: "Merge directly?", else: "Merge this PR?"}
+          {cond do
+            @direct? && @git_mode? -> "Merge branch into main?"
+            @direct? -> "Merge directly?"
+            true -> "Merge this PR?"
+          end}
         </span>
         <span class="text-base-content/50 text-xs truncate flex-1">
           "{@task.title}"
@@ -1066,7 +1075,11 @@ defmodule ApothecaryWeb.DashboardComponents do
           phx-click="confirm-merge"
           class="bg-green-500/20 hover:bg-green-500/30 text-green-400 px-3 py-1 rounded text-xs cursor-pointer transition-colors font-bold"
         >
-          {if @direct?, do: "Create PR & Merge", else: "Merge PR"}
+          {cond do
+            @direct? && @git_mode? -> "Merge into main"
+            @direct? -> "Create PR & Merge"
+            true -> "Merge PR"
+          end}
         </button>
         <button
           phx-click="cancel-merge"
@@ -1089,6 +1102,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :agent_output, :list, default: []
   attr :dev_server, :map, default: nil
   attr :has_preview_config, :boolean, default: false
+  attr :gh_available, :boolean, default: false
 
   def task_detail_panel(assigns) do
     assigns = assign(assigns, :pr_url, Map.get(assigns.task, :pr_url))
@@ -1234,7 +1248,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           Merge <span class="hidden sm:inline text-base-content/30 ml-1">m</span>
         </button>
         <button
-          :if={@task.status == "brew_done"}
+          :if={@task.status == "brew_done" && Apothecary.Git.merge_mode() == :github}
           phx-click="promote-to-assaying"
           class="border border-purple-400/30 text-purple-400 hover:bg-purple-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors"
         >
@@ -1871,7 +1885,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <.hk key="↑/↓" desc="change priority" />
             <.hk key="q" desc="requeue concoction" />
             <.hk key="x" desc="close concoction" />
-            <.hk key="m" desc="merge PR (pr_open)" />
+            <.hk key="m" desc="merge (brew_done/pr_open)" />
           </div>
         </div>
       </div>
