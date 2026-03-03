@@ -895,6 +895,13 @@ defmodule ApothecaryWeb.DashboardComponents do
         >
           Merge <span class="hidden sm:inline text-base-content/30 ml-1">m</span>
         </button>
+        <button
+          :if={@task.status == "brew_done"}
+          phx-click="promote-to-assaying"
+          class="border border-purple-400/30 text-purple-400 hover:bg-purple-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors font-bold"
+        >
+          Create PR <span class="hidden sm:inline text-base-content/30 ml-1">p</span>
+        </button>
       </div>
 
       <%!-- Ingredients section --%>
@@ -1509,6 +1516,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp status_abbrev("ready"), do: "RDY"
   defp status_abbrev("in_progress"), do: "WIP"
   defp status_abbrev("claimed"), do: "WIP"
+  defp status_abbrev("brew_done"), do: "BREW"
   defp status_abbrev("pr_open"), do: "PR"
   defp status_abbrev("revision_needed"), do: "REV"
   defp status_abbrev("merged"), do: "MRG"
@@ -1522,6 +1530,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp status_color("ready"), do: "text-emerald-400"
   defp status_color("in_progress"), do: "text-amber-400"
   defp status_color("claimed"), do: "text-amber-400"
+  defp status_color("brew_done"), do: "text-amber-400/70"
   defp status_color("pr_open"), do: "text-purple-400"
   defp status_color("revision_needed"), do: "text-orange-400"
   defp status_color("merged"), do: "text-green-400"

@@ -506,6 +506,19 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("promote-to-assaying", _params, socket) do
+    task = socket.assigns.selected_task
+
+    cond do
+      is_nil(task) || task.status != "brew_done" ->
+        {:noreply, put_flash(socket, :error, "Concoction is not ready for promotion")}
+
+      true ->
+        {:noreply, promote_to_assaying(socket, task)}
+    end
+  end
+
+  @impl true
   def handle_event("requeue", _params, socket) do
     case Ingredients.unclaim(socket.assigns.selected_task_id) do
       {:ok, _} ->
@@ -914,6 +927,16 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
+  defp handle_hotkey("p", socket) do
+    task = socket.assigns.selected_task
+
+    if task && task.status == "brew_done" do
+      promote_to_assaying(socket, task)
+    else
+      socket
+    end
+  end
+
   defp handle_hotkey("ArrowUp", socket) do
     if socket.assigns.selected_task_id do
       task = socket.assigns.selected_task
@@ -1076,6 +1099,48 @@ defmodule ApothecaryWeb.DashboardLive do
         else
           put_flash(socket, :error, "No git path found for this concoction")
         end
+    end
+  end
+
+  # --- Promote brew_done to assaying (create PR) ---
+
+  defp promote_to_assaying(socket, task) do
+    task_id = task.id
+
+    case Git.merge_mode() do
+      :github ->
+        git_path = task.git_path
+
+        if git_path do
+          title = "[#{task_id}] #{task.title}"
+
+          case Git.create_pr(git_path, title) do
+            {:ok, pr_url} ->
+              Ingredients.add_note(task_id, "PR created from dashboard: #{pr_url}")
+
+              Ingredients.update_concoction(task_id, %{
+                status: "pr_open",
+                pr_url: pr_url
+              })
+
+              put_flash(socket, :info, "PR created: #{pr_url}")
+
+            {:error, reason} ->
+              Ingredients.add_note(
+                task_id,
+                "Manual PR creation failed: #{inspect(reason)}. Try again or create manually."
+              )
+
+              put_flash(socket, :error, "PR creation failed: #{inspect(reason)}")
+          end
+        else
+          put_flash(socket, :error, "No git path found for this concoction")
+        end
+
+      :local ->
+        # In local mode, just move to pr_open for manual merge
+        Ingredients.update_concoction(task_id, %{status: "pr_open"})
+        put_flash(socket, :info, "Moved to assaying for manual merge")
     end
   end
 
