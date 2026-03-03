@@ -536,8 +536,15 @@ defmodule Apothecary.Brewer do
 
         Apothecary.Ingredients.add_note(
           worktree_id,
-          "Push failed: #{inspect(reason)}. Work may be lost — check concoction."
+          "Push failed: #{inspect(reason)}. Branch is ready — retry push from the dashboard."
         )
+
+        # Set to brew_done so the concoction appears in the assaying lane
+        # for manual retry, instead of staying stuck in "in_progress"
+        Apothecary.Ingredients.update_concoction(worktree_id, %{
+          status: "brew_done",
+          assigned_brewer_id: nil
+        })
     end
   end
 

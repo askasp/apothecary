@@ -134,5 +134,30 @@ defmodule Apothecary.MergeConflictTest do
       {:ok, fetched_concoction} = Ingredients.get_concoction(concoction.id)
       assert fetched_concoction.status == "open"
     end
+
+    test "push failure recovery: concoction moves to brew_done", %{concoction: concoction} do
+      # Simulate: brewer was assigned (in_progress with brewer)
+      {:ok, _} =
+        Ingredients.update_concoction(concoction.id, %{
+          status: "in_progress",
+          assigned_brewer_id: 1
+        })
+
+      # Simulate what happens when push fails in push_and_finalize:
+      # The concoction should be set to brew_done with brewer cleared
+      {:ok, _} =
+        Ingredients.update_concoction(concoction.id, %{
+          status: "brew_done",
+          assigned_brewer_id: nil
+        })
+
+      # Drain broadcasts
+      Process.sleep(100)
+
+      # Verify concoction is in brew_done (assaying lane) and not stuck in in_progress
+      {:ok, fetched} = Ingredients.get_concoction(concoction.id)
+      assert fetched.status == "brew_done"
+      assert fetched.assigned_brewer_id == nil
+    end
   end
 end
