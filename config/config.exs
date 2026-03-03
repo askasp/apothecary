@@ -13,7 +13,9 @@ config :apothecary,
   claude_path: "claude",
   mnesia_copies: :disc_copies,
   # true = auto-create PRs when brewer finishes, false = manual trigger from dashboard
-  auto_pr: false
+  auto_pr: false,
+  # :git = plain git merge (no GitHub required), :github = use GitHub PRs
+  merge_mode: :git
 
 # Configure the endpoint
 config :apothecary, ApothecaryWeb.Endpoint,

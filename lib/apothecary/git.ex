@@ -7,6 +7,7 @@ defmodule Apothecary.Git do
   """
 
   alias Apothecary.CLI
+  require Logger
 
   @doc "List all git worktrees in porcelain format."
   def list_worktrees(project_dir) do
@@ -103,6 +104,42 @@ defmodule Apothecary.Git do
     |> Regex.scan(output)
     |> Enum.map(fn [_, file] -> String.trim(file) end)
     |> Enum.uniq()
+  end
+
+  @doc "Check if a remote named 'origin' is configured for this repo."
+  def has_remote?(project_dir) do
+    case CLI.run("git", ["remote"], cd: project_dir) do
+      {:ok, output} -> String.contains?(output, "origin")
+      {:error, _} -> false
+    end
+  end
+
+  @doc """
+  Merge a feature branch into main locally (no GitHub needed).
+
+  Checks out main, merges the branch with --no-ff, then returns.
+  Returns :ok or {:error, reason}.
+  """
+  def merge_branch(project_dir, branch) do
+    base = main_branch(project_dir)
+
+    with {:ok, _} <- CLI.run("git", ["checkout", base], cd: project_dir),
+         {:ok, _} <-
+           CLI.run("git", ["merge", branch, "--no-ff", "--no-edit"], cd: project_dir) do
+      :ok
+    else
+      {:error, {_code, output}} = error ->
+        if merge_conflict?(output) do
+          # Abort the merge to leave the repo clean
+          CLI.run("git", ["merge", "--abort"], cd: project_dir)
+          {:error, {:merge_conflict, output}}
+        else
+          error
+        end
+
+      error ->
+        error
+    end
   end
 
   @doc "Push the current branch in a worktree to origin."
@@ -231,9 +268,80 @@ defmodule Apothecary.Git do
     :ok
   end
 
+  @doc """
+  Merge a worktree branch into main using plain git (no GitHub/PR required).
+
+  Steps:
+  1. Fetch latest main from origin
+  2. Checkout main in the project dir
+  3. Merge the branch (fast-forward if possible, otherwise merge commit)
+  4. Push main to origin
+  5. Checkout back to the original branch (if we were on one)
+
+  Returns :ok or {:error, reason}.
+  """
+  def git_merge(project_dir, branch) do
+    base = main_branch(project_dir)
+
+    with {:ok, _} <- CLI.run("git", ["fetch", "origin", base], cd: project_dir),
+         {:ok, original_branch} <- current_branch_or_detached(project_dir),
+         {:ok, _} <- CLI.run("git", ["checkout", base], cd: project_dir),
+         {:ok, _} <- CLI.run("git", ["pull", "--ff-only", "origin", base], cd: project_dir),
+         {:ok, _} <- CLI.run("git", ["merge", branch, "--no-edit"], cd: project_dir),
+         {:ok, _} <- CLI.run("git", ["push", "origin", base], cd: project_dir) do
+      # Try to go back to the original branch (best-effort)
+      if original_branch && original_branch != base do
+        CLI.run("git", ["checkout", original_branch], cd: project_dir)
+      end
+
+      :ok
+    else
+      {:error, reason} = error ->
+        # Try to recover: go back to whatever branch we were on
+        CLI.run("git", ["checkout", "-"], cd: project_dir)
+        Logger.warning("git_merge failed for branch #{branch}: #{inspect(reason)}")
+        error
+    end
+  end
+
+  @doc """
+  Check if a branch has been merged into main.
+  Returns true if all commits on the branch are reachable from main.
+  """
+  def branch_merged?(project_dir, branch) do
+    base = main_branch(project_dir)
+
+    case CLI.run("git", ["merge-base", "--is-ancestor", branch, base], cd: project_dir) do
+      {:ok, _} -> true
+      {:error, _} -> false
+    end
+  end
+
+  @doc """
+  Get the merge mode. Returns :github when GitHub PRs are used, :git for plain git merges.
+  """
+  def merge_mode do
+    Application.get_env(:apothecary, :merge_mode, :git)
+  end
+
+  @doc "Set the merge mode at runtime (:github or :git)."
+  def set_merge_mode(mode) when mode in [:github, :git] do
+    Application.put_env(:apothecary, :merge_mode, mode)
+    Apothecary.Store.put_setting(:merge_mode, mode)
+    :ok
+  end
+
   @doc "Delete a local branch. Uses -D (force) since the branch may already be merged."
   def delete_branch(project_dir, branch) do
     CLI.run("git", ["branch", "-D", branch], cd: project_dir)
+  end
+
+  defp current_branch_or_detached(path) do
+    case current_branch(path) do
+      {:ok, ""} -> {:ok, nil}
+      {:ok, branch} -> {:ok, branch}
+      {:error, _} -> {:ok, nil}
+    end
   end
 
   defp parse_worktrees(output) do

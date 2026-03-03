@@ -117,6 +117,11 @@ defmodule Apothecary.Store do
       nil -> :ok
       auto -> Application.put_env(:apothecary, :auto_pr, auto)
     end
+
+    case get_setting(:merge_mode) do
+      nil -> :ok
+      mode -> Application.put_env(:apothecary, :merge_mode, mode)
+    end
   end
 
   defp create_table(name, opts) do
