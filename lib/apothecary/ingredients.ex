@@ -198,6 +198,7 @@ defmodule Apothecary.Ingredients do
          notes: nil,
          pr_url: nil,
          mcp_servers: attrs[:mcp_servers],
+         kind: Map.get(attrs, :kind, "task"),
          created_at: now,
          updated_at: now,
          blockers: [],

@@ -1879,6 +1879,19 @@ defmodule ApothecaryWeb.DashboardComponents do
       </button>
       <button
         phx-click="switch-tab"
+        phx-value-tab="oracle"
+        class={[
+          "px-2 sm:px-3 py-1 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer whitespace-nowrap",
+          if(@active_tab == :oracle,
+            do: "text-base-content bg-base-content/10 font-bold",
+            else: "text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5"
+          )
+        ]}
+      >
+        Oracle
+      </button>
+      <button
+        phx-click="switch-tab"
         phx-value-tab="recipes"
         class={[
           "px-2 sm:px-3 py-1 text-xs font-apothecary tracking-wide rounded transition-colors cursor-pointer whitespace-nowrap",
@@ -1893,6 +1906,84 @@ defmodule ApothecaryWeb.DashboardComponents do
       </button>
     </div>
     """
+  end
+
+  # --- Oracle View (Questions) ---
+
+  attr :questions, :list, required: true
+  attr :agents, :list, default: []
+
+  def oracle_view(assigns) do
+    active_wt_ids =
+      assigns.agents
+      |> Enum.flat_map(fn a ->
+        if a.current_concoction, do: [to_string(a.current_concoction.id)], else: []
+      end)
+      |> MapSet.new()
+
+    sorted =
+      assigns.questions
+      |> Enum.sort_by(fn q -> q.created_at || "" end, :desc)
+
+    assigns = assign(assigns, sorted: sorted, active_wt_ids: active_wt_ids)
+
+    ~H"""
+    <div class="max-w-2xl mx-auto pt-3 sm:pt-6 pb-2 px-1 sm:px-0">
+      <h2 class="text-base-content/50 text-lg font-semibold mb-2 font-apothecary">
+        Ask the Oracle
+      </h2>
+      <p class="text-base-content/30 text-xs mb-3">
+        Type <code class="text-primary/60">? your question</code> in the input on the Workbench tab to ask about the codebase.
+      </p>
+    </div>
+    <div class="max-w-2xl mx-auto px-1 sm:px-0 space-y-3 pb-8">
+      <%= if @sorted == [] do %>
+        <div class="py-8 text-center text-base-content/30 text-sm">
+          No questions yet.
+        </div>
+      <% end %>
+      <div :for={q <- @sorted} class="border border-base-content/10 rounded-lg overflow-hidden">
+        <div class="px-4 py-3 flex items-start gap-3">
+          <.question_status_dot status={q.status} active={MapSet.member?(@active_wt_ids, q.id)} />
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-base-content/80">{q.title}</div>
+            <div class="text-xs text-base-content/30 mt-0.5">{q.id}</div>
+          </div>
+        </div>
+        <%= if q.notes && q.notes != "" do %>
+          <div class="border-t border-base-content/10 px-4 py-3 bg-base-200/50">
+            <div class="text-xs text-base-content/60 whitespace-pre-wrap font-mono leading-relaxed">
+              {format_question_answer(q.notes)}
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
+
+  defp question_status_dot(assigns) do
+    ~H"""
+    <%= cond do %>
+      <% @active -> %>
+        <span class="mt-1 flex h-2.5 w-2.5 shrink-0">
+          <span class="absolute inline-flex h-2.5 w-2.5 animate-ping rounded-full bg-amber-400 opacity-75"></span>
+          <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+        </span>
+      <% @status == "done" -> %>
+        <span class="mt-1 h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+      <% true -> %>
+        <span class="mt-1 h-2.5 w-2.5 rounded-full bg-base-content/20 shrink-0"></span>
+    <% end %>
+    """
+  end
+
+  defp format_question_answer(notes) do
+    # Extract the answer portion from notes (after "Answer:" marker)
+    case String.split(notes, "Answer:\n", parts: 2) do
+      [_before, answer] -> String.trim(answer)
+      _ -> notes
+    end
   end
 
   # --- Recipe List ---

@@ -148,7 +148,15 @@ defmodule ApothecaryWeb.DashboardLive do
     agents = socket.assigns[:agents] || []
     dev_servers = socket.assigns[:dev_servers] || %{}
     active_task_ids = active_task_ids_from_agents(agents)
-    worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
+
+    # Separate questions from task concoctions
+    {questions, task_items} =
+      Enum.split_with(task_state.tasks, fn item ->
+        String.starts_with?(to_string(item.id), "wt-") and
+          Map.get(item, :kind) == "question"
+      end)
+
+    worktrees_by_status = build_worktree_groups(task_items, agents, dev_servers)
 
     project_name =
       cond do
@@ -169,6 +177,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:card_ids, build_card_ids(worktrees_by_status))
     |> assign(:known_ingredient_ids, extract_ingredient_ids(task_state.tasks))
     |> assign(:project_files, load_project_files(project))
+    |> assign(:questions, questions)
   end
 
   # --- PubSub handlers ---
@@ -193,7 +202,14 @@ defmodule ApothecaryWeb.DashboardLive do
 
     agents = socket.assigns.agents
     active_task_ids = active_task_ids_from_agents(agents)
-    worktrees_by_status = build_worktree_groups(state.tasks, agents, socket.assigns.dev_servers)
+
+    {questions, task_items} =
+      Enum.split_with(state.tasks, fn item ->
+        String.starts_with?(to_string(item.id), "wt-") and
+          Map.get(item, :kind) == "question"
+      end)
+
+    worktrees_by_status = build_worktree_groups(task_items, agents, socket.assigns.dev_servers)
 
     socket =
       socket
@@ -205,6 +221,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:orphan_count, compute_orphan_count(state.tasks, active_task_ids))
       |> assign(:worktrees_by_status, worktrees_by_status)
       |> assign(:known_ingredient_ids, new_ids)
+      |> assign(:questions, questions)
       |> rebuild_card_ids(worktrees_by_status)
 
     socket =
@@ -227,7 +244,14 @@ defmodule ApothecaryWeb.DashboardLive do
     # Rebuild card groups since agent assignments affect which lane cards appear in
     task_state = scoped_get_state(socket)
     dev_servers = socket.assigns.dev_servers
-    worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
+
+    {questions, task_items} =
+      Enum.split_with(task_state.tasks, fn item ->
+        String.starts_with?(to_string(item.id), "wt-") and
+          Map.get(item, :kind) == "question"
+      end)
+
+    worktrees_by_status = build_worktree_groups(task_items, agents, dev_servers)
 
     socket =
       socket
@@ -236,6 +260,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:active_count, status.active_count)
       |> assign(:agents, agents)
       |> assign(:worktrees_by_status, worktrees_by_status)
+      |> assign(:questions, questions)
       |> rebuild_card_ids(worktrees_by_status)
 
     socket =
@@ -1306,9 +1331,10 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:collapsed_done, false)
   end
 
-  # Tab switching: w=workbench, e=recipes
+  # Tab switching: w=workbench, e=recipes, o=oracle
   defp handle_hotkey("w", socket), do: assign(socket, :active_tab, :workbench)
   defp handle_hotkey("e", socket), do: assign(socket, :active_tab, :recipes)
+  defp handle_hotkey("o", socket), do: assign(socket, :active_tab, :oracle)
 
   defp handle_hotkey(_key, socket), do: socket
 
@@ -1484,6 +1510,40 @@ defmodule ApothecaryWeb.DashboardLive do
   # --- Input handlers ---
 
   defp create_from_input(text, socket) do
+    # Detect question prefix: "? question text"
+    if String.starts_with?(text, "?") do
+      question_text = text |> String.trim_leading("?") |> String.trim()
+      create_question(question_text, socket)
+    else
+      create_task_from_input(text, socket)
+    end
+  end
+
+  defp create_question(text, socket) do
+    project_id =
+      if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
+
+    case Ingredients.create_concoction(%{
+           title: text,
+           kind: "question",
+           priority: 2,
+           project_id: project_id
+         }) do
+      {:ok, item} when not is_nil(item) ->
+        {:noreply,
+         socket
+         |> assign(:active_tab, :oracle)
+         |> put_flash(:info, "Question submitted")}
+
+      {:ok, nil} ->
+        {:noreply, put_flash(socket, :error, "Failed to submit question")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
+    end
+  end
+
+  defp create_task_from_input(text, socket) do
     {title, parent_id, dep_ids} = parse_smart_input(text)
 
     if parent_id do
@@ -2106,6 +2166,11 @@ defmodule ApothecaryWeb.DashboardLive do
 
         <%!-- Scrollable content --%>
         <div class="flex-1 overflow-y-auto">
+          <%= if @active_tab == :oracle and @current_project do %>
+            <div class="mx-auto px-2">
+              <.oracle_view questions={@questions} agents={@agents} />
+            </div>
+          <% end %>
           <%= if @active_tab == :recipes and @current_project do %>
             <div class="mx-auto px-2">
               <.recipe_list
@@ -2115,7 +2180,8 @@ defmodule ApothecaryWeb.DashboardLive do
                 editing_recipe_id={@editing_recipe_id}
               />
             </div>
-          <% else %>
+          <% end %>
+          <%= if @active_tab == :workbench or is_nil(@current_project) do %>
             <div class="mx-auto px-2">
               <%!-- Primary input — centered, narrower --%>
               <div class="max-w-2xl mx-auto pt-3 sm:pt-6 pb-2 px-1 sm:px-0">
@@ -2169,6 +2235,9 @@ defmodule ApothecaryWeb.DashboardLive do
                       gh_available={@gh_available}
                     />
                     <.primary_input input_focused={@input_focused} />
+                    <div class="text-base-content/20 text-[10px] mt-1 px-1">
+                      Start with <span class="text-primary/40">?</span> to ask about the codebase
+                    </div>
                     <.activity_ticker agents={@agents} />
                   <% end %>
                 <% end %>
@@ -2310,7 +2379,7 @@ defmodule ApothecaryWeb.DashboardLive do
         <div class="border-t border-base-content/10 px-2 py-1 text-xs flex items-center justify-between">
           <div class="flex items-center gap-3 text-base-content/30">
             <span class="hidden sm:inline">
-              j/k:nav  1-4:lanes  enter:inspect  w/e:tabs  s:concoct
+              j/k:nav  1-4:lanes  enter:inspect  w/e/o:tabs  s:concoct
             </span>
             <span class="sm:hidden">tap card to inspect</span>
             <button
