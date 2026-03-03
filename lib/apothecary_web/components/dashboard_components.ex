@@ -8,6 +8,50 @@ defmodule ApothecaryWeb.DashboardComponents do
     router: ApothecaryWeb.Router,
     statics: ApothecaryWeb.static_paths()
 
+  # --- Copy to clipboard button ---
+
+  attr :target, :string, required: true, doc: "CSS selector of the element whose text to copy"
+  attr :class, :string, default: ""
+
+  def copy_button(assigns) do
+    ~H"""
+    <button
+      id={"copy-btn-" <> String.replace(@target, ~r/[^a-zA-Z0-9]/, "")}
+      phx-hook=".CopyText"
+      data-copy-target={@target}
+      class={[
+        "text-base-content/30 hover:text-base-content/60 cursor-pointer transition-colors text-xs",
+        @class
+      ]}
+      title="Copy to clipboard"
+    >
+      [copy]
+    </button>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".CopyText">
+      export default {
+        mounted() {
+          this.el.addEventListener("click", (e) => {
+            e.stopPropagation()
+            const target = document.querySelector(this.el.dataset.copyTarget)
+            if (!target) return
+
+            const text = target.innerText || target.textContent
+            navigator.clipboard.writeText(text).then(() => {
+              const original = this.el.textContent
+              this.el.textContent = "[copied!]"
+              this.el.classList.add("text-green-400")
+              setTimeout(() => {
+                this.el.textContent = original
+                this.el.classList.remove("text-green-400")
+              }, 1500)
+            })
+          })
+        }
+      }
+    </script>
+    """
+  end
+
   # --- Project Selector ---
 
   attr :projects, :list, required: true
@@ -1224,8 +1268,14 @@ defmodule ApothecaryWeb.DashboardComponents do
 
       <%!-- Notes --%>
       <div :if={@task.notes && @task.notes != ""} class="space-y-2">
-        <.section label="notes" />
-        <div class="text-base-content/50 whitespace-pre-wrap text-xs px-3 py-2 bg-base-content/3 rounded">
+        <div class="flex items-center gap-2">
+          <div class="flex-1"><.section label="notes" /></div>
+          <.copy_button target="#task-notes" />
+        </div>
+        <div
+          id="task-notes"
+          class="text-base-content/50 whitespace-pre-wrap text-xs px-3 py-2 bg-base-content/3 rounded"
+        >
           {@task.notes}
         </div>
       </div>
@@ -1398,7 +1448,12 @@ defmodule ApothecaryWeb.DashboardComponents do
   def agent_output_panel(assigns) do
     ~H"""
     <div class="space-y-1">
-      <.section label={"alchemist-#{@working_agent.id} output"} />
+      <div class="flex items-center gap-2">
+        <div class="flex-1">
+          <.section label={"alchemist-#{@working_agent.id} output"} />
+        </div>
+        <.copy_button :if={@agent_output != []} target="#agent-output" />
+      </div>
       <div
         id="agent-output"
         phx-hook="ScrollBottom"
@@ -1507,17 +1562,20 @@ defmodule ApothecaryWeb.DashboardComponents do
         >
           [retry]
         </button>
+        <.copy_button :if={@dev_server.error || @dev_server.output != []} target="#dev-error-output" />
       </div>
-      <div :if={@dev_server.error} class="text-red-400/70 text-xs">{@dev_server.error}</div>
-      <div
-        :if={@dev_server.output != []}
-        class="bg-base-200/50 p-2 text-xs max-h-40 overflow-y-auto"
-      >
+      <div id="dev-error-output">
+        <div :if={@dev_server.error} class="text-red-400/70 text-xs">{@dev_server.error}</div>
         <div
-          :for={line <- @dev_server.output}
-          class="text-base-content/50 whitespace-pre-wrap break-all"
+          :if={@dev_server.output != []}
+          class="bg-base-200/50 p-2 text-xs max-h-40 overflow-y-auto"
         >
-          {line}
+          <div
+            :for={line <- @dev_server.output}
+            class="text-base-content/50 whitespace-pre-wrap break-all"
+          >
+            {line}
+          </div>
         </div>
       </div>
     </div>
@@ -1649,8 +1707,11 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%!-- Error state --%>
       <div :if={@diff.error && !@diff.loading} class="flex-1 flex items-center justify-center">
         <div class="text-center space-y-2">
-          <div class="text-red-400 text-sm">{@diff.error}</div>
-          <div class="text-base-content/30 text-xs">press esc to close</div>
+          <div id="diff-error-text" class="text-red-400 text-sm">{@diff.error}</div>
+          <div class="flex items-center justify-center gap-3">
+            <.copy_button target="#diff-error-text" />
+            <span class="text-base-content/30 text-xs">press esc to close</span>
+          </div>
         </div>
       </div>
 

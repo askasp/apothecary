@@ -208,6 +208,6 @@ defmodule ApothecaryWeb.DashboardLiveTest do
 
     # Go back to workbench
     html = view |> element("button", "Workbench") |> render_click()
-    assert html =~ "What shall we concoct?"
+    assert html =~ "Ready to mix?"
   end
 end

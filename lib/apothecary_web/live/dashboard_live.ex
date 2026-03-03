@@ -2188,20 +2188,31 @@ defmodule ApothecaryWeb.DashboardLive do
                     </div>
                   </div>
                 <% else %>
-                  <h2 class="text-base-content/50 text-lg font-semibold mb-2 font-apothecary">
-                    What shall we concoct?
-                  </h2>
-                  <%!-- Concoct + alchemist controls --%>
-                  <.concoct_controls
-                    swarm_status={@swarm_status}
-                    target_count={@target_count}
-                    active_count={@active_count}
-                    working_count={Enum.count(@agents, &(&1.status == :working))}
-                    auto_pr={@auto_pr}
-                    gh_available={@gh_available}
-                  />
-                  <.primary_input input_focused={@input_focused} />
-                  <.activity_ticker agents={@agents} />
+                  <%= if @projects != [] and is_nil(@current_project) do %>
+                    <div class="py-8 text-center">
+                      <h2 class="text-base-content/50 text-lg font-semibold mb-3 font-apothecary">
+                        Select a project
+                      </h2>
+                      <p class="text-base-content/30 text-sm">
+                        Choose a project above to see its workbench and concoctions.
+                      </p>
+                    </div>
+                  <% else %>
+                    <h2 class="text-base-content/50 text-lg font-semibold mb-2 font-apothecary">
+                      Ready to mix?
+                    </h2>
+                    <%!-- Concoct + alchemist controls --%>
+                    <.concoct_controls
+                      swarm_status={@swarm_status}
+                      target_count={@target_count}
+                      active_count={@active_count}
+                      working_count={Enum.count(@agents, &(&1.status == :working))}
+                      auto_pr={@auto_pr}
+                      gh_available={@gh_available}
+                    />
+                    <.primary_input input_focused={@input_focused} />
+                    <.activity_ticker agents={@agents} />
+                  <% end %>
                 <% end %>
               </div>
 
