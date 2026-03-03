@@ -169,8 +169,8 @@ defmodule Apothecary.Ingredients do
     now = DateTime.utc_now() |> DateTime.to_iso8601()
 
     record =
-      {:apothecary_concoctions, id, Map.get(attrs, :status, "open"), attrs[:title],
-       Map.get(attrs, :priority, 3), attrs[:git_path], attrs[:git_branch],
+      {:apothecary_concoctions, id, attrs[:project_id], Map.get(attrs, :status, "open"),
+       attrs[:title], Map.get(attrs, :priority, 3), attrs[:git_path], attrs[:git_branch],
        attrs[:parent_concoction_id], nil,
        %{
          description: attrs[:description],
@@ -201,7 +201,16 @@ defmodule Apothecary.Ingredients do
   end
 
   def list_concoctions do
-    :mnesia.dirty_match_object({:apothecary_concoctions, :_, :_, :_, :_, :_, :_, :_, :_, :_})
+    :mnesia.dirty_match_object(
+      {:apothecary_concoctions, :_, :_, :_, :_, :_, :_, :_, :_, :_, :_}
+    )
+    |> Enum.map(&Apothecary.Concoction.from_record/1)
+  end
+
+  def list_concoctions(project_id: project_id) do
+    :mnesia.dirty_match_object(
+      {:apothecary_concoctions, :_, project_id, :_, :_, :_, :_, :_, :_, :_, :_}
+    )
     |> Enum.map(&Apothecary.Concoction.from_record/1)
   end
 
@@ -243,17 +252,17 @@ defmodule Apothecary.Ingredients do
       :mnesia.transaction(fn ->
         case :mnesia.wread({:apothecary_concoctions, id}) do
           [record] ->
-            status = elem(record, 2)
-            current_brewer = elem(record, 8)
+            status = elem(record, 3)
+            current_brewer = elem(record, 9)
 
             if status in ["open", "revision_needed", "pr_open"] and is_nil(current_brewer) do
               now = DateTime.utc_now() |> DateTime.to_iso8601()
 
               updated =
                 record
-                |> put_elem(2, "in_progress")
-                |> put_elem(8, brewer_id)
-                |> update_record_data(9, fn data -> Map.put(data, :updated_at, now) end)
+                |> put_elem(3, "in_progress")
+                |> put_elem(9, brewer_id)
+                |> update_record_data(10, fn data -> Map.put(data, :updated_at, now) end)
 
               :mnesia.write(updated)
               updated
@@ -286,6 +295,10 @@ defmodule Apothecary.Ingredients do
 
   def ready_concoctions do
     list_concoctions() |> compute_ready_concoctions()
+  end
+
+  def ready_concoctions(project_id: project_id) do
+    list_concoctions(project_id: project_id) |> compute_ready_concoctions()
   end
 
   @doc "List concoctions with status pr_open."
@@ -476,7 +489,7 @@ defmodule Apothecary.Ingredients do
     id = to_string(id)
 
     if String.starts_with?(id, "wt-") do
-      append_note(:apothecary_concoctions, id, 9, note, &Apothecary.Concoction.from_record/1)
+      append_note(:apothecary_concoctions, id, 10, note, &Apothecary.Concoction.from_record/1)
     else
       append_note(:apothecary_ingredients, id, 6, note, &Apothecary.Ingredient.from_record/1)
     end
@@ -984,7 +997,7 @@ defmodule Apothecary.Ingredients do
   # --- Private: Record Manipulation ---
 
   defp apply_concoction_changes(record, changes) do
-    {table, id, status, title, priority, git_path, git_branch, parent_concoction_id,
+    {table, id, project_id, status, title, priority, git_path, git_branch, parent_concoction_id,
      assigned_brewer_id, data} = record
 
     now = DateTime.utc_now() |> DateTime.to_iso8601()
@@ -1011,7 +1024,7 @@ defmodule Apothecary.Ingredients do
       |> maybe_put(:dependents, changes[:dependents])
       |> Map.put(:updated_at, now)
 
-    {table, id, status, title, priority, git_path, git_branch, parent_concoction_id,
+    {table, id, project_id, status, title, priority, git_path, git_branch, parent_concoction_id,
      assigned_brewer_id, data}
   end
 

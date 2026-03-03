@@ -3,6 +3,7 @@ defmodule Apothecary.Concoction do
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
+          project_id: String.t() | nil,
           title: String.t() | nil,
           status: String.t() | nil,
           priority: integer() | nil,
@@ -25,6 +26,7 @@ defmodule Apothecary.Concoction do
 
   defstruct [
     :id,
+    :project_id,
     :title,
     :status,
     :priority,
@@ -47,11 +49,12 @@ defmodule Apothecary.Concoction do
 
   @doc "Build a Concoction struct from a Mnesia record tuple."
   def from_record(
-        {:apothecary_concoctions, id, status, title, priority, git_path, git_branch,
+        {:apothecary_concoctions, id, project_id, status, title, priority, git_path, git_branch,
          parent_concoction_id, assigned_brewer_id, data}
       ) do
     %__MODULE__{
       id: id,
+      project_id: project_id,
       status: status,
       title: title,
       priority: priority,
@@ -74,8 +77,8 @@ defmodule Apothecary.Concoction do
 
   @doc "Convert to a Mnesia record tuple."
   def to_record(%__MODULE__{} = wt) do
-    {:apothecary_concoctions, wt.id, wt.status, wt.title, wt.priority, wt.git_path, wt.git_branch,
-     wt.parent_concoction_id, wt.assigned_brewer_id,
+    {:apothecary_concoctions, wt.id, wt.project_id, wt.status, wt.title, wt.priority,
+     wt.git_path, wt.git_branch, wt.parent_concoction_id, wt.assigned_brewer_id,
      %{
        description: wt.description,
        notes: wt.notes,

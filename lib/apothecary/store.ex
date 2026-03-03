@@ -4,8 +4,8 @@ defmodule Apothecary.Store do
   use GenServer
   require Logger
 
-  @tables [:apothecary_concoctions, :apothecary_ingredients, :apothecary_recipes,
-           :apothecary_settings]
+  @tables [:apothecary_projects, :apothecary_concoctions, :apothecary_ingredients,
+           :apothecary_recipes, :apothecary_settings]
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -35,9 +35,17 @@ defmodule Apothecary.Store do
 
     # For ram_copies, mnesia is already running from extra_applications
 
+    create_table(:apothecary_projects,
+      attributes: [:id, :name, :path, :status, :data],
+      index: [:path, :status],
+      copies_type: copies_type,
+      node: node
+    )
+
     create_table(:apothecary_concoctions,
       attributes: [
         :id,
+        :project_id,
         :status,
         :title,
         :priority,
@@ -47,7 +55,7 @@ defmodule Apothecary.Store do
         :assigned_brewer_id,
         :data
       ],
-      index: [:status, :parent_concoction_id, :assigned_brewer_id],
+      index: [:project_id, :status, :parent_concoction_id, :assigned_brewer_id],
       copies_type: copies_type,
       node: node
     )
