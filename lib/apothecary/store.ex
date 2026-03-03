@@ -4,7 +4,8 @@ defmodule Apothecary.Store do
   use GenServer
   require Logger
 
-  @tables [:apothecary_concoctions, :apothecary_ingredients, :apothecary_recipes]
+  @tables [:apothecary_concoctions, :apothecary_ingredients, :apothecary_recipes,
+           :apothecary_settings]
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -65,8 +66,49 @@ defmodule Apothecary.Store do
       node: node
     )
 
+    create_table(:apothecary_settings,
+      attributes: [:key, :value],
+      index: [],
+      copies_type: copies_type,
+      node: node
+    )
+
     :ok = :mnesia.wait_for_tables(@tables, 10_000)
     Logger.info("Mnesia tables ready: #{inspect(@tables)}")
+
+    load_persisted_settings()
+  end
+
+  @doc "Read a setting from Mnesia. Returns the value or the default."
+  def get_setting(key, default \\ nil) do
+    case :mnesia.transaction(fn -> :mnesia.read(:apothecary_settings, key) end) do
+      {:atomic, [{:apothecary_settings, ^key, value}]} -> value
+      _ -> default
+    end
+  end
+
+  @doc "Write a setting to Mnesia."
+  def put_setting(key, value) do
+    {:atomic, :ok} =
+      :mnesia.transaction(fn ->
+        :mnesia.write({:apothecary_settings, key, value})
+      end)
+
+    :ok
+  end
+
+  defp load_persisted_settings do
+    # Load persisted merge settings into Application env, overriding config defaults
+    # but only if they were previously saved (i.e., user explicitly changed them)
+    case get_setting(:merge_mode) do
+      nil -> :ok
+      mode -> Application.put_env(:apothecary, :merge_mode, mode)
+    end
+
+    case get_setting(:merge_auto) do
+      nil -> :ok
+      auto -> Application.put_env(:apothecary, :merge_auto, auto)
+    end
   end
 
   defp create_table(name, opts) do

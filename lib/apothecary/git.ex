@@ -211,6 +211,7 @@ defmodule Apothecary.Git do
   """
   def set_merge_mode(mode) when mode in [:github, :local] do
     Application.put_env(:apothecary, :merge_mode, mode)
+    Apothecary.Store.put_setting(:merge_mode, mode)
     :ok
   end
 
@@ -219,6 +220,7 @@ defmodule Apothecary.Git do
   """
   def set_merge_auto(auto) when is_boolean(auto) do
     Application.put_env(:apothecary, :merge_auto, auto)
+    Apothecary.Store.put_setting(:merge_auto, auto)
     :ok
   end
 
