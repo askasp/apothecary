@@ -64,13 +64,11 @@ defmodule ApothecaryWeb.DashboardComponents do
   # --- Add Project Modal ---
 
   attr :error, :string, default: nil
+  attr :suggestions, :list, default: []
 
   def add_project_modal(assigns) do
     ~H"""
-    <div
-      class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
-      phx-click="cancel-add-project"
-    >
+    <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
       <div
         class="bg-base-100 rounded-lg shadow-xl p-6 w-full max-w-md mx-4"
         phx-click-away="cancel-add-project"
@@ -78,7 +76,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         phx-key="Escape"
       >
         <h3 class="text-lg font-apothecary font-semibold mb-4">Open Project</h3>
-        <form phx-submit="add-project" class="space-y-4">
+        <form phx-submit="add-project" phx-change="search-project-path" class="space-y-4">
           <div>
             <label class="block text-sm text-base-content/60 mb-1">Project path</label>
             <input
@@ -86,12 +84,31 @@ defmodule ApothecaryWeb.DashboardComponents do
               name="path"
               placeholder="/home/user/my-project"
               autofocus
+              autocomplete="off"
+              phx-debounce="150"
               class="w-full px-3 py-2 bg-base-200 border border-base-content/10 rounded text-sm focus:outline-none focus:border-primary/50"
             />
             <p :if={@error} class="text-error text-xs mt-1">{@error}</p>
-            <p class="text-base-content/30 text-xs mt-1">
+            <p :if={@suggestions == []} class="text-base-content/30 text-xs mt-1">
               Enter the absolute path to a git repository.
             </p>
+          </div>
+          <div
+            :if={@suggestions != []}
+            class="bg-base-200 border border-base-content/10 rounded max-h-40 overflow-y-auto -mt-2"
+          >
+            <button
+              :for={s <- @suggestions}
+              type="button"
+              phx-click="select-project-path"
+              phx-value-path={s.path}
+              class="w-full text-left px-3 py-1.5 text-sm hover:bg-base-content/10 flex items-center gap-2 cursor-pointer"
+            >
+              <span :if={s.is_git} class="text-emerald-400 text-xs shrink-0" title="git repo">&#x25CF;</span>
+              <span :if={!s.is_git} class="text-base-content/20 text-xs shrink-0">&#x25CB;</span>
+              <span class="truncate">{s.name}</span>
+              <span class="ml-auto text-base-content/20 text-xs shrink-0 truncate max-w-[180px]">{s.path}</span>
+            </button>
           </div>
           <div class="flex justify-end gap-2">
             <button
@@ -133,10 +150,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     assigns = assign(assigns, :templates, templates)
 
     ~H"""
-    <div
-      class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
-      phx-click="cancel-new-project"
-    >
+    <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
       <div
         class="bg-base-100 rounded-lg shadow-xl p-6 w-full max-w-md mx-4"
         phx-click-away="cancel-new-project"

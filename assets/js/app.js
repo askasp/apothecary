@@ -58,6 +58,13 @@ let Hooks = {
         const el = document.querySelector("[data-diff-selected]")
         if (el) el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" })
       })
+      this.handleEvent("set-input-value", ({ selector, value }) => {
+        const el = document.querySelector(selector)
+        if (el) {
+          el.value = value
+          el.dispatchEvent(new Event("input", { bubbles: true }))
+        }
+      })
     },
     updated() {
       if (!document.activeElement || document.activeElement === document.body) {

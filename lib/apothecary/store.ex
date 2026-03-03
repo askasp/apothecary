@@ -128,16 +128,12 @@ defmodule Apothecary.Store do
         :ok
 
       {:aborted, {:already_exists, ^name}} ->
-        # Verify schema matches
+        # Verify schema matches — auto-migrate if mismatched
         actual_attrs = :mnesia.table_info(name, :attributes)
 
         if actual_attrs != expected_attrs do
-          Logger.warning(
-            "Mnesia table #{name} schema mismatch!\n" <>
-              "  Expected: #{inspect(expected_attrs)}\n" <>
-              "  Actual:   #{inspect(actual_attrs)}\n" <>
-              "  You may need to run: :mnesia.delete_table(:#{name}) and restart."
-          )
+          Logger.info("Migrating Mnesia table #{name}: #{inspect(actual_attrs)} -> #{inspect(expected_attrs)}")
+          migrate_table(name, actual_attrs, expected_attrs, opts)
         end
 
         :ok
@@ -145,5 +141,56 @@ defmodule Apothecary.Store do
       {:aborted, reason} ->
         raise "Failed to create Mnesia table #{name}: #{inspect(reason)}"
     end
+  end
+
+  defp migrate_table(name, old_attrs, new_attrs, opts) do
+    # Read all existing records
+    old_records =
+      :mnesia.transaction(fn ->
+        :mnesia.foldl(fn rec, acc -> [rec | acc] end, [], name)
+      end)
+      |> case do
+        {:atomic, records} -> records
+        _ -> []
+      end
+
+    # Build a mapping from old attr positions to values
+    # Record tuple: {table_name, val1, val2, ...}
+    old_indexed = Enum.with_index(old_attrs, 1)
+    old_map = Map.new(old_indexed, fn {attr, idx} -> {attr, idx} end)
+
+    # Transform records to new schema
+    new_records =
+      Enum.map(old_records, fn old_rec ->
+        values =
+          Enum.map(new_attrs, fn attr ->
+            case Map.get(old_map, attr) do
+              nil -> nil
+              idx -> elem(old_rec, idx)
+            end
+          end)
+
+        List.to_tuple([name | values])
+      end)
+
+    # Delete and recreate table with new schema
+    {:atomic, :ok} = :mnesia.delete_table(name)
+
+    table_opts =
+      [
+        attributes: new_attrs,
+        index: opts[:index]
+      ] ++ [{opts[:copies_type], [opts[:node]]}]
+
+    {:atomic, :ok} = :mnesia.create_table(name, table_opts)
+    :ok = :mnesia.wait_for_tables([name], 5_000)
+
+    # Write migrated records
+    {:atomic, :ok} =
+      :mnesia.transaction(fn ->
+        Enum.each(new_records, &:mnesia.write/1)
+      end)
+
+    Logger.info("Migrated #{length(new_records)} records in #{name}")
   end
 end

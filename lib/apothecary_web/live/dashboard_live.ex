@@ -70,6 +70,7 @@ defmodule ApothecaryWeb.DashboardLive do
       # Add project modal
       |> assign(:show_add_project, false)
       |> assign(:add_project_error, nil)
+      |> assign(:project_path_suggestions, [])
       # New project (bootstrap) modal
       |> assign(:show_new_project, false)
       |> assign(:new_project_error, nil)
@@ -786,12 +787,42 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @impl true
   def handle_event("show-add-project", _params, socket) do
-    {:noreply, assign(socket, show_add_project: true, add_project_error: nil)}
+    {:noreply,
+     assign(socket,
+       show_add_project: true,
+       add_project_error: nil,
+       project_path_suggestions: []
+     )}
   end
 
   @impl true
   def handle_event("cancel-add-project", _params, socket) do
-    {:noreply, assign(socket, show_add_project: false, add_project_error: nil)}
+    {:noreply,
+     assign(socket,
+       show_add_project: false,
+       add_project_error: nil,
+       project_path_suggestions: []
+     )}
+  end
+
+  @impl true
+  def handle_event("search-project-path", %{"path" => path}, socket) do
+    suggestions = list_path_suggestions(path)
+    {:noreply, assign(socket, :project_path_suggestions, suggestions)}
+  end
+
+  @impl true
+  def handle_event("select-project-path", %{"path" => path}, socket) do
+    # Append / so the next search shows contents of this directory
+    path_with_slash = path <> "/"
+
+    {:noreply,
+     socket
+     |> assign(project_path_suggestions: list_path_suggestions(path_with_slash))
+     |> push_event("set-input-value", %{
+       selector: ~s(input[name="path"]),
+       value: path_with_slash
+     })}
   end
 
   @impl true
@@ -1779,6 +1810,77 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
+  defp list_path_suggestions(input) do
+    input = String.trim(input)
+
+    # If input is itself a valid git repo directory, no suggestions needed
+    if File.dir?(input) and File.dir?(Path.join(input, ".git")) do
+      []
+    else
+      {dir, query} =
+        if String.ends_with?(input, "/") do
+          {input, ""}
+        else
+          {Path.dirname(input), Path.basename(input)}
+        end
+
+      case File.ls(dir) do
+        {:ok, entries} ->
+          entries
+          |> Enum.filter(fn name -> not String.starts_with?(name, ".") end)
+          |> Enum.map(fn name -> Path.join(dir, name) end)
+          |> Enum.filter(&File.dir?/1)
+          |> Enum.map(fn full_path ->
+            name = Path.basename(full_path)
+            score = fuzzy_score(String.downcase(query), String.downcase(name))
+            {full_path, name, score}
+          end)
+          |> Enum.filter(fn {_, _, score} -> score > 0 or query == "" end)
+          |> Enum.sort_by(fn {_, name, score} -> {-score, name} end)
+          |> Enum.take(8)
+          |> Enum.map(fn {full_path, name, _score} ->
+            %{
+              path: full_path,
+              name: name,
+              is_git: File.dir?(Path.join(full_path, ".git"))
+            }
+          end)
+
+        {:error, _} ->
+          []
+      end
+    end
+  end
+
+  # Fuzzy match: checks if all chars in query appear in name in order.
+  # Returns a score (higher = better). 0 = no match.
+  defp fuzzy_score("", _name), do: 1
+  defp fuzzy_score(_query, ""), do: 0
+
+  defp fuzzy_score(query, name) do
+    query_chars = String.graphemes(query)
+    name_chars = String.graphemes(name)
+
+    case match_chars(query_chars, name_chars, 0, 0) do
+      nil -> 0
+      {matched, consecutive_bonus} ->
+        # Boost: consecutive matches, prefix matches, length similarity
+        prefix_bonus = if String.starts_with?(name, query), do: 10, else: 0
+        matched + consecutive_bonus * 2 + prefix_bonus
+    end
+  end
+
+  defp match_chars([], _name, matched, consecutive), do: {matched, consecutive}
+  defp match_chars(_query, [], _matched, _consecutive), do: nil
+
+  defp match_chars([q | qrest], [n | nrest], matched, consecutive) do
+    if q == n do
+      match_chars(qrest, nrest, matched + 1, consecutive + 1)
+    else
+      match_chars([q | qrest], nrest, matched, 0)
+    end
+  end
+
   defp scoped_get_state(socket) do
     case socket.assigns.current_project do
       nil -> Ingredients.get_state()
@@ -1983,7 +2085,7 @@ defmodule ApothecaryWeb.DashboardLive do
             projects={@projects}
             current_project={@current_project}
           />
-          <.tab_navigation active_tab={@active_tab} />
+          <.tab_navigation :if={@current_project} active_tab={@active_tab} />
           <span
             class="ml-auto text-base-content/30 cursor-pointer shrink-0 p-1"
             phx-click="toggle-help"
@@ -1996,7 +2098,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
         <%!-- Scrollable content --%>
         <div class="flex-1 overflow-y-auto">
-          <%= if @active_tab == :recipes do %>
+          <%= if @active_tab == :recipes and @current_project do %>
             <div class="mx-auto px-2">
               <.recipe_list
                 recipes={@recipes}
@@ -2036,23 +2138,35 @@ defmodule ApothecaryWeb.DashboardLive do
                     </div>
                   </div>
                 <% else %>
-                <h2 class="text-base-content/50 text-lg font-semibold mb-2 font-apothecary">
-                  What shall we concoct?
-                </h2>
-                <%!-- Concoct + alchemist controls --%>
-                <.concoct_controls
-                  swarm_status={@swarm_status}
-                  target_count={@target_count}
-                  active_count={@active_count}
-                  working_count={Enum.count(@agents, &(&1.status == :working))}
-                  auto_pr={@auto_pr}
-                  gh_available={@gh_available}
-                />
-                <.primary_input input_focused={@input_focused} />
-                <.activity_ticker agents={@agents} />
+                  <%= if @projects != [] and is_nil(@current_project) do %>
+                    <div class="py-8 text-center">
+                      <h2 class="text-base-content/50 text-lg font-semibold mb-3 font-apothecary">
+                        Select a project
+                      </h2>
+                      <p class="text-base-content/30 text-sm">
+                        Choose a project above to see its workbench and concoctions.
+                      </p>
+                    </div>
+                  <% else %>
+                    <h2 class="text-base-content/50 text-lg font-semibold mb-2 font-apothecary">
+                      What shall we concoct?
+                    </h2>
+                    <%!-- Concoct + alchemist controls --%>
+                    <.concoct_controls
+                      swarm_status={@swarm_status}
+                      target_count={@target_count}
+                      active_count={@active_count}
+                      working_count={Enum.count(@agents, &(&1.status == :working))}
+                      auto_pr={@auto_pr}
+                      gh_available={@gh_available}
+                    />
+                    <.primary_input input_focused={@input_focused} />
+                    <.activity_ticker agents={@agents} />
+                  <% end %>
                 <% end %>
               </div>
 
+              <%= if @current_project do %>
               <%!-- Lane: STOCKROOM — ready + blocked --%>
               <% stockroom_entries =
                 Enum.flat_map(~w(ready blocked), fn g -> @worktrees_by_status[g] || [] end)
@@ -2179,6 +2293,7 @@ defmodule ApothecaryWeb.DashboardLive do
                   <div :if={!@collapsed_done} class="py-3 text-base-content/20 text-xs">empty</div>
                 <% end %>
               </div>
+              <% end %>
             </div>
           <% end %>
         </div>
@@ -2229,6 +2344,7 @@ defmodule ApothecaryWeb.DashboardLive do
       <.add_project_modal
         :if={@show_add_project}
         error={@add_project_error}
+        suggestions={@project_path_suggestions}
       />
 
       <.new_project_modal
