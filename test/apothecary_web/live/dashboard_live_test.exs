@@ -3,7 +3,7 @@ defmodule ApothecaryWeb.DashboardLiveTest do
 
   import Phoenix.LiveViewTest
 
-  alias Apothecary.Ingredients
+  alias Apothecary.{Ingredients, Projects}
 
   setup do
     # Clean up recipes between tests
@@ -11,19 +11,36 @@ defmodule ApothecaryWeb.DashboardLiveTest do
       Ingredients.delete_recipe(recipe.id)
     end)
 
+    # Clean up projects
+    Enum.each(Projects.list_active(), fn project ->
+      Projects.archive(project.id)
+    end)
+
     :ok
   end
 
-  test "renders dashboard with stockroom tab active by default", %{conn: conn} do
+  defp create_project do
+    path = System.tmp_dir!() |> Path.join("test_project_#{System.unique_integer([:positive])}")
+    File.mkdir_p!(path)
+    {:ok, project} = Projects.create(path, name: "TestProject")
+    project
+  end
+
+  test "renders dashboard with empty state when no projects", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/")
-    # No projects = empty state shown
     assert html =~ "No projects yet"
+  end
+
+  test "renders dashboard with tabs when project selected", %{conn: conn} do
+    project = create_project()
+    {:ok, _view, html} = live(conn, ~p"/projects/#{project.id}")
     assert html =~ "Workbench"
     assert html =~ "Recurring Concoctions"
   end
 
   test "switches to recurring brews tab", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/")
+    project = create_project()
+    {:ok, view, _html} = live(conn, ~p"/projects/#{project.id}")
 
     html =
       view
@@ -36,7 +53,8 @@ defmodule ApothecaryWeb.DashboardLiveTest do
   end
 
   test "shows recipe creation form", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/")
+    project = create_project()
+    {:ok, view, _html} = live(conn, ~p"/projects/#{project.id}")
 
     # Switch to recipes tab
     view |> element("button", "Recurring Concoctions") |> render_click()
@@ -50,7 +68,8 @@ defmodule ApothecaryWeb.DashboardLiveTest do
   end
 
   test "creates a recipe", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/")
+    project = create_project()
+    {:ok, view, _html} = live(conn, ~p"/projects/#{project.id}")
 
     # Switch to recipes tab
     view |> element("button", "Recurring Concoctions") |> render_click()
@@ -77,7 +96,8 @@ defmodule ApothecaryWeb.DashboardLiveTest do
   end
 
   test "rejects invalid cron expression", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/")
+    project = create_project()
+    {:ok, view, _html} = live(conn, ~p"/projects/#{project.id}")
 
     view |> element("button", "Recurring Concoctions") |> render_click()
     view |> element("button", "New Recipe") |> render_click()
@@ -99,7 +119,8 @@ defmodule ApothecaryWeb.DashboardLiveTest do
     {:ok, recipe} =
       Ingredients.create_recipe(%{title: "Toggle test", schedule: "0 0 * * *"})
 
-    {:ok, view, _html} = live(conn, ~p"/")
+    project = create_project()
+    {:ok, view, _html} = live(conn, ~p"/projects/#{project.id}")
     view |> element("button", "Recurring Concoctions") |> render_click()
 
     # Should show as active initially
@@ -119,7 +140,8 @@ defmodule ApothecaryWeb.DashboardLiveTest do
     {:ok, recipe} =
       Ingredients.create_recipe(%{title: "Delete me", schedule: "0 0 * * *"})
 
-    {:ok, view, _html} = live(conn, ~p"/")
+    project = create_project()
+    {:ok, view, _html} = live(conn, ~p"/projects/#{project.id}")
     view |> element("button", "Recurring Concoctions") |> render_click()
 
     # Verify recipe shows up
@@ -144,7 +166,8 @@ defmodule ApothecaryWeb.DashboardLiveTest do
         priority: 3
       })
 
-    {:ok, view, _html} = live(conn, ~p"/")
+    project = create_project()
+    {:ok, view, _html} = live(conn, ~p"/projects/#{project.id}")
     view |> element("button", "Recurring Concoctions") |> render_click()
 
     # Click edit
@@ -174,17 +197,17 @@ defmodule ApothecaryWeb.DashboardLiveTest do
     assert html =~ "30 8 * * MON-FRI"
   end
 
-  test "switches back to stockroom tab", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/")
+  test "switches back to workbench tab", %{conn: conn} do
+    project = create_project()
+    {:ok, view, _html} = live(conn, ~p"/projects/#{project.id}")
 
     # Go to recipes
     view |> element("button", "Recurring Concoctions") |> render_click()
     html = render(view)
     refute html =~ "No projects yet"
 
-    # Go back to stockroom
+    # Go back to workbench
     html = view |> element("button", "Workbench") |> render_click()
-    # No projects = empty state shown
-    assert html =~ "No projects yet"
+    assert html =~ "What shall we concoct?"
   end
 end
