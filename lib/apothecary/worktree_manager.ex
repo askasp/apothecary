@@ -1,10 +1,13 @@
 defmodule Apothecary.WorktreeManager do
   @moduledoc """
-  Manages git worktrees for work units.
+  Manages git worktrees for work units across multiple projects.
 
   Creates one worktree per work unit under <project_dir>-worktrees/<id>/
   with a stable branch name `worktree/<id>`. Supports dependency chains
   where a child worktree branches from its parent's branch.
+
+  Each checkout call specifies the project_dir, allowing worktrees
+  for different projects to coexist without conflicts.
   """
 
   use GenServer
@@ -15,13 +18,13 @@ defmodule Apothecary.WorktreeManager do
   end
 
   @doc """
-  Check out a worktree. Returns {:ok, path, branch} or {:error, reason}.
+  Check out a worktree for a project. Returns {:ok, path, branch} or {:error, reason}.
 
   Options:
   - parent_worktree_id: branch from parent's branch instead of main
   """
-  def checkout(worktree_id, opts \\ []) do
-    GenServer.call(__MODULE__, {:checkout, worktree_id, opts}, 30_000)
+  def checkout(project_dir, worktree_id, opts \\ []) do
+    GenServer.call(__MODULE__, {:checkout, project_dir, worktree_id, opts}, 30_000)
   end
 
   @doc "Look up an existing worktree. Returns {:ok, path, branch} or :not_found."
@@ -34,9 +37,8 @@ defmodule Apothecary.WorktreeManager do
     GenServer.cast(__MODULE__, {:release, worktree_id})
   end
 
-  @doc "Get the worktrees base directory."
-  def worktrees_dir do
-    project_dir = Application.get_env(:apothecary, :project_dir)
+  @doc "Get the worktrees base directory for a project."
+  def worktrees_dir(project_dir) do
     "#{project_dir}-worktrees"
   end
 
@@ -50,10 +52,9 @@ defmodule Apothecary.WorktreeManager do
   end
 
   @impl true
-  def handle_call({:checkout, worktree_id, opts}, _from, state) do
+  def handle_call({:checkout, project_dir, worktree_id, opts}, _from, state) do
     worktree_id = to_string(worktree_id)
 
-    # If we already have a worktree for this ID, return it
     case Map.get(state.worktrees, worktree_id) do
       %{path: path, branch: branch} ->
         {:reply, {:ok, path, branch}, state}
@@ -61,20 +62,25 @@ defmodule Apothecary.WorktreeManager do
       nil ->
         parent_worktree_id = opts[:parent_worktree_id]
 
-        # Determine base branch
         base_branch =
           if parent_worktree_id do
             case Map.get(state.worktrees, to_string(parent_worktree_id)) do
               %{branch: parent_branch} -> parent_branch
-              nil -> Apothecary.Git.main_branch()
+              nil -> Apothecary.Git.main_branch(project_dir)
             end
           else
-            Apothecary.Git.main_branch()
+            Apothecary.Git.main_branch(project_dir)
           end
 
-        case create_worktree(worktree_id, base_branch) do
+        case create_worktree(project_dir, worktree_id, base_branch) do
           {:ok, path, branch} ->
-            entry = %{path: path, branch: branch, parent_worktree_id: parent_worktree_id}
+            entry = %{
+              path: path,
+              branch: branch,
+              parent_worktree_id: parent_worktree_id,
+              project_dir: project_dir
+            }
+
             worktrees = Map.put(state.worktrees, worktree_id, entry)
             {:reply, {:ok, path, branch}, %{state | worktrees: worktrees}}
 
@@ -102,10 +108,10 @@ defmodule Apothecary.WorktreeManager do
       {nil, _} ->
         {:noreply, state}
 
-      {%{path: path, branch: branch}, new_worktrees} ->
+      {%{path: path, branch: branch, project_dir: proj_dir}, new_worktrees} ->
         Logger.info("Releasing worktree for #{worktree_id}: #{path}")
 
-        case Apothecary.Git.remove_worktree(path) do
+        case Apothecary.Git.remove_worktree(proj_dir, path) do
           {:ok, _} ->
             Logger.info("Successfully removed worktree #{worktree_id} at #{path}")
 
@@ -116,40 +122,59 @@ defmodule Apothecary.WorktreeManager do
             )
         end
 
-        # Clean up the local branch now that the worktree is removed
         if branch do
-          case Apothecary.Git.delete_branch(branch) do
+          case Apothecary.Git.delete_branch(proj_dir, branch) do
             {:ok, _} ->
               Logger.info("Deleted branch #{branch} for worktree #{worktree_id}")
 
             {:error, reason} ->
               Logger.warning(
-                "Failed to delete branch #{branch} for worktree #{worktree_id}: #{inspect(reason)}"
+                "Failed to delete branch #{branch} for #{worktree_id}: #{inspect(reason)}"
               )
           end
         end
 
-        # Remove from state regardless — the worktree is logically released
         {:noreply, %{state | worktrees: new_worktrees}}
     end
   end
 
   defp recover_state_from_disk do
-    base_dir = worktrees_dir()
+    # Recover worktrees from all known projects
+    projects =
+      try do
+        Apothecary.Projects.list_active()
+      rescue
+        _ -> []
+      catch
+        :exit, _ -> []
+      end
 
+    Enum.reduce(projects, %{}, fn project, acc ->
+      base_dir = worktrees_dir(project.path)
+      recover_worktrees_from_dir(base_dir, project.path, acc)
+    end)
+  end
+
+  defp recover_worktrees_from_dir(base_dir, project_dir, acc) do
     if File.dir?(base_dir) do
       case File.ls(base_dir) do
         {:ok, entries} ->
           entries
           |> Enum.filter(fn entry -> File.dir?(Path.join(base_dir, entry)) end)
-          |> Enum.reduce(%{}, fn dir_name, acc ->
+          |> Enum.reduce(acc, fn dir_name, acc ->
             path = Path.join(base_dir, dir_name)
 
             case Apothecary.Git.current_branch(path) do
               {:ok, branch} ->
-                # Reconstruct worktree_id from directory name
                 worktree_id = dir_name
-                entry = %{path: path, branch: branch, parent_worktree_id: nil}
+
+                entry = %{
+                  path: path,
+                  branch: branch,
+                  parent_worktree_id: nil,
+                  project_dir: project_dir
+                }
+
                 Logger.info("Recovered worktree #{worktree_id}: #{path} (branch: #{branch})")
                 Map.put(acc, worktree_id, entry)
 
@@ -161,51 +186,40 @@ defmodule Apothecary.WorktreeManager do
 
         {:error, reason} ->
           Logger.warning("Failed to list worktrees dir #{base_dir}: #{inspect(reason)}")
-          %{}
+          acc
       end
     else
-      %{}
+      acc
     end
   end
 
-  defp create_worktree(worktree_id, base_branch) do
-    project_dir = Application.get_env(:apothecary, :project_dir)
+  defp create_worktree(project_dir, worktree_id, base_branch) do
+    base_dir = worktrees_dir(project_dir)
+    File.mkdir_p!(base_dir)
 
-    if project_dir do
-      base_dir = worktrees_dir()
-      File.mkdir_p!(base_dir)
+    safe_id = String.replace(worktree_id, ~r/[^a-zA-Z0-9_-]/, "-")
+    branch = "worktree/#{safe_id}"
+    path = Path.join(base_dir, safe_id)
 
-      # Sanitize worktree_id for use in path/branch (replace non-alphanum with dash)
-      safe_id = String.replace(worktree_id, ~r/[^a-zA-Z0-9_-]/, "-")
-      branch = "worktree/#{safe_id}"
-      path = Path.join(base_dir, safe_id)
+    if File.dir?(path) do
+      Apothecary.Git.remove_worktree(project_dir, path)
+    end
 
-      # Remove existing worktree if present (stale from previous run)
-      if File.dir?(path) do
-        Apothecary.Git.remove_worktree(path)
-      end
+    case Apothecary.Git.pull_main(project_dir) do
+      {:ok, _} -> :ok
+      {:error, reason} ->
+        Logger.warning(
+          "Failed to pull main before creating worktree #{worktree_id}: #{inspect(reason)}"
+        )
+    end
 
-      # Fetch latest main so the worktree branches from up-to-date code
-      case Apothecary.Git.pull_main() do
-        {:ok, _} ->
-          :ok
+    case Apothecary.Git.create_worktree(project_dir, path, branch, base_branch) do
+      {:ok, _} ->
+        Logger.info("Created worktree for #{worktree_id}: #{path} (branch: #{branch})")
+        {:ok, path, branch}
 
-        {:error, reason} ->
-          Logger.warning(
-            "Failed to pull main before creating worktree #{worktree_id}: #{inspect(reason)}"
-          )
-      end
-
-      case Apothecary.Git.create_worktree(path, branch, base_branch) do
-        {:ok, _} ->
-          Logger.info("Created worktree for #{worktree_id}: #{path} (branch: #{branch})")
-          {:ok, path, branch}
-
-        {:error, reason} ->
-          {:error, reason}
-      end
-    else
-      {:error, "no project_dir configured"}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 end

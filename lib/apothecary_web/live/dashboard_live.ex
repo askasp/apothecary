@@ -28,9 +28,10 @@ defmodule ApothecaryWeb.DashboardLive do
 
     worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
 
-    project_dir = Application.get_env(:apothecary, :project_dir, File.cwd!())
-    project_name = Path.basename(project_dir)
-    has_preview_config = File.exists?(Path.join(project_dir, ".apothecary/preview.yml"))
+    # Multi-project: show all projects, no single project_dir
+    projects = Apothecary.Projects.list_active()
+    project_name = if projects == [], do: "Apothecary", else: "Apothecary (#{length(projects)} projects)"
+    has_preview_config = false
 
     socket =
       socket
@@ -1112,9 +1113,11 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp execute_merge(socket, task_id, pr_url) do
+    project_dir = resolve_project_dir_for_concoction(task_id)
+
     case Git.merge_mode() do
       :github ->
-        case Git.merge_pr(pr_url) do
+        case Git.merge_pr(project_dir, pr_url) do
           :ok ->
             Ingredients.add_note(task_id, "PR merged from dashboard: #{pr_url}")
             Ingredients.cleanup_merged_concoction(task_id)
@@ -1134,7 +1137,7 @@ defmodule ApothecaryWeb.DashboardLive do
           end
 
         if git_path do
-          case Git.local_merge(git_path) do
+          case Git.local_merge(project_dir, git_path) do
             :ok ->
               Ingredients.add_note(task_id, "Branch merged into main locally from dashboard")
               Ingredients.cleanup_merged_concoction(task_id)
@@ -1153,6 +1156,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
   defp promote_to_assaying(socket, task) do
     task_id = task.id
+    project_dir = resolve_project_dir_for_concoction(task_id)
 
     case Git.merge_mode() do
       :github ->
@@ -1161,7 +1165,7 @@ defmodule ApothecaryWeb.DashboardLive do
         if git_path do
           title = "[#{task_id}] #{task.title}"
 
-          case Git.create_pr(git_path, title) do
+          case Git.create_pr(project_dir, git_path, title) do
             {:ok, pr_url} ->
               Ingredients.add_note(task_id, "PR created from dashboard: #{pr_url}")
 
@@ -1216,6 +1220,7 @@ defmodule ApothecaryWeb.DashboardLive do
     pr_url = Map.get(wt, :pr_url)
     git_path = Map.get(wt, :git_path)
     merge_mode = Git.merge_mode()
+    project_dir = resolve_project_dir_for_concoction(wt_id)
 
     diff_view = %{
       files: [],
@@ -1228,7 +1233,7 @@ defmodule ApothecaryWeb.DashboardLive do
     Elixir.Task.start(fn ->
       result =
         try do
-          fetch_diff(merge_mode, pr_url, git_path)
+          fetch_diff(merge_mode, pr_url, git_path, project_dir)
         rescue
           e -> {:error, Exception.message(e)}
         end
@@ -1239,35 +1244,35 @@ defmodule ApothecaryWeb.DashboardLive do
     assign(socket, :diff_view, diff_view)
   end
 
-  defp fetch_diff(:local, pr_url, git_path) do
-    with {:error, _} <- try_worktree_diff(git_path),
-         {:error, _} <- try_pr_diff(pr_url) do
+  defp fetch_diff(:local, pr_url, git_path, project_dir) do
+    with {:error, _} <- try_worktree_diff(git_path, project_dir),
+         {:error, _} <- try_pr_diff(pr_url, project_dir) do
       {:error, "No diff available (no worktree path or PR URL)"}
     end
   end
 
-  defp fetch_diff(:github, pr_url, git_path) do
-    with {:error, _} <- try_pr_diff(pr_url),
-         {:error, _} <- try_worktree_diff(git_path) do
+  defp fetch_diff(:github, pr_url, git_path, project_dir) do
+    with {:error, _} <- try_pr_diff(pr_url, project_dir),
+         {:error, _} <- try_worktree_diff(git_path, project_dir) do
       {:error, "No diff available (no PR URL or worktree path)"}
     end
   end
 
-  defp try_pr_diff(pr_url) when is_binary(pr_url) and pr_url != "" do
-    Git.pr_diff(pr_url)
+  defp try_pr_diff(pr_url, project_dir) when is_binary(pr_url) and pr_url != "" do
+    Git.pr_diff(project_dir, pr_url)
   end
 
-  defp try_pr_diff(_), do: {:error, :no_pr_url}
+  defp try_pr_diff(_, _), do: {:error, :no_pr_url}
 
-  defp try_worktree_diff(git_path) when is_binary(git_path) and git_path != "" do
+  defp try_worktree_diff(git_path, project_dir) when is_binary(git_path) and git_path != "" do
     if File.dir?(git_path) do
-      Git.worktree_diff(git_path)
+      Git.worktree_diff(project_dir, git_path)
     else
       {:error, :worktree_not_found}
     end
   end
 
-  defp try_worktree_diff(_), do: {:error, :no_git_path}
+  defp try_worktree_diff(_, _), do: {:error, :no_git_path}
 
   # --- Input handlers ---
 
@@ -1563,9 +1568,29 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp load_project_files do
-    case FileTree.list_files() do
-      {:ok, files} -> files
-      {:error, _} -> []
+    # Load files from first active project (or empty if none)
+    case Apothecary.Projects.list_active() do
+      [project | _] ->
+        case FileTree.list_files(project.path) do
+          {:ok, files} -> files
+          {:error, _} -> []
+        end
+
+      [] ->
+        []
+    end
+  end
+
+  defp resolve_project_dir_for_concoction(concoction_id) do
+    case Ingredients.get_concoction(concoction_id) do
+      {:ok, %{project_id: project_id}} when not is_nil(project_id) ->
+        case Apothecary.Projects.get(project_id) do
+          {:ok, project} -> project.path
+          _ -> nil
+        end
+
+      _ ->
+        nil
     end
   end
 

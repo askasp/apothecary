@@ -334,12 +334,16 @@ defmodule Apothecary.Ingredients do
     Apothecary.WorktreeManager.release(id)
 
     # Update local main so new worktrees branch from the latest code
-    case Apothecary.Git.pull_main() do
-      {:ok, _} ->
-        :ok
+    project_dir = resolve_project_dir(id)
 
-      {:error, reason} ->
-        Logger.warning("cleanup_merged_concoction: pull_main failed: #{inspect(reason)}")
+    if project_dir do
+      case Apothecary.Git.pull_main(project_dir) do
+        {:ok, _} ->
+          :ok
+
+        {:error, reason} ->
+          Logger.warning("cleanup_merged_concoction: pull_main failed: #{inspect(reason)}")
+      end
     end
   end
 
@@ -1137,6 +1141,19 @@ defmodule Apothecary.Ingredients do
   end
 
   # --- Private: Filtering ---
+
+  defp resolve_project_dir(concoction_id) do
+    case get_concoction(concoction_id) do
+      {:ok, %{project_id: project_id}} when not is_nil(project_id) ->
+        case Apothecary.Projects.get(project_id) do
+          {:ok, project} -> project.path
+          _ -> nil
+        end
+
+      _ ->
+        nil
+    end
+  end
 
   defp maybe_filter(items, _field, nil), do: items
 

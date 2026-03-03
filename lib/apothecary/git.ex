@@ -1,26 +1,29 @@
 defmodule Apothecary.Git do
-  @moduledoc "Git CLI wrapper for worktree and repository inspection."
+  @moduledoc """
+  Git CLI wrapper for worktree and repository inspection.
+
+  All functions that operate on a project repository accept `project_dir`
+  as an explicit parameter — no global state dependency.
+  """
 
   alias Apothecary.CLI
 
-  defp project_dir, do: Application.get_env(:apothecary, :project_dir)
-
   @doc "List all git worktrees in porcelain format."
-  def list_worktrees do
-    case CLI.run("git", ["worktree", "list", "--porcelain"], cd: project_dir()) do
+  def list_worktrees(project_dir) do
+    case CLI.run("git", ["worktree", "list", "--porcelain"], cd: project_dir) do
       {:ok, output} -> {:ok, parse_worktrees(output)}
       {:error, reason} -> {:error, reason}
     end
   end
 
   @doc "Create a new worktree with a branch based on the given base branch."
-  def create_worktree(path, branch, base_branch \\ "main") do
-    CLI.run("git", ["worktree", "add", "-b", branch, path, base_branch], cd: project_dir())
+  def create_worktree(project_dir, path, branch, base_branch \\ "main") do
+    CLI.run("git", ["worktree", "add", "-b", branch, path, base_branch], cd: project_dir)
   end
 
   @doc "Remove a worktree."
-  def remove_worktree(path) do
-    CLI.run("git", ["worktree", "remove", "--force", path], cd: project_dir())
+  def remove_worktree(project_dir, path) do
+    CLI.run("git", ["worktree", "remove", "--force", path], cd: project_dir)
   end
 
   @doc "Get the current branch for a worktree path."
@@ -40,16 +43,16 @@ defmodule Apothecary.Git do
   end
 
   @doc "Get the main/master branch name."
-  def main_branch do
-    dir = project_dir()
-
-    case CLI.run("git", ["symbolic-ref", "refs/remotes/origin/HEAD", "--short"], cd: dir) do
+  def main_branch(project_dir) do
+    case CLI.run("git", ["symbolic-ref", "refs/remotes/origin/HEAD", "--short"],
+           cd: project_dir
+         ) do
       {:ok, ref} ->
         ref |> String.trim() |> String.split("/") |> List.last()
 
       {:error, _} ->
         # Fallback: check if main or master exists
-        case CLI.run("git", ["rev-parse", "--verify", "main"], cd: dir) do
+        case CLI.run("git", ["rev-parse", "--verify", "main"], cd: project_dir) do
           {:ok, _} -> "main"
           _ -> "master"
         end
@@ -57,8 +60,8 @@ defmodule Apothecary.Git do
   end
 
   @doc "Reset a worktree branch to the latest main."
-  def reset_to_main(worktree_path) do
-    base = main_branch()
+  def reset_to_main(project_dir, worktree_path) do
+    base = main_branch(project_dir)
 
     with {:ok, _} <- CLI.run("git", ["fetch", "origin", base], cd: worktree_path),
          {:ok, _} <- CLI.run("git", ["reset", "--hard", "origin/#{base}"], cd: worktree_path) do
@@ -67,8 +70,8 @@ defmodule Apothecary.Git do
   end
 
   @doc "Fetch latest main and merge it into the current worktree branch."
-  def merge_main_into(worktree_path) do
-    base = main_branch()
+  def merge_main_into(project_dir, worktree_path) do
+    base = main_branch(project_dir)
 
     with {:ok, _} <- CLI.run("git", ["fetch", "origin", base], cd: worktree_path),
          {:ok, _} <- CLI.run("git", ["merge", "origin/#{base}", "--no-edit"], cd: worktree_path) do
@@ -88,10 +91,10 @@ defmodule Apothecary.Git do
   end
 
   @doc "Create a PR from the current branch in a worktree. Returns {:ok, pr_url} or {:error, reason}."
-  def create_pr(worktree_path, title) do
+  def create_pr(project_dir, worktree_path, title) do
     case current_branch(worktree_path) do
       {:ok, branch} ->
-        base = main_branch()
+        base = main_branch(project_dir)
 
         case CLI.run(
                "gh",
@@ -108,12 +111,9 @@ defmodule Apothecary.Git do
   end
 
   @doc "Merge a PR on GitHub. Returns :ok or {:error, reason}."
-  def merge_pr(pr_url) do
-    # Don't use --delete-branch: the branch is checked out in a worktree,
-    # so local branch deletion fails and causes gh to report an error even
-    # though the merge succeeded. We handle cleanup via WorktreeManager.release.
+  def merge_pr(project_dir, pr_url) do
     case CLI.run("gh", ["pr", "merge", pr_url, "--merge"],
-           cd: project_dir(),
+           cd: project_dir,
            timeout: 60_000
          ) do
       {:ok, _} -> :ok
@@ -122,20 +122,20 @@ defmodule Apothecary.Git do
   end
 
   @doc "View PR diff. Returns {:ok, diff} or {:error, reason}."
-  def pr_diff(pr_url) do
-    CLI.run("gh", ["pr", "diff", pr_url], cd: project_dir())
+  def pr_diff(project_dir, pr_url) do
+    CLI.run("gh", ["pr", "diff", pr_url], cd: project_dir)
   end
 
   @doc "Get diff of a worktree branch against main. Returns {:ok, diff} or {:error, reason}."
-  def worktree_diff(worktree_path) do
-    base = main_branch()
+  def worktree_diff(project_dir, worktree_path) do
+    base = main_branch(project_dir)
     CLI.run("git", ["diff", "#{base}...HEAD"], cd: worktree_path)
   end
 
   @doc "Get PR status from GitHub. Returns {:ok, map} or {:error, reason}."
-  def pr_status(pr_url) do
+  def pr_status(project_dir, pr_url) do
     case CLI.run("gh", ["pr", "view", pr_url, "--json", "state,reviewDecision"],
-           cd: project_dir()
+           cd: project_dir
          ) do
       {:ok, output} ->
         case Jason.decode(String.trim(output)) do
@@ -149,21 +149,20 @@ defmodule Apothecary.Git do
   end
 
   @doc "Pull latest changes on the main branch."
-  def pull_main do
-    base = main_branch()
-    CLI.run("git", ["pull", "--rebase", "origin", base], cd: project_dir())
+  def pull_main(project_dir) do
+    base = main_branch(project_dir)
+    CLI.run("git", ["pull", "--rebase", "origin", base], cd: project_dir)
   end
 
   @doc "Get the recent commit log for a worktree. Returns {:ok, log} or {:error, reason}."
-  def worktree_log(worktree_path, count \\ 20) do
-    base = main_branch()
-
+  def worktree_log(project_dir, worktree_path, count \\ 20) do
+    base = main_branch(project_dir)
     CLI.run("git", ["log", "--oneline", "#{base}..HEAD", "-#{count}"], cd: worktree_path)
   end
 
-  @doc "Get a compact commit log with per-commit file change stats. Returns {:ok, log} or {:error, reason}."
-  def worktree_log_with_stats(worktree_path, count \\ 20) do
-    base = main_branch()
+  @doc "Get a compact commit log with per-commit file change stats."
+  def worktree_log_with_stats(project_dir, worktree_path, count \\ 20) do
+    base = main_branch(project_dir)
 
     CLI.run(
       "git",
@@ -173,12 +172,12 @@ defmodule Apothecary.Git do
   end
 
   @doc "Get the overall diff stat (files changed, insertions, deletions) for the branch vs main."
-  def worktree_diff_stat(worktree_path) do
-    base = main_branch()
+  def worktree_diff_stat(project_dir, worktree_path) do
+    base = main_branch(project_dir)
     CLI.run("git", ["diff", "--stat", "#{base}...HEAD"], cd: worktree_path)
   end
 
-  @doc "Get a summary of uncommitted changes in a worktree. Returns {:ok, diff_stat} or {:error, reason}."
+  @doc "Get a summary of uncommitted changes in a worktree."
   def worktree_status(worktree_path) do
     CLI.run("git", ["diff", "--stat", "HEAD"], cd: worktree_path)
   end
@@ -191,58 +190,48 @@ defmodule Apothecary.Git do
     end
   end
 
-  @doc """
-  Get the configured merge mode: :github or :local.
-  """
+  @doc "Get the configured merge mode: :github or :local."
   def merge_mode do
     Application.get_env(:apothecary, :merge_mode, :local)
   end
 
-  @doc """
-  Whether auto-finalization is enabled. When true, the brewer auto-merges (local)
-  or auto-creates PRs (github). When false, the user must trigger these manually.
-  """
+  @doc "Whether auto-finalization is enabled."
   def merge_auto? do
     Application.get_env(:apothecary, :merge_auto, true)
   end
 
-  @doc """
-  Set the merge mode at runtime. Accepts :github or :local.
-  """
+  @doc "Set the merge mode at runtime."
   def set_merge_mode(mode) when mode in [:github, :local] do
     Application.put_env(:apothecary, :merge_mode, mode)
     Apothecary.Store.put_setting(:merge_mode, mode)
     :ok
   end
 
-  @doc """
-  Set the merge auto flag at runtime.
-  """
+  @doc "Set the merge auto flag at runtime."
   def set_merge_auto(auto) when is_boolean(auto) do
     Application.put_env(:apothecary, :merge_auto, auto)
     Apothecary.Store.put_setting(:merge_auto, auto)
     :ok
   end
 
-  @doc "Merge a worktree branch into main locally. Does NOT delete the branch — cleanup happens via WorktreeManager.release."
-  def local_merge(worktree_path) do
-    base = main_branch()
+  @doc "Merge a worktree branch into main locally."
+  def local_merge(project_dir, worktree_path) do
+    base = main_branch(project_dir)
 
     with {:ok, branch} <- current_branch(worktree_path),
-         {:ok, _} <- CLI.run("git", ["checkout", base], cd: project_dir()),
-         {:ok, _} <- CLI.run("git", ["merge", branch, "--no-edit"], cd: project_dir()) do
+         {:ok, _} <- CLI.run("git", ["checkout", base], cd: project_dir),
+         {:ok, _} <- CLI.run("git", ["merge", branch, "--no-edit"], cd: project_dir) do
       :ok
     else
       {:error, reason} ->
-        # Try to go back to the base branch if merge fails
-        CLI.run("git", ["checkout", base], cd: project_dir())
+        CLI.run("git", ["checkout", base], cd: project_dir)
         {:error, reason}
     end
   end
 
-  @doc "Delete a local branch. Uses -D (force) since the branch may already be merged."
-  def delete_branch(branch) do
-    CLI.run("git", ["branch", "-D", branch], cd: project_dir())
+  @doc "Delete a local branch."
+  def delete_branch(project_dir, branch) do
+    CLI.run("git", ["branch", "-D", branch], cd: project_dir)
   end
 
   defp parse_worktrees(output) do

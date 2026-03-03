@@ -51,7 +51,9 @@ defmodule Apothecary.PRMonitor do
   end
 
   defp check_pr(wt) do
-    case Apothecary.Git.pr_status(wt.pr_url) do
+    project_dir = resolve_project_dir(wt)
+
+    case Apothecary.Git.pr_status(project_dir, wt.pr_url) do
       {:ok, %{"state" => "MERGED"}} ->
         Logger.info("PRMonitor: PR merged for #{wt.id}, cleaning up")
         Apothecary.Ingredients.add_note(wt.id, "PR merged: #{wt.pr_url}")
@@ -68,11 +70,19 @@ defmodule Apothecary.PRMonitor do
         Apothecary.Ingredients.cleanup_cancelled_concoction(wt.id)
 
       {:ok, %{"state" => "OPEN"}} ->
-        # No action needed — PR is open and awaiting review
         :ok
 
       {:error, reason} ->
         Logger.warning("PRMonitor: Failed to check PR for #{wt.id}: #{inspect(reason)}")
     end
   end
+
+  defp resolve_project_dir(%{project_id: project_id}) when not is_nil(project_id) do
+    case Apothecary.Projects.get(project_id) do
+      {:ok, project} -> project.path
+      _ -> nil
+    end
+  end
+
+  defp resolve_project_dir(_), do: nil
 end
