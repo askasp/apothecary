@@ -155,7 +155,8 @@ defmodule Apothecary.Bootstrapper do
 
     CLI.run("sh", ["-c", "curl -fsSL https://new.phoenixframework.org/#{name} | sh"],
       cd: parent_dir,
-      timeout: 180_000
+      timeout: 180_000,
+      env: clean_release_env()
     )
   end
 
@@ -168,7 +169,8 @@ defmodule Apothecary.Bootstrapper do
       "sh",
       ["-c", "curl -fsSL https://new.phoenixframework.org/#{name} | sh -s -- --no-ecto"],
       cd: parent_dir,
-      timeout: 180_000
+      timeout: 180_000,
+      env: clean_release_env()
     )
   end
 
@@ -179,6 +181,40 @@ defmodule Apothecary.Bootstrapper do
       cd: parent_dir,
       timeout: 60_000
     )
+  end
+
+  # Strip RELEASE_* env vars and clean PATH so spawned mix/elixir processes
+  # don't try to use the Apothecary release's boot files, config, or ERTS.
+  defp clean_release_env do
+    env = System.get_env()
+    release_root = Map.get(env, "RELEASE_ROOT")
+
+    # Unset all RELEASE_* variables
+    release_unsets =
+      env
+      |> Enum.filter(fn {key, _val} -> String.starts_with?(key, "RELEASE_") end)
+      |> Enum.map(fn {key, _val} -> {key, false} end)
+
+    # Remove release ERTS and bin dirs from PATH
+    path_override =
+      case {release_root, Map.get(env, "PATH")} do
+        {nil, _} ->
+          []
+
+        {_, nil} ->
+          []
+
+        {root, path} ->
+          clean_path =
+            path
+            |> String.split(":")
+            |> Enum.reject(&String.starts_with?(&1, root))
+            |> Enum.join(":")
+
+          [{"PATH", clean_path}]
+      end
+
+    release_unsets ++ path_override
   end
 
   defp init_git_if_needed(path) do
