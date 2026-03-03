@@ -26,6 +26,23 @@ defmodule ApothecaryWeb.DashboardComponents do
   port_count: 1\
   """
 
+  # --- Spinner ---
+
+  attr :class, :string, default: "w-4 h-4"
+
+  def spinner(assigns) do
+    ~H"""
+    <svg class={["animate-spin text-current", @class]} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+      <path
+        class="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      />
+    </svg>
+    """
+  end
+
   # --- Copy to clipboard button ---
 
   attr :target, :string, required: true, doc: "CSS selector of the element whose text to copy"
@@ -318,9 +335,10 @@ defmodule ApothecaryWeb.DashboardComponents do
           <p :if={@error} class="text-error text-xs">{@error}</p>
           <div
             :if={@progress}
-            class="text-sm text-base-content/50 bg-base-200 rounded p-2 font-mono text-xs"
+            class="flex items-center gap-2 text-sm text-base-content/50 bg-base-200 rounded p-2 font-mono text-xs"
           >
-            {@progress}
+            <.spinner class="w-3.5 h-3.5 shrink-0" />
+            <span>{@progress}</span>
           </div>
           <div class="flex justify-end gap-2">
             <button
@@ -1035,6 +1053,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :dev_server, :map, default: nil
   attr :has_preview_config, :boolean, default: false
   attr :pending_action, :any, default: nil
+  attr :loading_action, :atom, default: nil
 
   def task_detail_drawer(assigns) do
     ~H"""
@@ -1076,7 +1095,12 @@ defmodule ApothecaryWeb.DashboardComponents do
         <%!-- Scrollable content --%>
         <div class="flex-1 overflow-y-auto">
           <%!-- Merge confirmation bar --%>
-          <.merge_confirmation :if={@pending_action} task={@task} pending_action={@pending_action} />
+          <.merge_confirmation
+            :if={@pending_action || @loading_action}
+            task={@task}
+            pending_action={@pending_action}
+            loading_action={@loading_action}
+          />
 
           <%!-- Panel content --%>
           <.task_detail_panel
@@ -1087,6 +1111,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             agent_output={@agent_output}
             dev_server={@dev_server}
             has_preview_config={@has_preview_config}
+            loading_action={@loading_action}
           />
         </div>
       </div>
@@ -1097,39 +1122,63 @@ defmodule ApothecaryWeb.DashboardComponents do
   # --- Merge Confirmation Bar ---
 
   attr :task, :map, required: true
-  attr :pending_action, :any, required: true
+  attr :pending_action, :any, default: nil
+  attr :loading_action, :atom, default: nil
 
   def merge_confirmation(assigns) do
-    assigns = assign(assigns, :direct?, match?({:direct_merge, _, _}, assigns.pending_action))
+    assigns =
+      assigns
+      |> assign(:direct?, match?({:direct_merge, _, _}, assigns.pending_action))
+      |> assign(:loading?, assigns.loading_action != nil)
 
     ~H"""
-    <div class="bg-amber-400/10 border-b border-amber-400/30 px-3 py-3">
-      <div class="flex items-center gap-3">
-        <span class="text-amber-400 text-sm font-apothecary">
-          {if @direct?, do: "Merge directly?", else: "Merge this PR?"}
-        </span>
-        <span class="text-base-content/50 text-xs truncate flex-1">
-          "{@task.title}"
-        </span>
-      </div>
-      <div class="flex items-center gap-2 mt-2">
-        <button
-          phx-click="confirm-merge"
-          class="bg-green-500/20 hover:bg-green-500/30 text-green-400 px-3 py-1 rounded text-xs cursor-pointer transition-colors font-bold"
-        >
-          {if @direct?, do: "Create PR & Merge", else: "Merge PR"}
-        </button>
-        <button
-          phx-click="cancel-merge"
-          class="bg-base-content/5 hover:bg-base-content/10 text-base-content/50 px-3 py-1 rounded text-xs cursor-pointer transition-colors"
-        >
-          Cancel
-        </button>
-        <span class="text-base-content/30 text-xs ml-auto">m/y/Enter to confirm, Esc to cancel</span>
-      </div>
+    <div class={[
+      "border-b px-3 py-3",
+      if(@loading?, do: "bg-cyan-400/10 border-cyan-400/30", else: "bg-amber-400/10 border-amber-400/30")
+    ]}>
+      <%= if @loading? do %>
+        <div class="flex items-center gap-3">
+          <.spinner />
+          <span class="text-cyan-400 text-sm font-apothecary">
+            {loading_label(@loading_action)}
+          </span>
+          <span class="text-base-content/50 text-xs truncate flex-1">
+            "{@task.title}"
+          </span>
+        </div>
+      <% else %>
+        <div class="flex items-center gap-3">
+          <span class="text-amber-400 text-sm font-apothecary">
+            {if @direct?, do: "Merge directly?", else: "Merge this PR?"}
+          </span>
+          <span class="text-base-content/50 text-xs truncate flex-1">
+            "{@task.title}"
+          </span>
+        </div>
+        <div class="flex items-center gap-2 mt-2">
+          <button
+            phx-click="confirm-merge"
+            class="bg-green-500/20 hover:bg-green-500/30 text-green-400 px-3 py-1 rounded text-xs cursor-pointer transition-colors font-bold"
+          >
+            {if @direct?, do: "Create PR & Merge", else: "Merge PR"}
+          </button>
+          <button
+            phx-click="cancel-merge"
+            class="bg-base-content/5 hover:bg-base-content/10 text-base-content/50 px-3 py-1 rounded text-xs cursor-pointer transition-colors"
+          >
+            Cancel
+          </button>
+          <span class="text-base-content/30 text-xs ml-auto">m/y/Enter to confirm, Esc to cancel</span>
+        </div>
+      <% end %>
     </div>
     """
   end
+
+  defp loading_label(:merging), do: "Merging PR..."
+  defp loading_label(:direct_merging), do: "Creating PR & merging..."
+  defp loading_label(:creating_pr), do: "Creating PR..."
+  defp loading_label(_), do: "Working..."
 
   # --- Task Detail Panel (reused content) ---
 
@@ -1140,9 +1189,13 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :agent_output, :list, default: []
   attr :dev_server, :map, default: nil
   attr :has_preview_config, :boolean, default: false
+  attr :loading_action, :atom, default: nil
 
   def task_detail_panel(assigns) do
-    assigns = assign(assigns, :pr_url, Map.get(assigns.task, :pr_url))
+    assigns =
+      assigns
+      |> assign(:pr_url, Map.get(assigns.task, :pr_url))
+      |> assign(:loading?, assigns.loading_action != nil)
 
     ~H"""
     <div class="space-y-4 p-4">
@@ -1254,47 +1307,75 @@ defmodule ApothecaryWeb.DashboardComponents do
       <div class="flex items-center gap-2 flex-wrap">
         <button
           phx-click="claim"
-          class="border border-cyan-400/30 text-cyan-400 hover:bg-cyan-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors"
+          disabled={@loading?}
+          class={[
+            "border border-cyan-400/30 text-cyan-400 py-1.5 px-3 rounded text-xs transition-colors",
+            if(@loading?, do: "opacity-40 cursor-not-allowed", else: "hover:bg-cyan-400/10 cursor-pointer")
+          ]}
         >
           Claim
         </button>
         <button
           phx-click="requeue"
-          class="border border-yellow-400/30 text-yellow-400 hover:bg-yellow-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors"
+          disabled={@loading?}
+          class={[
+            "border border-yellow-400/30 text-yellow-400 py-1.5 px-3 rounded text-xs transition-colors",
+            if(@loading?, do: "opacity-40 cursor-not-allowed", else: "hover:bg-yellow-400/10 cursor-pointer")
+          ]}
         >
           Requeue <span class="hidden sm:inline text-base-content/30 ml-1">q</span>
         </button>
         <button
           phx-click="close"
-          class="border border-red-400/30 text-red-400 hover:bg-red-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors"
+          disabled={@loading?}
+          class={[
+            "border border-red-400/30 text-red-400 py-1.5 px-3 rounded text-xs transition-colors",
+            if(@loading?, do: "opacity-40 cursor-not-allowed", else: "hover:bg-red-400/10 cursor-pointer")
+          ]}
         >
           Close <span class="hidden sm:inline text-base-content/30 ml-1">x</span>
         </button>
         <button
           :if={@task.status == "pr_open"}
           phx-click="merge-pr"
-          class="border border-green-400/30 text-green-400 hover:bg-green-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors font-bold"
+          disabled={@loading?}
+          class={[
+            "border border-green-400/30 text-green-400 py-1.5 px-3 rounded text-xs transition-colors font-bold",
+            if(@loading?, do: "opacity-40 cursor-not-allowed", else: "hover:bg-green-400/10 cursor-pointer")
+          ]}
         >
           Merge <span class="hidden sm:inline text-base-content/30 ml-1">m</span>
         </button>
         <button
           :if={@task.status == "brew_done"}
           phx-click="direct-merge"
-          class="border border-green-400/30 text-green-400 hover:bg-green-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors font-bold"
+          disabled={@loading?}
+          class={[
+            "border border-green-400/30 text-green-400 py-1.5 px-3 rounded text-xs transition-colors font-bold",
+            if(@loading?, do: "opacity-40 cursor-not-allowed", else: "hover:bg-green-400/10 cursor-pointer")
+          ]}
         >
           Merge <span class="hidden sm:inline text-base-content/30 ml-1">m</span>
         </button>
         <button
           :if={@task.status == "brew_done"}
           phx-click="promote-to-assaying"
-          class="border border-purple-400/30 text-purple-400 hover:bg-purple-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors"
+          disabled={@loading?}
+          class={[
+            "border border-purple-400/30 text-purple-400 py-1.5 px-3 rounded text-xs transition-colors",
+            if(@loading?, do: "opacity-40 cursor-not-allowed", else: "hover:bg-purple-400/10 cursor-pointer")
+          ]}
         >
           Create PR <span class="hidden sm:inline text-base-content/30 ml-1">p</span>
         </button>
         <button
           :if={@task.status == "merge_conflict"}
           phx-click="approve-merge-fix"
-          class="border border-orange-400/30 text-orange-400 hover:bg-orange-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors font-bold"
+          disabled={@loading?}
+          class={[
+            "border border-orange-400/30 text-orange-400 py-1.5 px-3 rounded text-xs transition-colors font-bold",
+            if(@loading?, do: "opacity-40 cursor-not-allowed", else: "hover:bg-orange-400/10 cursor-pointer")
+          ]}
         >
           Approve Merge Fix
         </button>
