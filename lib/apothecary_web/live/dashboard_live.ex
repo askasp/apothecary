@@ -78,8 +78,8 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:editing_recipe_id, nil)
       |> assign(:project_files, load_project_files())
       # Merge mode
-      |> assign(:merge_mode_setting, Git.merge_mode_setting())
-      |> assign(:merge_mode_effective, Git.merge_mode())
+      |> assign(:merge_mode, Git.merge_mode())
+      |> assign(:merge_auto, Git.merge_auto?())
       |> assign(:gh_available, Git.gh_available?())
 
     {:ok, socket}
@@ -359,18 +359,22 @@ defmodule ApothecaryWeb.DashboardLive do
   def handle_event("set-merge-mode", %{"mode" => mode}, socket) do
     mode_atom =
       case mode do
-        "auto" -> :auto
         "github" -> :github
         "local" -> :local
-        _ -> :auto
+        _ -> :local
       end
 
     Git.set_merge_mode(mode_atom)
 
-    {:noreply,
-     socket
-     |> assign(:merge_mode_setting, mode_atom)
-     |> assign(:merge_mode_effective, Git.merge_mode())}
+    {:noreply, assign(socket, :merge_mode, mode_atom)}
+  end
+
+  @impl true
+  def handle_event("set-merge-auto", %{"auto" => auto_str}, socket) do
+    auto = auto_str == "true"
+    Git.set_merge_auto(auto)
+
+    {:noreply, assign(socket, :merge_auto, auto)}
   end
 
   @impl true
@@ -499,6 +503,19 @@ defmodule ApothecaryWeb.DashboardLive do
   @impl true
   def handle_event("cancel-merge", _params, socket) do
     {:noreply, assign(socket, :pending_action, nil)}
+  end
+
+  @impl true
+  def handle_event("promote-to-assaying", _params, socket) do
+    task = socket.assigns.selected_task
+
+    cond do
+      is_nil(task) || task.status != "brew_done" ->
+        {:noreply, put_flash(socket, :error, "Concoction is not ready for promotion")}
+
+      true ->
+        {:noreply, promote_to_assaying(socket, task)}
+    end
   end
 
   @impl true
@@ -910,6 +927,16 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
+  defp handle_hotkey("p", socket) do
+    task = socket.assigns.selected_task
+
+    if task && task.status == "brew_done" do
+      promote_to_assaying(socket, task)
+    else
+      socket
+    end
+  end
+
   defp handle_hotkey("ArrowUp", socket) do
     if socket.assigns.selected_task_id do
       task = socket.assigns.selected_task
@@ -1072,6 +1099,48 @@ defmodule ApothecaryWeb.DashboardLive do
         else
           put_flash(socket, :error, "No git path found for this concoction")
         end
+    end
+  end
+
+  # --- Promote brew_done to assaying (create PR) ---
+
+  defp promote_to_assaying(socket, task) do
+    task_id = task.id
+
+    case Git.merge_mode() do
+      :github ->
+        git_path = task.git_path
+
+        if git_path do
+          title = "[#{task_id}] #{task.title}"
+
+          case Git.create_pr(git_path, title) do
+            {:ok, pr_url} ->
+              Ingredients.add_note(task_id, "PR created from dashboard: #{pr_url}")
+
+              Ingredients.update_concoction(task_id, %{
+                status: "pr_open",
+                pr_url: pr_url
+              })
+
+              put_flash(socket, :info, "PR created: #{pr_url}")
+
+            {:error, reason} ->
+              Ingredients.add_note(
+                task_id,
+                "Manual PR creation failed: #{inspect(reason)}. Try again or create manually."
+              )
+
+              put_flash(socket, :error, "PR creation failed: #{inspect(reason)}")
+          end
+        else
+          put_flash(socket, :error, "No git path found for this concoction")
+        end
+
+      :local ->
+        # In local mode, just move to pr_open for manual merge
+        Ingredients.update_concoction(task_id, %{status: "pr_open"})
+        put_flash(socket, :info, "Moved to assaying for manual merge")
     end
   end
 
@@ -1357,6 +1426,7 @@ defmodule ApothecaryWeb.DashboardLive do
       Enum.group_by(worktrees, fn wt ->
         cond do
           MapSet.member?(active_wt_ids, to_string(wt.id)) -> "running"
+          wt.status == "brew_done" -> "running"
           wt.status in ["open", "ready"] -> "ready"
           wt.status in ["in_progress", "claimed"] -> "ready"
           wt.status == "blocked" -> "blocked"
@@ -1462,6 +1532,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
     cond do
       MapSet.member?(active_ids, to_string(worktree.id)) -> "running"
+      worktree.status == "brew_done" -> "running"
       worktree.status in ["open", "ready", "in_progress", "claimed", "revision_needed"] -> "ready"
       worktree.status == "blocked" -> "blocked"
       worktree.status == "pr_open" -> "pr"
@@ -1646,8 +1717,8 @@ defmodule ApothecaryWeb.DashboardLive do
                   target_count={@target_count}
                   active_count={@active_count}
                   working_count={Enum.count(@agents, &(&1.status == :working))}
-                  merge_mode_setting={@merge_mode_setting}
-                  merge_mode_effective={@merge_mode_effective}
+                  merge_mode={@merge_mode}
+                  merge_auto={@merge_auto}
                   gh_available={@gh_available}
                 />
                 <.primary_input input_focused={@input_focused} />

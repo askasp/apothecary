@@ -13,8 +13,8 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :target_count, :integer, default: 3
   attr :active_count, :integer, default: 0
   attr :working_count, :integer, default: 0
-  attr :merge_mode_setting, :atom, default: :auto
-  attr :merge_mode_effective, :atom, default: :local
+  attr :merge_mode, :atom, default: :local
+  attr :merge_auto, :boolean, default: true
   attr :gh_available, :boolean, default: false
 
   def concoct_controls(assigns) do
@@ -63,8 +63,8 @@ defmodule ApothecaryWeb.DashboardComponents do
       <span class="text-base-content/20 hidden sm:inline">│</span>
 
       <.merge_mode_toggle
-        merge_mode_setting={@merge_mode_setting}
-        merge_mode_effective={@merge_mode_effective}
+        merge_mode={@merge_mode}
+        merge_auto={@merge_auto}
         gh_available={@gh_available}
       />
     </div>
@@ -73,40 +73,37 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   # --- Merge Mode Toggle ---
 
-  attr :merge_mode_setting, :atom, default: :auto
-  attr :merge_mode_effective, :atom, default: :local
+  attr :merge_mode, :atom, default: :local
+  attr :merge_auto, :boolean, default: true
   attr :gh_available, :boolean, default: false
 
   def merge_mode_toggle(assigns) do
+    assigns =
+      assigns
+      |> assign(:on, "bg-base-content/15 text-base-content/80 font-medium")
+      |> assign(:off, "text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5")
+
     ~H"""
     <div class="flex items-center gap-1.5">
+      <%!-- Mode: local vs github --%>
       <button
         phx-click="set-merge-mode"
-        phx-value-mode="auto"
+        phx-value-mode="local"
         class={[
           "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
-          if(@merge_mode_setting == :auto,
-            do: "bg-base-content/15 text-base-content/80 font-medium",
-            else: "text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5"
-          )
+          if(@merge_mode == :local, do: @on, else: @off)
         ]}
-        title={"Auto-detect merge strategy (currently: #{@merge_mode_effective})"}
+        title="Merge branches locally (no PRs)"
       >
-        auto
+        local
       </button>
       <button
         phx-click="set-merge-mode"
         phx-value-mode="github"
         class={[
           "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
-          if(@merge_mode_setting == :github,
-            do: "bg-base-content/15 text-base-content/80 font-medium",
-            else: "text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5"
-          ),
-          if(!@gh_available && @merge_mode_setting != :github,
-            do: "opacity-50",
-            else: ""
-          )
+          if(@merge_mode == :github, do: @on, else: @off),
+          if(!@gh_available && @merge_mode != :github, do: "opacity-50", else: "")
         ]}
         title={
           if(@gh_available,
@@ -117,25 +114,47 @@ defmodule ApothecaryWeb.DashboardComponents do
       >
         github
       </button>
-      <button
-        phx-click="set-merge-mode"
-        phx-value-mode="local"
-        class={[
-          "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
-          if(@merge_mode_setting == :local,
-            do: "bg-base-content/15 text-base-content/80 font-medium",
-            else: "text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5"
-          )
-        ]}
-        title="Merge branches locally (no PRs)"
-      >
-        local
-      </button>
       <%= if !@gh_available do %>
         <span class="text-amber-400/50 text-[10px] hidden sm:inline" title="gh CLI not installed">
           no gh
         </span>
       <% end %>
+
+      <span class="text-base-content/10 mx-0.5">|</span>
+
+      <%!-- Sub-mode: auto vs manual --%>
+      <button
+        phx-click="set-merge-auto"
+        phx-value-auto="true"
+        class={[
+          "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
+          if(@merge_auto, do: @on, else: @off)
+        ]}
+        title={
+          if(@merge_mode == :github,
+            do: "Auto-create PRs when brewer finishes",
+            else: "Auto-merge into main when brewer finishes"
+          )
+        }
+      >
+        auto
+      </button>
+      <button
+        phx-click="set-merge-auto"
+        phx-value-auto="false"
+        class={[
+          "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
+          if(!@merge_auto, do: @on, else: @off)
+        ]}
+        title={
+          if(@merge_mode == :github,
+            do: "Manually trigger PR creation from dashboard",
+            else: "Manually trigger merge from dashboard"
+          )
+        }
+      >
+        manual
+      </button>
     </div>
     """
   end
@@ -878,6 +897,13 @@ defmodule ApothecaryWeb.DashboardComponents do
         >
           Merge <span class="hidden sm:inline text-base-content/30 ml-1">m</span>
         </button>
+        <button
+          :if={@task.status == "brew_done"}
+          phx-click="promote-to-assaying"
+          class="border border-purple-400/30 text-purple-400 hover:bg-purple-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors font-bold"
+        >
+          Create PR <span class="hidden sm:inline text-base-content/30 ml-1">p</span>
+        </button>
       </div>
 
       <%!-- Ingredients section --%>
@@ -1492,6 +1518,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp status_abbrev("ready"), do: "RDY"
   defp status_abbrev("in_progress"), do: "WIP"
   defp status_abbrev("claimed"), do: "WIP"
+  defp status_abbrev("brew_done"), do: "BREW"
   defp status_abbrev("pr_open"), do: "PR"
   defp status_abbrev("revision_needed"), do: "REV"
   defp status_abbrev("merged"), do: "MRG"
@@ -1505,6 +1532,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp status_color("ready"), do: "text-emerald-400"
   defp status_color("in_progress"), do: "text-amber-400"
   defp status_color("claimed"), do: "text-amber-400"
+  defp status_color("brew_done"), do: "text-amber-400/70"
   defp status_color("pr_open"), do: "text-purple-400"
   defp status_color("revision_needed"), do: "text-orange-400"
   defp status_color("merged"), do: "text-green-400"

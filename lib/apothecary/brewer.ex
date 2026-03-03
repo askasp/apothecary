@@ -414,9 +414,14 @@ defmodule Apothecary.Brewer do
   # Private — Concoction finalization
 
   defp finalize_concoction(worktree_id, agent) do
-    case Apothecary.Git.merge_mode() do
-      :github -> finalize_github(worktree_id, agent)
-      :local -> finalize_local(worktree_id, agent)
+    mode = Apothecary.Git.merge_mode()
+    auto = Apothecary.Git.merge_auto?()
+
+    case {mode, auto} do
+      {:github, true} -> finalize_github(worktree_id, agent)
+      {:github, false} -> finalize_github_manual(worktree_id, agent)
+      {:local, true} -> finalize_local_auto(worktree_id, agent)
+      {:local, false} -> finalize_local_manual(worktree_id)
     end
   end
 
@@ -499,18 +504,80 @@ defmodule Apothecary.Brewer do
     # Do NOT release the git worktree — keep it alive for PR lifecycle
   end
 
-  defp finalize_local(worktree_id, _agent) do
-    # In local mode, set to pr_open so the user can review and manually merge
-    # from the dashboard instead of auto-merging into main
-    Logger.info("Concoction #{worktree_id} ready for manual merge (local mode)")
+  defp finalize_local_auto(worktree_id, agent) do
+    # Auto-merge into main locally
+    worktree_path = agent.worktree_path
+    Logger.info("Auto-merging concoction #{worktree_id} into main (local+auto)")
+
+    case Apothecary.Git.local_merge(worktree_path) do
+      :ok ->
+        Apothecary.Ingredients.add_note(worktree_id, "Auto-merged into main locally.")
+        Apothecary.Ingredients.cleanup_merged_concoction(worktree_id)
+
+      {:error, reason} ->
+        Logger.warning("Auto-merge failed for #{worktree_id}: #{inspect(reason)}")
+
+        Apothecary.Ingredients.add_note(
+          worktree_id,
+          "Auto-merge failed: #{inspect(reason)}. Use the dashboard Merge button."
+        )
+
+        Apothecary.Ingredients.update_concoction(worktree_id, %{
+          status: "pr_open",
+          assigned_brewer_id: nil
+        })
+    end
+  end
+
+  defp finalize_local_manual(worktree_id) do
+    # Manual local mode: set to pr_open for user to merge from dashboard
+    Logger.info("Concoction #{worktree_id} ready for manual merge (local+manual)")
 
     Apothecary.Ingredients.add_note(
       worktree_id,
-      "Branch ready for manual merge into main (local mode). Use the dashboard Merge button."
+      "Branch ready for manual merge into main. Use the dashboard Merge button."
     )
 
     Apothecary.Ingredients.update_concoction(worktree_id, %{
       status: "pr_open",
+      assigned_brewer_id: nil
+    })
+  end
+
+  defp finalize_github_manual(worktree_id, agent) do
+    # Manual github mode: push branch but don't create PR. Set to brew_done
+    # so the user can trigger PR creation from the dashboard.
+    worktree_path = agent.worktree_path
+    Logger.info("Concoction #{worktree_id} ready for manual PR creation (github+manual)")
+
+    # Merge latest main into branch before pushing
+    case Apothecary.Git.merge_main_into(worktree_path) do
+      :ok ->
+        Logger.info("Merged latest main into branch for concoction #{worktree_id}")
+
+      {:error, reason} ->
+        Logger.warning("Failed to merge main into branch for #{worktree_id}: #{inspect(reason)}")
+    end
+
+    # Push the branch
+    case Apothecary.Git.push_branch(worktree_path) do
+      {:ok, _} ->
+        Apothecary.Ingredients.add_note(
+          worktree_id,
+          "Branch pushed. Waiting for manual PR creation from dashboard (github+manual mode)."
+        )
+
+      {:error, reason} ->
+        Logger.warning("Failed to push branch for #{worktree_id}: #{inspect(reason)}")
+
+        Apothecary.Ingredients.add_note(
+          worktree_id,
+          "Push failed: #{inspect(reason)}. Branch may need manual push."
+        )
+    end
+
+    Apothecary.Ingredients.update_concoction(worktree_id, %{
+      status: "brew_done",
       assigned_brewer_id: nil
     })
   end
