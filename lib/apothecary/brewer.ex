@@ -456,9 +456,7 @@ defmodule Apothecary.Brewer do
         Apothecary.Git.abort_merge(worktree_path)
         conflict_files = Apothecary.Git.conflict_files(output)
 
-        Logger.warning(
-          "Merge conflict for #{worktree_id} in files: #{inspect(conflict_files)}"
-        )
+        Logger.warning("Merge conflict for #{worktree_id} in files: #{inspect(conflict_files)}")
 
         handle_merge_conflict(worktree_id, conflict_files, output)
 

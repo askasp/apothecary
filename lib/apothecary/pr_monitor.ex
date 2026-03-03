@@ -36,15 +36,20 @@ defmodule Apothecary.PRMonitor do
   end
 
   defp check_all_prs do
-    concoctions = Apothecary.Ingredients.pr_open_concoctions()
+    # Skip polling entirely in git-only merge mode (no GitHub)
+    if Apothecary.Git.merge_mode() != :github do
+      :ok
+    else
+      concoctions = Apothecary.Ingredients.pr_open_concoctions()
 
-    Enum.each(concoctions, fn wt ->
-      if wt.pr_url do
-        check_pr(wt)
-      else
-        Logger.warning("PRMonitor: concoction #{wt.id} is pr_open but has no pr_url")
-      end
-    end)
+      Enum.each(concoctions, fn wt ->
+        if wt.pr_url do
+          check_pr(wt)
+        else
+          Logger.warning("PRMonitor: concoction #{wt.id} is pr_open but has no pr_url")
+        end
+      end)
+    end
   end
 
   defp check_pr(wt) do
