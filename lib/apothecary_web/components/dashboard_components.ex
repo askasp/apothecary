@@ -144,7 +144,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         phx-key="Escape"
       >
         <h3 class="text-lg font-apothecary font-semibold mb-4">New Project</h3>
-        <form phx-submit="create-new-project" class="space-y-4">
+        <form phx-submit="create-new-project" id="new-project-form" class="space-y-4">
           <div>
             <label class="block text-sm text-base-content/60 mb-1">Parent directory</label>
             <input
@@ -160,10 +160,13 @@ defmodule ApothecaryWeb.DashboardComponents do
             <input
               type="text"
               name="name"
-              placeholder="my-app"
+              placeholder="my_app"
               autofocus
               class="w-full px-3 py-2 bg-base-200 border border-base-content/10 rounded text-sm focus:outline-none focus:border-primary/50"
             />
+            <p class="text-base-content/30 text-xs mt-1">
+              Lowercase letters, numbers, and underscores only (e.g. my_app)
+            </p>
           </div>
           <div>
             <label class="block text-sm text-base-content/60 mb-1">Template</label>
@@ -176,7 +179,7 @@ defmodule ApothecaryWeb.DashboardComponents do
                   type="radio"
                   name="template"
                   value={tmpl.id}
-                  checked={tmpl.id == :phoenix}
+                  checked={tmpl.id == :phoenix_no_ecto}
                   class="radio radio-sm"
                 />
                 <div>

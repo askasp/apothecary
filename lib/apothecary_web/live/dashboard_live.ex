@@ -910,6 +910,9 @@ defmodule ApothecaryWeb.DashboardLive do
           {:error, :already_exists} ->
             {:noreply, assign(socket, :new_project_error, "Directory already exists")}
 
+          {:error, msg} when is_binary(msg) ->
+            {:noreply, assign(socket, :new_project_error, msg)}
+
           {:error, reason} ->
             {:noreply, assign(socket, :new_project_error, "Failed: #{inspect(reason)}")}
         end
