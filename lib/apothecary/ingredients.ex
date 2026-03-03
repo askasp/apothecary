@@ -1012,6 +1012,7 @@ defmodule Apothecary.Ingredients do
       "in_progress" => length(by_status["in_progress"] || []),
       "done" => length(by_status["done"] || []),
       "blocked" => length(by_status["blocked"] || []),
+      "merge_conflict" => length(by_status["merge_conflict"] || []),
       "pr_open" => length(by_status["pr_open"] || []),
       "revision_needed" => length(by_status["revision_needed"] || []),
       "merged" => length(by_status["merged"] || [])

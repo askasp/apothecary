@@ -715,6 +715,32 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("approve-merge-fix", _params, socket) do
+    concoction_id = socket.assigns.selected_task_id
+
+    # Unblock the fix-merge-conflicts ingredient(s) by setting them to "open"
+    fix_ingredients =
+      Ingredients.list_ingredients(concoction_id: concoction_id)
+      |> Enum.filter(fn t ->
+        t.status == "blocked" and String.contains?(t.title || "", "merge conflict")
+      end)
+
+    case fix_ingredients do
+      [] ->
+        {:noreply, put_flash(socket, :error, "No merge conflict ingredient found to approve")}
+
+      ingredients ->
+        for ingredient <- ingredients do
+          Ingredients.update_ingredient(ingredient.id, %{status: "open"})
+        end
+
+        # Set concoction back to open so it gets dispatched
+        Ingredients.update_concoction(concoction_id, %{status: "open"})
+        {:noreply, put_flash(socket, :info, "Merge fix approved — concoction will be re-dispatched")}
+    end
+  end
+
+  @impl true
   def handle_event("change-priority", %{"dir" => dir}, socket) do
     id = socket.assigns.selected_task_id
 
@@ -1874,7 +1900,7 @@ defmodule ApothecaryWeb.DashboardLive do
           wt.status == "brew_done" -> "pr"
           wt.status in ["open", "ready"] -> "ready"
           wt.status in ["in_progress", "claimed"] -> "ready"
-          wt.status == "blocked" -> "blocked"
+          wt.status in ["blocked", "merge_conflict"] -> "blocked"
           wt.status == "pr_open" -> "pr"
           wt.status == "revision_needed" -> "ready"
           wt.status in ["done", "closed", "merged"] -> "done"
@@ -2116,7 +2142,7 @@ defmodule ApothecaryWeb.DashboardLive do
       MapSet.member?(active_ids, to_string(worktree.id)) -> "running"
       worktree.status == "brew_done" -> "running"
       worktree.status in ["open", "ready", "in_progress", "claimed", "revision_needed"] -> "ready"
-      worktree.status == "blocked" -> "blocked"
+      worktree.status in ["blocked", "merge_conflict"] -> "blocked"
       worktree.status == "pr_open" -> "pr"
       true -> "ready"
     end
