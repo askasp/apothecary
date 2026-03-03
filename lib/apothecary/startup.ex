@@ -2,33 +2,33 @@ defmodule Apothecary.Startup do
   @moduledoc """
   Validates the environment on application boot.
   Called from Application.start/2.
+
+  In standalone mode, Apothecary boots without any project configured.
+  Projects are added at runtime via the dashboard UI.
   """
 
   require Logger
 
   def run do
-    project_dir = Application.get_env(:apothecary, :project_dir) || File.cwd!()
-    Application.put_env(:apothecary, :project_dir, project_dir)
+    check_claude_binary()
+    check_gh_binary()
 
-    with :ok <- validate_project_dir(project_dir),
-         :ok <- validate_git_repo(project_dir),
-         :ok <- check_claude_binary(),
-         :ok <- check_gh_binary() do
-      Logger.info("Apothecary started for project: #{project_dir}")
+    Logger.info("Apothecary started (standalone mode — add projects via dashboard)")
+    :ok
+  end
+
+  @doc "Validate a project directory before adding it."
+  def validate_project(path) do
+    expanded = Path.expand(path)
+
+    with :ok <- validate_dir_exists(expanded),
+         :ok <- validate_git_repo(expanded) do
       :ok
-    else
-      {:warn, msg} ->
-        Logger.warning("Apothecary: #{msg}")
-        :ok
-
-      {:error, msg} ->
-        Logger.error("Apothecary startup: #{msg}")
-        :ok
     end
   end
 
-  defp validate_project_dir(dir) do
-    if File.dir?(dir), do: :ok, else: {:error, "project_dir does not exist: #{dir}"}
+  defp validate_dir_exists(dir) do
+    if File.dir?(dir), do: :ok, else: {:error, "Directory does not exist: #{dir}"}
   end
 
   defp validate_git_repo(dir) do
@@ -41,22 +41,20 @@ defmodule Apothecary.Startup do
   defp check_claude_binary do
     claude = Application.get_env(:apothecary, :claude_path, "claude")
 
-    if System.find_executable(claude) do
-      :ok
-    else
-      {:warn,
-       "WARNING: '#{claude}' not found in PATH! " <>
-         "The swarm WILL FAIL to spawn agents. " <>
-         "Install Claude Code CLI or set :claude_path in config."}
+    unless System.find_executable(claude) do
+      Logger.warning(
+        "'#{claude}' not found in PATH! " <>
+          "The swarm WILL FAIL to spawn agents. " <>
+          "Install Claude Code CLI or set :claude_path in config."
+      )
     end
   end
 
   defp check_gh_binary do
-    if System.find_executable("gh") do
-      :ok
-    else
-      {:warn,
-       "gh (GitHub CLI) not found in PATH. PR creation will fail after agents finish work."}
+    unless System.find_executable("gh") do
+      Logger.warning(
+        "gh (GitHub CLI) not found in PATH. PR creation will fail after agents finish work."
+      )
     end
   end
 
