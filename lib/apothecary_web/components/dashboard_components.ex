@@ -948,68 +948,80 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </div>
 
-      <%!-- Preview indicator (only visible when active) --%>
-      <.preview_indicator worktree_id={@worktree.id} dev_server={@dev_server} />
+      <%!-- Preview button (full-width bottom) --%>
+      <div class="mt-auto">
+        <.card_preview_button worktree_id={@worktree.id} dev_server={@dev_server} />
+      </div>
     </div>
     """
   end
 
-  # --- Preview Indicator (on worktree card, only shown when active) ---
+  # --- Card Preview Button (full-width bottom of worktree card) ---
 
   attr :worktree_id, :string, required: true
   attr :dev_server, :map, default: nil
 
-  def preview_indicator(%{dev_server: %{status: :starting}} = assigns) do
+  defp card_preview_button(%{dev_server: %{status: :starting}} = assigns) do
     ~H"""
-    <div class="px-3 py-1 flex items-center gap-2 text-xs">
-      <span class="text-cyan-400">PREVIEW</span>
-      <span class="text-cyan-400 animate-pulse">◐ starting...</span>
+    <div class="border-t border-base-content/10 px-3 py-2 flex items-center justify-center gap-2 bg-cyan-400/5">
+      <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+      <span class="text-xs text-cyan-400 font-apothecary">Starting Preview...</span>
     </div>
     """
   end
 
-  def preview_indicator(%{dev_server: %{status: :running}} = assigns) do
+  defp card_preview_button(%{dev_server: %{status: :running}} = assigns) do
     ~H"""
-    <div class="px-3 py-1 flex items-center gap-2 text-xs flex-wrap">
-      <span class="text-green-400">PREVIEW ●</span>
-      <span :for={p <- @dev_server.ports} class="shrink-0">
-        <a
-          href={"http://localhost:#{p.port}"}
-          target="_blank"
-          class="text-cyan-400 hover:text-cyan-300"
+    <div class="border-t border-base-content/10 bg-green-400/5">
+      <div class="flex items-center justify-between px-3 py-2">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-green-400" />
+          <span class="text-xs text-green-400 font-apothecary">Preview</span>
+          <span :for={p <- @dev_server.ports} class="shrink-0">
+            <a
+              href={"http://localhost:#{p.port}"}
+              target="_blank"
+              class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+            >
+              :{p.port}
+            </a>
+          </span>
+        </div>
+        <button
+          phx-click="stop-dev"
+          phx-value-id={@worktree_id}
+          class="text-xs text-base-content/30 hover:text-red-400 cursor-pointer transition-colors"
         >
-          {p.name}:{p.port}
-        </a>
-      </span>
-      <button
-        phx-click="stop-dev"
-        phx-value-id={@worktree_id}
-        class="text-red-400 hover:text-red-300 cursor-pointer ml-auto"
-      >
-        [stop]
-      </button>
+          stop
+        </button>
+      </div>
     </div>
     """
   end
 
-  def preview_indicator(%{dev_server: %{status: :error}} = assigns) do
+  defp card_preview_button(%{dev_server: %{status: :error}} = assigns) do
     ~H"""
-    <div class="px-3 py-1 flex items-center gap-2 text-xs">
-      <span class="text-red-400">PREVIEW ✕</span>
-      <span class="text-red-400/70 truncate">{@dev_server.error || "error"}</span>
-      <button
-        phx-click="start-dev"
-        phx-value-id={@worktree_id}
-        class="text-base-content/30 hover:text-cyan-400 cursor-pointer ml-auto"
-      >
-        [retry]
-      </button>
-    </div>
+    <button
+      phx-click="start-dev"
+      phx-value-id={@worktree_id}
+      class="w-full border-t border-error/20 px-3 py-2 flex items-center justify-center gap-2 bg-error/5 hover:bg-error/10 cursor-pointer transition-colors"
+    >
+      <span class="text-xs text-error/70 font-apothecary">Preview failed</span>
+      <span class="text-xs text-base-content/40">· retry</span>
+    </button>
     """
   end
 
-  def preview_indicator(assigns) do
+  defp card_preview_button(assigns) do
     ~H"""
+    <button
+      phx-click="start-dev"
+      phx-value-id={@worktree_id}
+      class="w-full border-t border-base-content/10 px-3 py-2 flex items-center justify-center gap-2 text-base-content/30 hover:text-base-content/50 hover:bg-base-content/5 cursor-pointer transition-colors"
+    >
+      <.icon name="hero-play" class="w-3.5 h-3.5" />
+      <span class="text-xs font-apothecary">Preview Concoction</span>
+    </button>
     """
   end
 
