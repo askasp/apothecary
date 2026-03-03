@@ -62,6 +62,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:agent_output, [])
       |> assign(:diff_view, nil)
       |> assign(:pending_action, nil)
+      |> assign(:loading_action, nil)
       # Tab navigation
       |> assign(:active_tab, :workbench)
       # Recipe state
@@ -433,6 +434,22 @@ defmodule ApothecaryWeb.DashboardLive do
 
   # Catch-all for async task results (e.g. Task.async replies) to prevent crashes
   @impl true
+  def handle_info({:async_action_result, {:ok, message}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:loading_action, nil)
+     |> put_flash(:info, message)}
+  end
+
+  @impl true
+  def handle_info({:async_action_result, {:error, message}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:loading_action, nil)
+     |> put_flash(:error, message)}
+  end
+
+  @impl true
   def handle_info({ref, _result}, socket) when is_reference(ref) do
     Process.demonitor(ref, [:flush])
     {:noreply, socket}
@@ -466,6 +483,9 @@ defmodule ApothecaryWeb.DashboardLive do
   def handle_event("hotkey", %{"key" => key}, socket) do
     cond do
       socket.assigns.input_focused and key not in ["Escape"] ->
+        {:noreply, socket}
+
+      socket.assigns.loading_action != nil ->
         {:noreply, socket}
 
       socket.assigns.diff_view != nil ->
@@ -708,6 +728,10 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("merge-pr", _params, %{assigns: %{loading_action: la}} = socket)
+      when la != nil,
+      do: {:noreply, socket}
+
   def handle_event("merge-pr", _params, socket) do
     task = socket.assigns.selected_task
     pr_url = task && Map.get(task, :pr_url)
@@ -725,6 +749,10 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("confirm-merge", _params, %{assigns: %{loading_action: la}} = socket)
+      when la != nil,
+      do: {:noreply, socket}
+
   def handle_event("confirm-merge", _params, socket) do
     case socket.assigns.pending_action do
       {:merge, task_id, pr_url} ->
@@ -746,6 +774,10 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("direct-merge", _params, %{assigns: %{loading_action: la}} = socket)
+      when la != nil,
+      do: {:noreply, socket}
+
   def handle_event("direct-merge", _params, socket) do
     task = socket.assigns.selected_task
 
@@ -762,6 +794,10 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("promote-to-assaying", _params, %{assigns: %{loading_action: la}} = socket)
+      when la != nil,
+      do: {:noreply, socket}
+
   def handle_event("promote-to-assaying", _params, socket) do
     task = socket.assigns.selected_task
 
@@ -1587,38 +1623,54 @@ defmodule ApothecaryWeb.DashboardLive do
 
   defp execute_merge(socket, task_id, pr_url) do
     project_dir = resolve_project_dir_for_concoction(task_id)
+    lv = self()
 
-    case Git.merge_pr(project_dir, pr_url) do
-      :ok ->
-        Ingredients.add_note(task_id, "PR merged from dashboard: #{pr_url}")
-        Ingredients.cleanup_merged_concoction(task_id)
-        put_flash(socket, :info, "PR merged and worktree cleaned up")
+    Task.start(fn ->
+      result =
+        case Git.merge_pr(project_dir, pr_url) do
+          :ok ->
+            Ingredients.add_note(task_id, "PR merged from dashboard: #{pr_url}")
+            Ingredients.cleanup_merged_concoction(task_id)
+            {:ok, "PR merged and worktree cleaned up"}
 
-      {:error, reason} ->
-        put_flash(socket, :error, "Merge failed: #{inspect(reason)}")
-    end
+          {:error, reason} ->
+            {:error, "Merge failed: #{inspect(reason)}"}
+        end
+
+      send(lv, {:async_action_result, result})
+    end)
+
+    assign(socket, :loading_action, :merging)
   end
 
   defp execute_direct_merge(socket, task_id, git_path) do
     project_dir = resolve_project_dir_for_concoction(task_id)
     task = socket.assigns.selected_task
     title = "[#{task_id}] #{(task && task.title) || task_id}"
+    lv = self()
 
-    with {:ok, pr_url} <- Git.create_pr(project_dir, git_path, title),
-         :ok <- Git.merge_pr(project_dir, pr_url) do
-      Ingredients.add_note(
-        task_id,
-        "Direct merge from dashboard (PR created and merged): #{pr_url}"
-      )
+    Task.start(fn ->
+      result =
+        with {:ok, pr_url} <- Git.create_pr(project_dir, git_path, title),
+             :ok <- Git.merge_pr(project_dir, pr_url) do
+          Ingredients.add_note(
+            task_id,
+            "Direct merge from dashboard (PR created and merged): #{pr_url}"
+          )
 
-      Ingredients.update_concoction(task_id, %{pr_url: pr_url})
-      Ingredients.cleanup_merged_concoction(task_id)
-      put_flash(socket, :info, "PR created and merged: #{pr_url}")
-    else
-      {:error, reason} ->
-        Ingredients.add_note(task_id, "Direct merge failed: #{inspect(reason)}")
-        put_flash(socket, :error, "Direct merge failed: #{inspect(reason)}")
-    end
+          Ingredients.update_concoction(task_id, %{pr_url: pr_url})
+          Ingredients.cleanup_merged_concoction(task_id)
+          {:ok, "PR created and merged: #{pr_url}"}
+        else
+          {:error, reason} ->
+            Ingredients.add_note(task_id, "Direct merge failed: #{inspect(reason)}")
+            {:error, "Direct merge failed: #{inspect(reason)}"}
+        end
+
+      send(lv, {:async_action_result, result})
+    end)
+
+    assign(socket, :loading_action, :direct_merging)
   end
 
   # --- Promote brew_done to assaying (create PR) ---
@@ -1630,26 +1682,34 @@ defmodule ApothecaryWeb.DashboardLive do
 
     if git_path do
       title = "[#{task_id}] #{task.title}"
+      lv = self()
 
-      case Git.create_pr(project_dir, git_path, title) do
-        {:ok, pr_url} ->
-          Ingredients.add_note(task_id, "PR created from dashboard: #{pr_url}")
+      Task.start(fn ->
+        result =
+          case Git.create_pr(project_dir, git_path, title) do
+            {:ok, pr_url} ->
+              Ingredients.add_note(task_id, "PR created from dashboard: #{pr_url}")
 
-          Ingredients.update_concoction(task_id, %{
-            status: "pr_open",
-            pr_url: pr_url
-          })
+              Ingredients.update_concoction(task_id, %{
+                status: "pr_open",
+                pr_url: pr_url
+              })
 
-          put_flash(socket, :info, "PR created: #{pr_url}")
+              {:ok, "PR created: #{pr_url}"}
 
-        {:error, reason} ->
-          Ingredients.add_note(
-            task_id,
-            "PR creation failed: #{inspect(reason)}. Try again or create manually."
-          )
+            {:error, reason} ->
+              Ingredients.add_note(
+                task_id,
+                "PR creation failed: #{inspect(reason)}. Try again or create manually."
+              )
 
-          put_flash(socket, :error, "PR creation failed: #{inspect(reason)}")
-      end
+              {:error, "PR creation failed: #{inspect(reason)}"}
+          end
+
+        send(lv, {:async_action_result, result})
+      end)
+
+      assign(socket, :loading_action, :creating_pr)
     else
       put_flash(socket, :error, "No git path found for this concoction")
     end
@@ -2675,6 +2735,7 @@ defmodule ApothecaryWeb.DashboardLive do
         dev_server={@dev_servers[@selected_task_id]}
         has_preview_config={@has_preview_config}
         pending_action={@pending_action}
+        loading_action={@loading_action}
       />
 
       <.which_key_overlay
