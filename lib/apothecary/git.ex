@@ -192,52 +192,20 @@ defmodule Apothecary.Git do
   end
 
   @doc """
-  Get the configured merge mode: :github or :local.
+  Whether auto-PR creation is enabled. When true, the brewer automatically creates
+  a GitHub PR when it finishes. When false, the user must trigger PR creation from the dashboard.
   """
-  def merge_mode do
-    Application.get_env(:apothecary, :merge_mode, :local)
+  def auto_pr? do
+    Application.get_env(:apothecary, :auto_pr, false)
   end
 
   @doc """
-  Whether auto-finalization is enabled. When true, the brewer auto-merges (local)
-  or auto-creates PRs (github). When false, the user must trigger these manually.
+  Set the auto-PR flag at runtime.
   """
-  def merge_auto? do
-    Application.get_env(:apothecary, :merge_auto, true)
-  end
-
-  @doc """
-  Set the merge mode at runtime. Accepts :github or :local.
-  """
-  def set_merge_mode(mode) when mode in [:github, :local] do
-    Application.put_env(:apothecary, :merge_mode, mode)
-    Apothecary.Store.put_setting(:merge_mode, mode)
+  def set_auto_pr(auto) when is_boolean(auto) do
+    Application.put_env(:apothecary, :auto_pr, auto)
+    Apothecary.Store.put_setting(:auto_pr, auto)
     :ok
-  end
-
-  @doc """
-  Set the merge auto flag at runtime.
-  """
-  def set_merge_auto(auto) when is_boolean(auto) do
-    Application.put_env(:apothecary, :merge_auto, auto)
-    Apothecary.Store.put_setting(:merge_auto, auto)
-    :ok
-  end
-
-  @doc "Merge a worktree branch into main locally. Does NOT delete the branch — cleanup happens via WorktreeManager.release."
-  def local_merge(worktree_path) do
-    base = main_branch()
-
-    with {:ok, branch} <- current_branch(worktree_path),
-         {:ok, _} <- CLI.run("git", ["checkout", base], cd: project_dir()),
-         {:ok, _} <- CLI.run("git", ["merge", branch, "--no-edit"], cd: project_dir()) do
-      :ok
-    else
-      {:error, reason} ->
-        # Try to go back to the base branch if merge fails
-        CLI.run("git", ["checkout", base], cd: project_dir())
-        {:error, reason}
-    end
   end
 
   @doc "Delete a local branch. Uses -D (force) since the branch may already be merged."

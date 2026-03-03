@@ -23,18 +23,11 @@ config :apothecary, ApothecaryWeb.Endpoint, server: true
 config :apothecary, ApothecaryWeb.Endpoint, http: [port: port]
 
 # Apothecary project configuration
-merge_mode =
-  case System.get_env("APOTHECARY_MERGE_MODE") do
-    "github" -> :github
-    "local" -> :local
-    _ -> :local
-  end
-
-merge_auto =
-  case System.get_env("APOTHECARY_MERGE_AUTO") do
-    "false" -> false
-    "manual" -> false
-    _ -> true
+auto_pr =
+  case System.get_env("APOTHECARY_AUTO_PR") do
+    "true" -> true
+    "1" -> true
+    _ -> false
   end
 
 config :apothecary,
@@ -43,8 +36,7 @@ config :apothecary,
   poll_interval: String.to_integer(System.get_env("APOTHECARY_POLL_INTERVAL", "2000")),
   bd_path: System.get_env("APOTHECARY_BD_PATH", "bd"),
   claude_path: System.get_env("APOTHECARY_CLAUDE_PATH", "claude"),
-  merge_mode: merge_mode,
-  merge_auto: merge_auto
+  auto_pr: auto_pr
 
 if config_env() == :prod do
   # Generate a default SECRET_KEY_BASE for local-tool use.

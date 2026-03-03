@@ -12,10 +12,8 @@ config :apothecary,
   project_dir: nil,
   claude_path: "claude",
   mnesia_copies: :disc_copies,
-  # :github (create PRs) or :local (merge locally)
-  merge_mode: :local,
-  # true = auto-finalize (auto-merge/auto-PR), false = manual trigger from dashboard
-  merge_auto: true
+  # true = auto-create PRs when brewer finishes, false = manual trigger from dashboard
+  auto_pr: false
 
 # Configure the endpoint
 config :apothecary, ApothecaryWeb.Endpoint,

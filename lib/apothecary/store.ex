@@ -100,14 +100,9 @@ defmodule Apothecary.Store do
   defp load_persisted_settings do
     # Load persisted merge settings into Application env, overriding config defaults
     # but only if they were previously saved (i.e., user explicitly changed them)
-    case get_setting(:merge_mode) do
+    case get_setting(:auto_pr) do
       nil -> :ok
-      mode -> Application.put_env(:apothecary, :merge_mode, mode)
-    end
-
-    case get_setting(:merge_auto) do
-      nil -> :ok
-      auto -> Application.put_env(:apothecary, :merge_auto, auto)
+      auto -> Application.put_env(:apothecary, :auto_pr, auto)
     end
   end
 

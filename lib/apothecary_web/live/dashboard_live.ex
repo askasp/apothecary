@@ -77,9 +77,8 @@ defmodule ApothecaryWeb.DashboardLive do
       )
       |> assign(:editing_recipe_id, nil)
       |> assign(:project_files, load_project_files())
-      # Merge mode
-      |> assign(:merge_mode, Git.merge_mode())
-      |> assign(:merge_auto, Git.merge_auto?())
+      # Auto PR
+      |> assign(:auto_pr, Git.auto_pr?())
       |> assign(:gh_available, Git.gh_available?())
 
     {:ok, socket}
@@ -356,25 +355,11 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
-  def handle_event("set-merge-mode", %{"mode" => mode}, socket) do
-    mode_atom =
-      case mode do
-        "github" -> :github
-        "local" -> :local
-        _ -> :local
-      end
+  def handle_event("toggle-auto-pr", _params, socket) do
+    new_val = !socket.assigns.auto_pr
+    Git.set_auto_pr(new_val)
 
-    Git.set_merge_mode(mode_atom)
-
-    {:noreply, assign(socket, :merge_mode, mode_atom)}
-  end
-
-  @impl true
-  def handle_event("set-merge-auto", %{"auto" => auto_str}, socket) do
-    auto = auto_str == "true"
-    Git.set_merge_auto(auto)
-
-    {:noreply, assign(socket, :merge_auto, auto)}
+    {:noreply, assign(socket, :auto_pr, new_val)}
   end
 
   @impl true
@@ -466,25 +451,15 @@ defmodule ApothecaryWeb.DashboardLive do
     task = socket.assigns.selected_task
     pr_url = task && Map.get(task, :pr_url)
 
-    case Git.merge_mode() do
-      :github ->
-        cond do
-          is_nil(pr_url) ->
-            {:noreply, put_flash(socket, :error, "No PR URL on this worktree")}
+    cond do
+      is_nil(pr_url) ->
+        {:noreply, put_flash(socket, :error, "No PR URL on this worktree")}
 
-          task.status != "pr_open" ->
-            {:noreply, put_flash(socket, :error, "Worktree is not in pr_open status")}
+      task.status != "pr_open" ->
+        {:noreply, put_flash(socket, :error, "Worktree is not in pr_open status")}
 
-          true ->
-            {:noreply, assign(socket, :pending_action, {:merge, task.id, pr_url})}
-        end
-
-      :local ->
-        if task.status == "pr_open" do
-          {:noreply, assign(socket, :pending_action, {:merge, task.id, nil})}
-        else
-          {:noreply, put_flash(socket, :error, "Worktree is not ready for merge")}
-        end
+      true ->
+        {:noreply, assign(socket, :pending_action, {:merge, task.id, pr_url})}
     end
   end
 
@@ -963,11 +938,8 @@ defmodule ApothecaryWeb.DashboardLive do
       is_nil(task) || task.status != "pr_open" ->
         socket
 
-      Git.merge_mode() == :github && Map.get(task, :pr_url) ->
+      Map.get(task, :pr_url) ->
         assign(socket, :pending_action, {:merge, task.id, task.pr_url})
-
-      Git.merge_mode() == :local ->
-        assign(socket, :pending_action, {:merge, task.id, nil})
 
       true ->
         socket
@@ -1112,40 +1084,14 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp execute_merge(socket, task_id, pr_url) do
-    case Git.merge_mode() do
-      :github ->
-        case Git.merge_pr(pr_url) do
-          :ok ->
-            Ingredients.add_note(task_id, "PR merged from dashboard: #{pr_url}")
-            Ingredients.cleanup_merged_concoction(task_id)
-            put_flash(socket, :info, "PR merged and worktree cleaned up")
+    case Git.merge_pr(pr_url) do
+      :ok ->
+        Ingredients.add_note(task_id, "PR merged from dashboard: #{pr_url}")
+        Ingredients.cleanup_merged_concoction(task_id)
+        put_flash(socket, :info, "PR merged and worktree cleaned up")
 
-          {:error, reason} ->
-            put_flash(socket, :error, "Merge failed: #{inspect(reason)}")
-        end
-
-      :local ->
-        task = Ingredients.show(task_id)
-
-        git_path =
-          case task do
-            {:ok, t} -> t.git_path
-            _ -> nil
-          end
-
-        if git_path do
-          case Git.local_merge(git_path) do
-            :ok ->
-              Ingredients.add_note(task_id, "Branch merged into main locally from dashboard")
-              Ingredients.cleanup_merged_concoction(task_id)
-              put_flash(socket, :info, "Merged into main locally and cleaned up")
-
-            {:error, reason} ->
-              put_flash(socket, :error, "Local merge failed: #{inspect(reason)}")
-          end
-        else
-          put_flash(socket, :error, "No git path found for this concoction")
-        end
+      {:error, reason} ->
+        put_flash(socket, :error, "Merge failed: #{inspect(reason)}")
     end
   end
 
@@ -1153,41 +1099,32 @@ defmodule ApothecaryWeb.DashboardLive do
 
   defp promote_to_assaying(socket, task) do
     task_id = task.id
+    git_path = task.git_path
 
-    case Git.merge_mode() do
-      :github ->
-        git_path = task.git_path
+    if git_path do
+      title = "[#{task_id}] #{task.title}"
 
-        if git_path do
-          title = "[#{task_id}] #{task.title}"
+      case Git.create_pr(git_path, title) do
+        {:ok, pr_url} ->
+          Ingredients.add_note(task_id, "PR created from dashboard: #{pr_url}")
 
-          case Git.create_pr(git_path, title) do
-            {:ok, pr_url} ->
-              Ingredients.add_note(task_id, "PR created from dashboard: #{pr_url}")
+          Ingredients.update_concoction(task_id, %{
+            status: "pr_open",
+            pr_url: pr_url
+          })
 
-              Ingredients.update_concoction(task_id, %{
-                status: "pr_open",
-                pr_url: pr_url
-              })
+          put_flash(socket, :info, "PR created: #{pr_url}")
 
-              put_flash(socket, :info, "PR created: #{pr_url}")
+        {:error, reason} ->
+          Ingredients.add_note(
+            task_id,
+            "PR creation failed: #{inspect(reason)}. Try again or create manually."
+          )
 
-            {:error, reason} ->
-              Ingredients.add_note(
-                task_id,
-                "Manual PR creation failed: #{inspect(reason)}. Try again or create manually."
-              )
-
-              put_flash(socket, :error, "PR creation failed: #{inspect(reason)}")
-          end
-        else
-          put_flash(socket, :error, "No git path found for this concoction")
-        end
-
-      :local ->
-        # In local mode, just move to pr_open for manual merge
-        Ingredients.update_concoction(task_id, %{status: "pr_open"})
-        put_flash(socket, :info, "Moved to assaying for manual merge")
+          put_flash(socket, :error, "PR creation failed: #{inspect(reason)}")
+      end
+    else
+      put_flash(socket, :error, "No git path found for this concoction")
     end
   end
 
@@ -1215,7 +1152,6 @@ defmodule ApothecaryWeb.DashboardLive do
     wt_id = wt.id
     pr_url = Map.get(wt, :pr_url)
     git_path = Map.get(wt, :git_path)
-    merge_mode = Git.merge_mode()
 
     diff_view = %{
       files: [],
@@ -1228,7 +1164,7 @@ defmodule ApothecaryWeb.DashboardLive do
     Elixir.Task.start(fn ->
       result =
         try do
-          fetch_diff(merge_mode, pr_url, git_path)
+          fetch_diff(pr_url, git_path)
         rescue
           e -> {:error, Exception.message(e)}
         end
@@ -1239,14 +1175,7 @@ defmodule ApothecaryWeb.DashboardLive do
     assign(socket, :diff_view, diff_view)
   end
 
-  defp fetch_diff(:local, pr_url, git_path) do
-    with {:error, _} <- try_worktree_diff(git_path),
-         {:error, _} <- try_pr_diff(pr_url) do
-      {:error, "No diff available (no worktree path or PR URL)"}
-    end
-  end
-
-  defp fetch_diff(:github, pr_url, git_path) do
+  defp fetch_diff(pr_url, git_path) do
     with {:error, _} <- try_pr_diff(pr_url),
          {:error, _} <- try_worktree_diff(git_path) do
       {:error, "No diff available (no PR URL or worktree path)"}
@@ -1473,7 +1402,7 @@ defmodule ApothecaryWeb.DashboardLive do
       Enum.group_by(worktrees, fn wt ->
         cond do
           MapSet.member?(active_wt_ids, to_string(wt.id)) -> "running"
-          wt.status == "brew_done" -> "running"
+          wt.status == "brew_done" -> "pr"
           wt.status in ["open", "ready"] -> "ready"
           wt.status in ["in_progress", "claimed"] -> "ready"
           wt.status == "blocked" -> "blocked"
@@ -1764,8 +1693,7 @@ defmodule ApothecaryWeb.DashboardLive do
                   target_count={@target_count}
                   active_count={@active_count}
                   working_count={Enum.count(@agents, &(&1.status == :working))}
-                  merge_mode={@merge_mode}
-                  merge_auto={@merge_auto}
+                  auto_pr={@auto_pr}
                   gh_available={@gh_available}
                 />
                 <.primary_input input_focused={@input_focused} />
