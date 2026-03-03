@@ -4,8 +4,13 @@ defmodule Apothecary.Store do
   use GenServer
   require Logger
 
-  @tables [:apothecary_projects, :apothecary_concoctions, :apothecary_ingredients,
-           :apothecary_recipes, :apothecary_settings]
+  @tables [
+    :apothecary_projects,
+    :apothecary_concoctions,
+    :apothecary_ingredients,
+    :apothecary_recipes,
+    :apothecary_settings
+  ]
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -132,7 +137,10 @@ defmodule Apothecary.Store do
         actual_attrs = :mnesia.table_info(name, :attributes)
 
         if actual_attrs != expected_attrs do
-          Logger.info("Migrating Mnesia table #{name}: #{inspect(actual_attrs)} -> #{inspect(expected_attrs)}")
+          Logger.info(
+            "Migrating Mnesia table #{name}: #{inspect(actual_attrs)} -> #{inspect(expected_attrs)}"
+          )
+
           migrate_table(name, actual_attrs, expected_attrs, opts)
         end
 

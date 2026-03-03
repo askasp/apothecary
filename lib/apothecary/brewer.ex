@@ -562,6 +562,7 @@ defmodule Apothecary.Brewer do
         extra_mcps: extra_mcps,
         project_dir: project_dir
       )
+
     merged = config["mcpServers"]
 
     mcp_path = Path.join(worktree_path, ".mcp.json")
