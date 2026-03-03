@@ -41,10 +41,11 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:page_title, "Dashboard")
       |> assign(:projects, projects)
       |> assign(:current_project, nil)
-      |> assign(:swarm_status, dispatcher_status.status)
-      |> assign(:target_count, max(dispatcher_status.target_count, 1))
-      |> assign(:active_count, dispatcher_status.active_count)
+      |> assign(:swarm_status, :paused)
+      |> assign(:target_count, 1)
+      |> assign(:active_count, 0)
       |> assign(:agents, agents)
+      |> assign(:dispatcher_projects, dispatcher_status[:projects] || %{})
       |> assign(:show_help, false)
       |> assign(:input_focused, false)
       |> assign(:dev_servers, dev_servers)
@@ -129,12 +130,15 @@ defmodule ApothecaryWeb.DashboardLive do
 
     cond do
       is_nil(project_id) && is_nil(current) ->
-        load_dashboard_state(socket, nil)
+        socket
+        |> apply_swarm_state(nil)
+        |> load_dashboard_state(nil)
 
       is_nil(project_id) && not is_nil(current) ->
         socket
         |> assign(:current_project, nil)
         |> assign(:has_project_preview_config, false)
+        |> apply_swarm_state(nil)
         |> load_dashboard_state(nil)
 
       not is_nil(project_id) && (is_nil(current) || current.id != project_id) ->
@@ -143,6 +147,7 @@ defmodule ApothecaryWeb.DashboardLive do
             socket
             |> assign(:current_project, project)
             |> assign(:has_project_preview_config, DevServer.has_config_for_path?(project.path))
+            |> apply_swarm_state(project)
             |> load_dashboard_state(project)
 
           {:error, _} ->
@@ -154,6 +159,22 @@ defmodule ApothecaryWeb.DashboardLive do
       true ->
         socket
     end
+  end
+
+  defp apply_swarm_state(socket, nil) do
+    socket
+    |> assign(:swarm_status, :paused)
+    |> assign(:target_count, 1)
+    |> assign(:active_count, 0)
+  end
+
+  defp apply_swarm_state(socket, project) do
+    project_status = Dispatcher.project_status(project.id)
+
+    socket
+    |> assign(:swarm_status, project_status.status)
+    |> assign(:target_count, max(project_status.target_count, 1))
+    |> assign(:active_count, project_status.active_count)
   end
 
   defp load_dashboard_state(socket, project) do
@@ -264,12 +285,16 @@ defmodule ApothecaryWeb.DashboardLive do
 
     worktrees_by_status = build_worktree_groups(task_items, agents, dev_servers)
 
+    # Extract per-project swarm state for the currently selected project
+    project_status = current_project_swarm_status(socket, status)
+
     socket =
       socket
-      |> assign(:swarm_status, status.status)
-      |> assign(:target_count, status.target_count)
-      |> assign(:active_count, status.active_count)
+      |> assign(:swarm_status, project_status.status)
+      |> assign(:target_count, max(project_status.target_count, 1))
+      |> assign(:active_count, project_status.active_count)
       |> assign(:agents, agents)
+      |> assign(:dispatcher_projects, status[:projects] || %{})
       |> assign(:worktrees_by_status, worktrees_by_status)
       |> assign(:questions, questions)
       |> rebuild_card_ids(worktrees_by_status)
@@ -423,6 +448,9 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("hotkey", %{"metaKey" => true}, socket), do: {:noreply, socket}
+  def handle_event("hotkey", %{"ctrlKey" => true}, socket), do: {:noreply, socket}
+
   def handle_event("hotkey", %{"key" => key}, socket) do
     cond do
       socket.assigns.input_focused and key not in ["Escape"] ->
@@ -458,56 +486,84 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @impl true
   def handle_event("start-swarm", _params, socket) do
-    Dispatcher.start_swarm(socket.assigns.target_count)
+    case socket.assigns.current_project do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Select a project first")}
 
-    {:noreply,
-     put_flash(socket, :info, "Concocting started with #{socket.assigns.target_count} alchemists")}
+      project ->
+        Dispatcher.start_swarm(project.id, socket.assigns.target_count)
+
+        {:noreply,
+         put_flash(
+           socket,
+           :info,
+           "Concocting started with #{socket.assigns.target_count} alchemists"
+         )}
+    end
   end
 
   @impl true
   def handle_event("stop-swarm", _params, socket) do
-    Dispatcher.stop_swarm()
-    {:noreply, put_flash(socket, :info, "Concocting stopped")}
+    case socket.assigns.current_project do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Select a project first")}
+
+      project ->
+        Dispatcher.stop_swarm(project.id)
+        {:noreply, put_flash(socket, :info, "Concocting stopped")}
+    end
   end
 
   @impl true
   def handle_event("inc-agents", _params, socket) do
     count = min(socket.assigns.target_count + 1, 10)
 
-    if socket.assigns.swarm_status == :running do
-      Dispatcher.set_agent_count(count)
+    case socket.assigns.current_project do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Select a project first")}
+
+      project ->
+        if socket.assigns.swarm_status == :running do
+          Dispatcher.set_agent_count(project.id, count)
+        end
+
+        socket = assign(socket, :target_count, count)
+
+        socket =
+          if socket.assigns.swarm_status != :running do
+            put_flash(socket, :info, "Alchemist count set to #{count}")
+          else
+            socket
+          end
+
+        {:noreply, socket}
     end
-
-    socket = assign(socket, :target_count, count)
-
-    socket =
-      if socket.assigns.swarm_status != :running do
-        put_flash(socket, :info, "Alchemist count set to #{count}")
-      else
-        socket
-      end
-
-    {:noreply, socket}
   end
 
   @impl true
   def handle_event("dec-agents", _params, socket) do
     count = max(socket.assigns.target_count - 1, 1)
 
-    if socket.assigns.swarm_status == :running do
-      Dispatcher.set_agent_count(count)
+    case socket.assigns.current_project do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Select a project first")}
+
+      project ->
+        if socket.assigns.swarm_status == :running do
+          Dispatcher.set_agent_count(project.id, count)
+        end
+
+        socket = assign(socket, :target_count, count)
+
+        socket =
+          if socket.assigns.swarm_status != :running do
+            put_flash(socket, :info, "Alchemist count set to #{count}")
+          else
+            socket
+          end
+
+        {:noreply, socket}
     end
-
-    socket = assign(socket, :target_count, count)
-
-    socket =
-      if socket.assigns.swarm_status != :running do
-        put_flash(socket, :info, "Alchemist count set to #{count}")
-      else
-        socket
-      end
-
-    {:noreply, socket}
   end
 
   @impl true
@@ -739,7 +795,9 @@ defmodule ApothecaryWeb.DashboardLive do
 
         # Set concoction back to open so it gets dispatched
         Ingredients.update_concoction(concoction_id, %{status: "open"})
-        {:noreply, put_flash(socket, :info, "Merge fix approved — concoction will be re-dispatched")}
+
+        {:noreply,
+         put_flash(socket, :info, "Merge fix approved — concoction will be re-dispatched")}
     end
   end
 
@@ -1252,17 +1310,23 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("s", socket) do
-    if socket.assigns.swarm_status == :running do
-      Dispatcher.stop_swarm()
-      put_flash(socket, :info, "Concocting stopped")
-    else
-      Dispatcher.start_swarm(socket.assigns.target_count)
+    case socket.assigns.current_project do
+      nil ->
+        put_flash(socket, :error, "Select a project first")
 
-      put_flash(
-        socket,
-        :info,
-        "Concocting started with #{socket.assigns.target_count} alchemists"
-      )
+      project ->
+        if socket.assigns.swarm_status == :running do
+          Dispatcher.stop_swarm(project.id)
+          put_flash(socket, :info, "Concocting stopped")
+        else
+          Dispatcher.start_swarm(project.id, socket.assigns.target_count)
+
+          put_flash(
+            socket,
+            :info,
+            "Concocting started with #{socket.assigns.target_count} alchemists"
+          )
+        end
     end
   end
 
@@ -1271,34 +1335,46 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey(key, socket) when key in ["+", "="] do
-    count = min(socket.assigns.target_count + 1, 10)
+    case socket.assigns.current_project do
+      nil ->
+        socket
 
-    if socket.assigns.swarm_status == :running do
-      Dispatcher.set_agent_count(count)
-    end
+      project ->
+        count = min(socket.assigns.target_count + 1, 10)
 
-    socket = assign(socket, :target_count, count)
+        if socket.assigns.swarm_status == :running do
+          Dispatcher.set_agent_count(project.id, count)
+        end
 
-    if socket.assigns.swarm_status != :running do
-      put_flash(socket, :info, "Alchemist count set to #{count}")
-    else
-      socket
+        socket = assign(socket, :target_count, count)
+
+        if socket.assigns.swarm_status != :running do
+          put_flash(socket, :info, "Alchemist count set to #{count}")
+        else
+          socket
+        end
     end
   end
 
   defp handle_hotkey("-", socket) do
-    count = max(socket.assigns.target_count - 1, 1)
+    case socket.assigns.current_project do
+      nil ->
+        socket
 
-    if socket.assigns.swarm_status == :running do
-      Dispatcher.set_agent_count(count)
-    end
+      project ->
+        count = max(socket.assigns.target_count - 1, 1)
 
-    socket = assign(socket, :target_count, count)
+        if socket.assigns.swarm_status == :running do
+          Dispatcher.set_agent_count(project.id, count)
+        end
 
-    if socket.assigns.swarm_status != :running do
-      put_flash(socket, :info, "Alchemist count set to #{count}")
-    else
-      socket
+        socket = assign(socket, :target_count, count)
+
+        if socket.assigns.swarm_status != :running do
+          put_flash(socket, :info, "Alchemist count set to #{count}")
+        else
+          socket
+        end
     end
   end
 
@@ -2251,10 +2327,43 @@ defmodule ApothecaryWeb.DashboardLive do
     |> Enum.each(fn a -> Phoenix.PubSub.unsubscribe(@pubsub, "brewer:#{a.id}") end)
   end
 
+  defp current_project_swarm_status(socket, dispatcher_status) do
+    case socket.assigns.current_project do
+      nil ->
+        # No project selected — show aggregate
+        %{
+          status: dispatcher_status.status,
+          target_count: dispatcher_status.target_count,
+          active_count: dispatcher_status.active_count
+        }
+
+      project ->
+        projects = dispatcher_status[:projects] || %{}
+
+        case projects[project.id] do
+          nil -> %{status: :paused, target_count: 0, active_count: 0}
+          ps -> ps
+        end
+    end
+  end
+
   defp enrich_agents_with_pids(agents_map) do
     Enum.map(agents_map, fn {pid, agent_state} ->
       %{agent_state | pid: pid}
     end)
+  end
+
+  defp project_scoped_agents(agents, nil, _dispatcher_projects), do: agents
+
+  defp project_scoped_agents(agents, project, dispatcher_projects) do
+    case dispatcher_projects[project.id] do
+      %{agents: project_agents} when is_map(project_agents) ->
+        project_pids = MapSet.new(Map.keys(project_agents))
+        Enum.filter(agents, fn a -> MapSet.member?(project_pids, a.pid) end)
+
+      _ ->
+        []
+    end
   end
 
   defp selected_card_id(assigns) do
@@ -2361,11 +2470,13 @@ defmodule ApothecaryWeb.DashboardLive do
                       Ready to mix?
                     </h2>
                     <%!-- Concoct + alchemist controls --%>
+                    <% project_agents =
+                      project_scoped_agents(@agents, @current_project, @dispatcher_projects) %>
                     <.concoct_controls
                       swarm_status={@swarm_status}
                       target_count={@target_count}
                       active_count={@active_count}
-                      working_count={Enum.count(@agents, &(&1.status == :working))}
+                      working_count={Enum.count(project_agents, &(&1.status == :working))}
                       auto_pr={@auto_pr}
                       gh_available={@gh_available}
                     />
@@ -2373,7 +2484,7 @@ defmodule ApothecaryWeb.DashboardLive do
                     <div class="text-base-content/20 text-[10px] mt-1 px-1">
                       Start with <span class="text-primary/40">?</span> to ask about the codebase
                     </div>
-                    <.activity_ticker agents={@agents} />
+                    <.activity_ticker agents={project_agents} />
                   <% end %>
                 <% end %>
               </div>

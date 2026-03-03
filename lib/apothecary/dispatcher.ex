@@ -2,10 +2,10 @@ defmodule Apothecary.Dispatcher do
   @moduledoc """
   Coordinates concoction assignment between the ingredient queue and brewers.
 
-  Concoction-centric dispatch model:
-  - Each concoction gets its own git worktree and one brewer
-  - Brewers work on all ingredients within their assigned concoction
-  - Different concoctions can run in parallel across different brewers
+  Per-project dispatch model:
+  - Each project has its own pool of brewers (alchemists)
+  - Brewers are scoped to a single project and only pick up that project's concoctions
+  - You can start/stop concocting independently per project
   """
 
   use GenServer
@@ -24,19 +24,19 @@ defmodule Apothecary.Dispatcher do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @doc "Start the swarm with N brewers."
-  def start_swarm(brewer_count) do
-    GenServer.call(__MODULE__, {:start_swarm, brewer_count}, 60_000)
+  @doc "Start the swarm for a specific project with N brewers."
+  def start_swarm(project_id, brewer_count) do
+    GenServer.call(__MODULE__, {:start_swarm, project_id, brewer_count}, 60_000)
   end
 
-  @doc "Stop the swarm, terminating all brewers."
-  def stop_swarm do
-    GenServer.call(__MODULE__, :stop_swarm, 30_000)
+  @doc "Stop the swarm for a specific project, terminating its brewers."
+  def stop_swarm(project_id) do
+    GenServer.call(__MODULE__, {:stop_swarm, project_id}, 30_000)
   end
 
-  @doc "Set the target brewer count (scale up/down)."
-  def set_agent_count(count) do
-    GenServer.call(__MODULE__, {:set_agent_count, count}, 60_000)
+  @doc "Set the target brewer count for a specific project (scale up/down)."
+  def set_agent_count(project_id, count) do
+    GenServer.call(__MODULE__, {:set_agent_count, project_id, count}, 60_000)
   end
 
   @doc "Report a brewer as idle and ready for the next concoction."
@@ -44,9 +44,14 @@ defmodule Apothecary.Dispatcher do
     GenServer.cast(__MODULE__, {:agent_idle, brewer_pid})
   end
 
-  @doc "Get dispatcher status."
+  @doc "Get dispatcher status for all projects."
   def status do
     GenServer.call(__MODULE__, :status)
+  end
+
+  @doc "Get dispatcher status for a specific project."
+  def project_status(project_id) do
+    GenServer.call(__MODULE__, {:project_status, project_id})
   end
 
   @doc "Subscribe to dispatcher updates."
@@ -62,206 +67,323 @@ defmodule Apothecary.Dispatcher do
     Apothecary.Ingredients.subscribe()
 
     state = %{
-      status: :paused,
-      target_count: 0,
-      agent_pids: [],
-      idle_agents: [],
-      agents: %{},
-      # Track consecutive fast failures per brewer slot for backoff
-      # %{slot_id => %{count: N, last_failure: monotonic_time}}
-      failure_tracker: %{},
-      backoff_timers: %{}
+      # Global brewer ID counter
+      next_brewer_id: 1,
+      # Per-project pools: %{project_id => pool}
+      projects: %{},
+      # Reverse lookup: pid → project_id
+      brewer_projects: %{},
+      # Whether periodic dispatch is scheduled
+      dispatch_scheduled: false
     }
 
     {:ok, state}
   end
 
   @impl true
-  def handle_call({:start_swarm, count}, _from, state) do
-    Logger.info("Starting swarm with #{count} brewers")
-    state = %{state | status: :running, target_count: count}
-    state = scale_agents(state)
-    schedule_dispatch()
+  def handle_call({:start_swarm, project_id, count}, _from, state) do
+    Logger.info("Starting swarm for project #{project_id} with #{count} brewers")
+
+    pool = get_or_create_pool(state, project_id)
+    pool = %{pool | status: :running, target_count: count}
+    state = put_pool(state, project_id, pool)
+    state = scale_project_agents(state, project_id)
+
+    ensure_dispatch_scheduled(state)
     broadcast(state)
     {:reply, :ok, state}
   end
 
   @impl true
-  def handle_call(:stop_swarm, _from, state) do
-    Logger.info("Stopping swarm")
+  def handle_call({:stop_swarm, project_id}, _from, state) do
+    Logger.info("Stopping swarm for project #{project_id}")
 
-    Enum.each(state.agent_pids, fn pid ->
-      Apothecary.BrewerSupervisor.stop_brewer(pid)
-    end)
+    case state.projects[project_id] do
+      nil ->
+        {:reply, :ok, state}
 
-    # Cancel any pending backoff timers
-    Enum.each(state.backoff_timers, fn {_slot, timer} -> Process.cancel_timer(timer) end)
+      pool ->
+        # Stop all brewers in this project's pool
+        Enum.each(pool.agent_pids, fn pid ->
+          Apothecary.BrewerSupervisor.stop_brewer(pid)
+        end)
 
-    state = %{
-      state
-      | status: :paused,
-        target_count: 0,
-        agent_pids: [],
-        idle_agents: [],
-        agents: %{},
-        failure_tracker: %{},
-        backoff_timers: %{}
-    }
+        # Cancel any pending backoff timers
+        Enum.each(pool.backoff_timers, fn {_slot, timer} -> Process.cancel_timer(timer) end)
 
-    broadcast(state)
-    {:reply, :ok, state}
+        # Clean up brewer_projects mappings
+        brewer_projects = Map.drop(state.brewer_projects, pool.agent_pids)
+
+        empty_pool = new_pool()
+        state = %{state | brewer_projects: brewer_projects}
+        state = put_pool(state, project_id, empty_pool)
+
+        broadcast(state)
+        {:reply, :ok, state}
+    end
   end
 
   @impl true
-  def handle_call({:set_agent_count, count}, _from, state) do
-    state = %{state | target_count: count}
-    state = scale_agents(state)
+  def handle_call({:set_agent_count, project_id, count}, _from, state) do
+    pool = get_or_create_pool(state, project_id)
+    pool = %{pool | target_count: count}
+    state = put_pool(state, project_id, pool)
+    state = scale_project_agents(state, project_id)
     broadcast(state)
     {:reply, :ok, state}
   end
 
   @impl true
   def handle_call(:status, _from, state) do
-    info = %{
-      status: state.status,
-      target_count: state.target_count,
-      active_count: length(state.agent_pids),
-      idle_count: length(state.idle_agents),
-      agents: state.agents
-    }
+    info = build_global_status(state)
+    {:reply, info, state}
+  end
 
+  @impl true
+  def handle_call({:project_status, project_id}, _from, state) do
+    info = build_project_status(state, project_id)
     {:reply, info, state}
   end
 
   @impl true
   def handle_cast({:agent_idle, pid}, state) do
-    idle = if pid in state.idle_agents, do: state.idle_agents, else: [pid | state.idle_agents]
+    project_id = state.brewer_projects[pid]
 
-    # Reset failure counter on successful idle (brewer completed work)
-    brewer_state = state.agents[pid]
-    slot_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(pid)
-    failure_tracker = Map.delete(state.failure_tracker, slot_id)
+    state =
+      if project_id do
+        pool = state.projects[project_id]
 
-    state = %{state | idle_agents: idle, failure_tracker: failure_tracker}
-    state = try_dispatch(state)
+        if pool do
+          idle =
+            if pid in pool.idle_agents, do: pool.idle_agents, else: [pid | pool.idle_agents]
+
+          # Reset failure counter on successful idle (brewer completed work)
+          brewer_state = pool.agents[pid]
+          slot_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(pid)
+          failure_tracker = Map.delete(pool.failure_tracker, slot_id)
+
+          pool = %{pool | idle_agents: idle, failure_tracker: failure_tracker}
+          state = put_pool(state, project_id, pool)
+          try_dispatch(state)
+        else
+          state
+        end
+      else
+        # Brewer not associated with any project — shouldn't happen but handle gracefully
+        Logger.warning("Brewer #{inspect(pid)} reported idle but has no project association")
+        state
+      end
+
     broadcast(state)
     {:noreply, state}
   end
 
   @impl true
   def handle_cast({:agent_update, pid, brewer_state}, state) do
-    agents = Map.put(state.agents, pid, brewer_state)
-    state = %{state | agents: agents}
-    broadcast(state)
-    {:noreply, state}
-  end
+    project_id = state.brewer_projects[pid]
 
-  @impl true
-  def handle_info(:dispatch, %{status: :running} = state) do
-    state = try_dispatch(state)
-    schedule_dispatch()
+    state =
+      if project_id do
+        pool = state.projects[project_id]
+
+        if pool do
+          agents = Map.put(pool.agents, pid, brewer_state)
+          put_pool(state, project_id, %{pool | agents: agents})
+        else
+          state
+        end
+      else
+        state
+      end
+
+    broadcast(state)
     {:noreply, state}
   end
 
   @impl true
   def handle_info(:dispatch, state) do
+    state = try_dispatch(state)
+    state = maybe_schedule_dispatch(state)
     {:noreply, state}
   end
 
   # React to ingredient state changes (replaces polling)
   @impl true
-  def handle_info({:ingredients_update, _state}, %{status: :running} = state) do
+  def handle_info({:ingredients_update, _ingredient_state}, state) do
     state = try_dispatch(state)
-    {:noreply, state}
-  end
-
-  def handle_info({:ingredients_update, _state}, state) do
     {:noreply, state}
   end
 
   @impl true
   def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
-    brewer_state = state.agents[pid]
-    slot_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(pid)
-    Logger.warning("Brewer #{inspect(slot_id)} (#{inspect(pid)}) went down: #{inspect(reason)}")
+    project_id = state.brewer_projects[pid]
 
-    agent_pids = List.delete(state.agent_pids, pid)
-    idle_agents = List.delete(state.idle_agents, pid)
-    agents = Map.delete(state.agents, pid)
-    state = %{state | agent_pids: agent_pids, idle_agents: idle_agents, agents: agents}
+    state =
+      if project_id do
+        pool = state.projects[project_id]
 
-    # Track failure for backoff
-    state = record_failure(state, slot_id)
+        if pool do
+          brewer_state = pool.agents[pid]
+          slot_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(pid)
 
-    if should_backoff?(state, slot_id) do
-      Logger.warning(
-        "Brewer slot #{slot_id} hit #{@max_fast_failures} fast failures, " <>
-          "backing off #{div(@backoff_ms, 1000)}s before respawn"
-      )
+          Logger.warning(
+            "Brewer #{inspect(slot_id)} (#{inspect(pid)}) in project #{project_id} went down: #{inspect(reason)}"
+          )
 
-      timer = Process.send_after(self(), {:backoff_expired, slot_id}, @backoff_ms)
-      state = put_in(state.backoff_timers[slot_id], timer)
-      broadcast(state)
-      {:noreply, state}
-    else
-      state = scale_agents(state)
-      broadcast(state)
-      {:noreply, state}
-    end
-  end
+          agent_pids = List.delete(pool.agent_pids, pid)
+          idle_agents = List.delete(pool.idle_agents, pid)
+          agents = Map.delete(pool.agents, pid)
 
-  @impl true
-  def handle_info({:backoff_expired, slot_id}, state) do
-    Logger.info("Backoff expired for brewer slot #{slot_id}, attempting respawn")
-    state = %{state | backoff_timers: Map.delete(state.backoff_timers, slot_id)}
-    state = scale_agents(state)
+          pool = %{pool | agent_pids: agent_pids, idle_agents: idle_agents, agents: agents}
+          pool = record_pool_failure(pool, slot_id)
+
+          brewer_projects = Map.delete(state.brewer_projects, pid)
+          state = %{state | brewer_projects: brewer_projects}
+
+          if should_pool_backoff?(pool, slot_id) do
+            Logger.warning(
+              "Brewer slot #{slot_id} in project #{project_id} hit #{@max_fast_failures} fast failures, " <>
+                "backing off #{div(@backoff_ms, 1000)}s before respawn"
+            )
+
+            timer =
+              Process.send_after(
+                self(),
+                {:backoff_expired, project_id, slot_id},
+                @backoff_ms
+              )
+
+            pool = put_in(pool.backoff_timers[slot_id], timer)
+            put_pool(state, project_id, pool)
+          else
+            state = put_pool(state, project_id, pool)
+            scale_project_agents(state, project_id)
+          end
+        else
+          Map.update!(state, :brewer_projects, &Map.delete(&1, pid))
+        end
+      else
+        state
+      end
+
     broadcast(state)
     {:noreply, state}
   end
 
-  # Private
+  @impl true
+  def handle_info({:backoff_expired, project_id, slot_id}, state) do
+    Logger.info(
+      "Backoff expired for brewer slot #{slot_id} in project #{project_id}, attempting respawn"
+    )
+
+    state =
+      case state.projects[project_id] do
+        nil ->
+          state
+
+        pool ->
+          pool = %{pool | backoff_timers: Map.delete(pool.backoff_timers, slot_id)}
+          state = put_pool(state, project_id, pool)
+          scale_project_agents(state, project_id)
+      end
+
+    broadcast(state)
+    {:noreply, state}
+  end
+
+  # Private — Pool management
+
+  defp new_pool do
+    %{
+      status: :paused,
+      target_count: 0,
+      agent_pids: [],
+      idle_agents: [],
+      agents: %{},
+      failure_tracker: %{},
+      backoff_timers: %{}
+    }
+  end
+
+  defp get_or_create_pool(state, project_id) do
+    state.projects[project_id] || new_pool()
+  end
+
+  defp put_pool(state, project_id, pool) do
+    put_in(state.projects[project_id], pool)
+  end
+
+  # Private — Scheduling
+
+  defp ensure_dispatch_scheduled(state) do
+    unless state.dispatch_scheduled do
+      schedule_dispatch()
+    end
+  end
+
+  defp maybe_schedule_dispatch(state) do
+    any_running? = Enum.any?(state.projects, fn {_id, pool} -> pool.status == :running end)
+
+    if any_running? do
+      schedule_dispatch()
+      %{state | dispatch_scheduled: true}
+    else
+      %{state | dispatch_scheduled: false}
+    end
+  end
 
   defp schedule_dispatch do
     Process.send_after(self(), :dispatch, @dispatch_interval)
   end
 
-  defp scale_agents(%{status: :paused} = state), do: state
+  # Private — Scaling
 
-  defp scale_agents(state) do
-    current = length(state.agent_pids)
-    target = state.target_count
+  defp scale_project_agents(state, project_id) do
+    pool = state.projects[project_id]
+    if is_nil(pool) or pool.status == :paused, do: state, else: do_scale(state, project_id, pool)
+  end
+
+  defp do_scale(state, project_id, pool) do
+    current = length(pool.agent_pids)
+    target = pool.target_count
 
     cond do
       current < target ->
-        new_agents =
-          for id <- (current + 1)..target do
-            case Apothecary.BrewerSupervisor.start_brewer(id) do
-              {:ok, pid} ->
-                Process.monitor(pid)
-                pid
+        {new_pids, next_id} = start_n_brewers(state.next_brewer_id, target - current)
 
-              {:error, reason} ->
-                Logger.error("Failed to start brewer #{id}: #{inspect(reason)}")
-                nil
-            end
-          end
-          |> Enum.reject(&is_nil/1)
+        # Track project association for each new brewer
+        new_mappings = Map.new(new_pids, fn pid -> {pid, project_id} end)
+
+        pool = %{
+          pool
+          | agent_pids: pool.agent_pids ++ new_pids,
+            idle_agents: pool.idle_agents ++ new_pids
+        }
 
         %{
           state
-          | agent_pids: state.agent_pids ++ new_agents,
-            idle_agents: state.idle_agents ++ new_agents
+          | next_brewer_id: next_id,
+            brewer_projects: Map.merge(state.brewer_projects, new_mappings),
+            projects: Map.put(state.projects, project_id, pool)
         }
 
       current > target ->
-        {to_stop, to_keep} = Enum.split(state.agent_pids, current - target)
+        {to_stop, to_keep} = Enum.split(pool.agent_pids, current - target)
         Enum.each(to_stop, &Apothecary.BrewerSupervisor.stop_brewer/1)
+
+        pool = %{
+          pool
+          | agent_pids: to_keep,
+            idle_agents: pool.idle_agents -- to_stop,
+            agents: Map.drop(pool.agents, to_stop)
+        }
+
+        brewer_projects = Map.drop(state.brewer_projects, to_stop)
 
         %{
           state
-          | agent_pids: to_keep,
-            idle_agents: state.idle_agents -- to_stop,
-            agents: Map.drop(state.agents, to_stop)
+          | brewer_projects: brewer_projects,
+            projects: Map.put(state.projects, project_id, pool)
         }
 
       true ->
@@ -269,63 +391,129 @@ defmodule Apothecary.Dispatcher do
     end
   end
 
-  defp try_dispatch(%{idle_agents: []} = state), do: state
-  defp try_dispatch(%{status: :paused} = state), do: state
+  defp start_n_brewers(start_id, count) do
+    pids =
+      for id <- start_id..(start_id + count - 1) do
+        case Apothecary.BrewerSupervisor.start_brewer(id) do
+          {:ok, pid} ->
+            Process.monitor(pid)
+            pid
+
+          {:error, reason} ->
+            Logger.error("Failed to start brewer #{id}: #{inspect(reason)}")
+            nil
+        end
+      end
+      |> Enum.reject(&is_nil/1)
+
+    {pids, start_id + count}
+  end
+
+  # Private — Dispatch
 
   defp try_dispatch(state) do
-    case Apothecary.Ingredients.ready_concoctions() do
+    Enum.reduce(state.projects, state, fn {project_id, pool}, acc ->
+      if pool.status == :running and pool.idle_agents != [] do
+        try_dispatch_project(acc, project_id)
+      else
+        acc
+      end
+    end)
+  end
+
+  defp try_dispatch_project(state, project_id) do
+    case Apothecary.Ingredients.ready_concoctions(project_id: project_id) do
       [] ->
         state
 
       concoctions ->
-        dispatch_first_available(concoctions, state)
+        dispatch_first_available(concoctions, state, project_id)
     end
   end
 
-  defp dispatch_first_available([], state), do: state
-  defp dispatch_first_available(_concoctions, %{idle_agents: []} = state), do: state
+  defp dispatch_first_available([], state, _project_id), do: state
 
-  defp dispatch_first_available([concoction | rest], state) do
-    [brewer_pid | _] = state.idle_agents
-    brewer_state = state.agents[brewer_pid]
-    brewer_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(brewer_pid)
+  defp dispatch_first_available(_concoctions, state, project_id) do
+    pool = state.projects[project_id]
+    if is_nil(pool) or pool.idle_agents == [], do: state, else: do_dispatch(state, project_id)
+  end
 
-    # Atomically claim the concoction
-    case Apothecary.Ingredients.claim_concoction(concoction.id, brewer_id) do
-      {:ok, claimed} ->
-        project_dir = resolve_project_dir(concoction)
+  defp do_dispatch(state, project_id) do
+    pool = state.projects[project_id]
 
-        if concoction.kind == "question" do
-          # Questions run read-only against the project directory — no worktree needed
-          [_ | rest_idle] = state.idle_agents
-          Apothecary.Brewer.assign_concoction(brewer_pid, claimed, project_dir, nil, project_dir)
-          %{state | idle_agents: rest_idle}
-        else
-          # Task concoctions get their own git worktree
-          case ensure_git_worktree(concoction, project_dir) do
-            {:ok, path, branch} ->
-              Apothecary.Ingredients.update_concoction(concoction.id, %{
-                git_path: path,
-                git_branch: branch
-              })
+    case Apothecary.Ingredients.ready_concoctions(project_id: project_id) do
+      [] ->
+        state
 
-              [_ | rest_idle] = state.idle_agents
-              Apothecary.Brewer.assign_concoction(brewer_pid, claimed, path, branch, project_dir)
-              %{state | idle_agents: rest_idle}
+      [concoction | rest] ->
+        [brewer_pid | _] = pool.idle_agents
+        brewer_state = pool.agents[brewer_pid]
+        brewer_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(brewer_pid)
 
-            {:error, reason} ->
-              Logger.error(
-                "Failed to create git worktree for #{concoction.id}: #{inspect(reason)}"
+        # Atomically claim the concoction
+        case Apothecary.Ingredients.claim_concoction(concoction.id, brewer_id) do
+          {:ok, claimed} ->
+            project_dir = resolve_project_dir(concoction)
+
+            if concoction.kind == "question" do
+              # Questions run read-only against the project directory — no worktree needed
+              [_ | rest_idle] = pool.idle_agents
+              pool = %{pool | idle_agents: rest_idle}
+              state = put_pool(state, project_id, pool)
+
+              Apothecary.Brewer.assign_concoction(
+                brewer_pid,
+                claimed,
+                project_dir,
+                nil,
+                project_dir
               )
 
-              Apothecary.Ingredients.release_concoction(concoction.id)
-              dispatch_first_available(rest, state)
-          end
-        end
+              state
+            else
+              # Task concoctions get their own git worktree
+              case ensure_git_worktree(concoction, project_dir) do
+                {:ok, path, branch} ->
+                  Apothecary.Ingredients.update_concoction(concoction.id, %{
+                    git_path: path,
+                    git_branch: branch
+                  })
 
-      {:error, _} ->
-        dispatch_first_available(rest, state)
+                  [_ | rest_idle] = pool.idle_agents
+                  pool = %{pool | idle_agents: rest_idle}
+                  state = put_pool(state, project_id, pool)
+
+                  Apothecary.Brewer.assign_concoction(
+                    brewer_pid,
+                    claimed,
+                    path,
+                    branch,
+                    project_dir
+                  )
+
+                  state
+
+                {:error, reason} ->
+                  Logger.error(
+                    "Failed to create git worktree for #{concoction.id}: #{inspect(reason)}"
+                  )
+
+                  Apothecary.Ingredients.release_concoction(concoction.id)
+                  dispatch_remaining(rest, state, project_id)
+              end
+            end
+
+          {:error, _} ->
+            dispatch_remaining(rest, state, project_id)
+        end
     end
+  end
+
+  defp dispatch_remaining([], state, _project_id), do: state
+
+  defp dispatch_remaining(_rest, state, project_id) do
+    # Retry dispatch for remaining concoctions
+    do_dispatch(state, project_id)
   end
 
   defp ensure_git_worktree(%{git_path: path, git_branch: branch}, project_dir)
@@ -351,14 +539,15 @@ defmodule Apothecary.Dispatcher do
 
   defp resolve_project_dir(_), do: nil
 
-  defp record_failure(state, slot_id) do
+  # Private — Failure tracking (per-pool)
+
+  defp record_pool_failure(pool, slot_id) do
     now = System.monotonic_time(:millisecond)
 
     entry =
-      case state.failure_tracker[slot_id] do
+      case pool.failure_tracker[slot_id] do
         %{count: count, first_failure: first} ->
           if now - first > @fast_failure_window_ms do
-            # Window expired, start fresh
             %{count: 1, first_failure: now}
           else
             %{count: count + 1, first_failure: first}
@@ -368,27 +557,71 @@ defmodule Apothecary.Dispatcher do
           %{count: 1, first_failure: now}
       end
 
-    %{state | failure_tracker: Map.put(state.failure_tracker, slot_id, entry)}
+    %{pool | failure_tracker: Map.put(pool.failure_tracker, slot_id, entry)}
   end
 
-  defp should_backoff?(state, slot_id) do
-    case state.failure_tracker[slot_id] do
+  defp should_pool_backoff?(pool, slot_id) do
+    case pool.failure_tracker[slot_id] do
       %{count: count} when count >= @max_fast_failures -> true
       _ -> false
     end
   end
 
-  defp broadcast(state) do
-    Phoenix.PubSub.broadcast(@pubsub, @topic, {:dispatcher_update, status_map(state)})
+  # Private — Status building
+
+  defp build_global_status(state) do
+    # Aggregate across all projects for backward-compatible fields
+    all_agents =
+      Enum.reduce(state.projects, %{}, fn {_id, pool}, acc ->
+        Map.merge(acc, pool.agents)
+      end)
+
+    total_target =
+      Enum.reduce(state.projects, 0, fn {_id, pool}, acc -> acc + pool.target_count end)
+
+    total_active =
+      Enum.reduce(state.projects, 0, fn {_id, pool}, acc -> acc + length(pool.agent_pids) end)
+
+    total_idle =
+      Enum.reduce(state.projects, 0, fn {_id, pool}, acc -> acc + length(pool.idle_agents) end)
+
+    any_running? = Enum.any?(state.projects, fn {_id, pool} -> pool.status == :running end)
+
+    %{
+      # Aggregate status for backward compat
+      status: if(any_running?, do: :running, else: :paused),
+      target_count: total_target,
+      active_count: total_active,
+      idle_count: total_idle,
+      agents: all_agents,
+      # Per-project breakdown
+      projects:
+        Map.new(state.projects, fn {project_id, pool} ->
+          {project_id, pool_status(pool)}
+        end)
+    }
   end
 
-  defp status_map(state) do
+  defp build_project_status(state, project_id) do
+    case state.projects[project_id] do
+      nil -> pool_status(new_pool())
+      pool -> pool_status(pool)
+    end
+  end
+
+  defp pool_status(pool) do
     %{
-      status: state.status,
-      target_count: state.target_count,
-      active_count: length(state.agent_pids),
-      idle_count: length(state.idle_agents),
-      agents: state.agents
+      status: pool.status,
+      target_count: pool.target_count,
+      active_count: length(pool.agent_pids),
+      idle_count: length(pool.idle_agents),
+      agents: pool.agents
     }
+  end
+
+  # Private — Broadcast
+
+  defp broadcast(state) do
+    Phoenix.PubSub.broadcast(@pubsub, @topic, {:dispatcher_update, build_global_status(state)})
   end
 end
