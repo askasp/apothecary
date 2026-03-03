@@ -32,6 +32,11 @@ defmodule Apothecary.DevServer do
     GenServer.call(__MODULE__, {:start_server, worktree_id}, 30_000)
   end
 
+  @doc "Start a dev server for a project (main repo, not a worktree)."
+  def start_project_server(project_id, project_path) do
+    GenServer.call(__MODULE__, {:start_project_server, project_id, project_path}, 30_000)
+  end
+
   @doc "Stop a dev server for a worktree."
   def stop_server(worktree_id) do
     GenServer.call(__MODULE__, {:stop_server, worktree_id}, 15_000)
@@ -55,6 +60,19 @@ defmodule Apothecary.DevServer do
   @doc "Check if a worktree has a dev config (explicit or auto-detected)."
   def has_config?(worktree_id) do
     GenServer.call(__MODULE__, {:has_config, worktree_id})
+  end
+
+  @doc "Check if a path has a dev config (explicit or auto-detected)."
+  def has_config_for_path?(path) do
+    case DevConfig.load(path) do
+      {:ok, _} -> true
+      :not_found ->
+        case DevConfig.detect(path) do
+          {:ok, _} -> true
+          _ -> false
+        end
+      _ -> false
+    end
   end
 
   # --- GenServer Callbacks ---
@@ -89,6 +107,27 @@ defmodule Apothecary.DevServer do
               {:error, reason} ->
                 {:reply, {:error, reason}, state}
             end
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
+    end
+  end
+
+  @impl true
+  def handle_call({:start_project_server, project_id, project_path}, _from, state) do
+    case Map.get(state.servers, project_id) do
+      %{status: status} when status in [:starting, :running] ->
+        {:reply, {:error, :already_running}, state}
+
+      _ ->
+        case load_or_detect_config(project_path) do
+          {:ok, config} ->
+            {state, result} = do_start_server(project_id, project_path, config, state)
+            {:reply, result, state}
+
+          :not_found ->
+            {:reply, {:error, :no_dev_config}, state}
 
           {:error, reason} ->
             {:reply, {:error, reason}, state}

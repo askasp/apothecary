@@ -342,6 +342,11 @@ defmodule ApothecaryWeb.DashboardLive do
   def handle_info({:bootstrap_complete, _name, {:ok, project}}, socket) do
     projects = Projects.list_active()
 
+    # Auto-start dev server for the new project
+    if DevServer.has_config_for_path?(project.path) do
+      DevServer.start_project_server(project.id, project.path)
+    end
+
     {:noreply,
      socket
      |> assign(
@@ -515,6 +520,42 @@ defmodule ApothecaryWeb.DashboardLive do
   def handle_event("stop-dev", %{"id" => wt_id}, socket) do
     DevServer.stop_server(wt_id)
     {:noreply, put_flash(socket, :info, "Preview stopped for #{wt_id}")}
+  end
+
+  # Project-level dev server controls
+  @impl true
+  def handle_event("start-project-dev", _params, socket) do
+    project = socket.assigns.current_project
+
+    if project do
+      case DevServer.start_project_server(project.id, project.path) do
+        {:ok, _base_port} ->
+          {:noreply, put_flash(socket, :info, "Starting dev server for #{project.name}")}
+
+        {:error, :no_dev_config} ->
+          {:noreply, put_flash(socket, :error, "Could not detect dev server config for this project")}
+
+        {:error, :already_running} ->
+          {:noreply, put_flash(socket, :info, "Dev server already running")}
+
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Failed to start: #{inspect(reason)}")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("stop-project-dev", _params, socket) do
+    project = socket.assigns.current_project
+
+    if project do
+      DevServer.stop_server(project.id)
+      {:noreply, put_flash(socket, :info, "Dev server stopped")}
+    else
+      {:noreply, socket}
+    end
   end
 
   # Card inline task creation
@@ -2048,6 +2089,14 @@ defmodule ApothecaryWeb.DashboardLive do
                 <.primary_input input_focused={@input_focused} />
                 <.activity_ticker agents={@agents} />
                 <% end %>
+              </div>
+
+              <%!-- Project preview --%>
+              <div :if={@current_project} class="max-w-2xl mx-auto pb-2 px-1 sm:px-0">
+                <.project_preview
+                  project={@current_project}
+                  dev_server={@dev_servers[@current_project.id]}
+                />
               </div>
 
               <%!-- Lane: STOCKROOM — ready + blocked --%>

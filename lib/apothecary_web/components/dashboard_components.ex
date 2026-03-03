@@ -270,6 +270,79 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
+  # --- Project Preview ---
+
+  attr :project, :any, required: true
+  attr :dev_server, :any, default: nil
+
+  def project_preview(assigns) do
+    ~H"""
+    <div class="mb-4">
+      <%= cond do %>
+        <% @dev_server && @dev_server.status in [:starting, :running] -> %>
+          <div class="rounded-lg border border-base-content/10 overflow-hidden">
+            <div class="flex items-center justify-between px-3 py-2 bg-base-200/50">
+              <div class="flex items-center gap-2">
+                <span class={[
+                  "w-2 h-2 rounded-full",
+                  if(@dev_server.status == :running, do: "bg-green-400", else: "bg-amber-400 animate-pulse")
+                ]} />
+                <span class="text-xs text-base-content/60 font-apothecary">
+                  <%= if @dev_server.status == :running, do: "Running", else: "Starting..." %>
+                </span>
+                <%= for port_info <- @dev_server.ports || [] do %>
+                  <a
+                    href={"http://localhost:#{port_info.port}"}
+                    target="_blank"
+                    class="text-xs text-primary hover:text-primary/80 transition-colors"
+                  >
+                    :{port_info.port}
+                  </a>
+                <% end %>
+              </div>
+              <button
+                phx-click="stop-project-dev"
+                class="text-xs text-base-content/40 hover:text-error transition-colors cursor-pointer"
+              >
+                Stop
+              </button>
+            </div>
+            <%= if @dev_server.status == :running do %>
+              <% port = List.first(@dev_server.ports || []) %>
+              <%= if port do %>
+                <iframe
+                  src={"http://localhost:#{port.port}"}
+                  class="w-full h-[300px] sm:h-[400px] border-t border-base-content/10 bg-white"
+                  title={"#{@project.name} preview"}
+                />
+              <% end %>
+            <% end %>
+          </div>
+        <% @dev_server && @dev_server.status == :error -> %>
+          <div class="rounded-lg border border-error/20 p-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-error/70">{@dev_server.error || "Server error"}</span>
+              <button
+                phx-click="start-project-dev"
+                class="text-xs text-primary hover:text-primary/80 transition-colors cursor-pointer"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        <% true -> %>
+          <button
+            phx-click="start-project-dev"
+            class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-dashed border-base-content/15 hover:border-base-content/30 text-base-content/40 hover:text-base-content/60 transition-colors cursor-pointer"
+          >
+            <.icon name="hero-play" class="w-4 h-4" />
+            <span class="text-sm font-apothecary">Start Preview</span>
+          </button>
+        <% end %>
+    </div>
+    """
+  end
+
   def concoct_controls(assigns) do
     ~H"""
     <div class="flex items-center gap-3 mb-3 text-xs flex-wrap">
