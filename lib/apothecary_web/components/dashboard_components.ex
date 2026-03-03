@@ -628,7 +628,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         patch={~p"/?task=#{@worktree.id}"}
         class="px-3 pt-2 pb-1 cursor-pointer hover:bg-base-content/5"
       >
-        <div class={["text-sm font-bold truncate", status_color(@worktree.status)]}>
+        <div class={["text-sm font-bold truncate", lane_color(@group)]}>
           {@worktree.title || @worktree.id}
         </div>
         <div class="flex items-center gap-2 text-xs text-base-content/40 mt-0.5">
@@ -1736,6 +1736,13 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp status_abbrev("blocked"), do: "BLK"
   defp status_abbrev(nil), do: "???"
   defp status_abbrev(_), do: "???"
+
+  defp lane_color("ready"), do: "text-emerald-400"
+  defp lane_color("blocked"), do: "text-emerald-400"
+  defp lane_color("running"), do: "text-amber-400"
+  defp lane_color("pr"), do: "text-purple-400"
+  defp lane_color("done"), do: "text-green-400/70"
+  defp lane_color(_), do: "text-base-content/50"
 
   defp status_color("open"), do: "text-emerald-400"
   defp status_color("ready"), do: "text-emerald-400"
