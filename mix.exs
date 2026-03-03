@@ -82,6 +82,7 @@ defmodule Apothecary.MixProject do
       {:hermes_mcp, "~> 0.14"},
       {:yaml_elixir, "~> 2.9"},
       {:crontab, "~> 1.1"},
+      {:hackney, "~> 1.9"},
       {:burrito, "~> 1.5"}
     ]
   end
