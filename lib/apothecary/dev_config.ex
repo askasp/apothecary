@@ -123,4 +123,86 @@ defmodule Apothecary.DevConfig do
       %{name: name, port: allocated_base + offset}
     end)
   end
+
+  @doc """
+  Auto-detect a dev config for a project directory based on common patterns.
+
+  Returns `{:ok, config}` or `:not_detected`.
+  """
+  @spec detect(String.t()) :: {:ok, t()} | :not_detected
+  def detect(project_dir) do
+    cond do
+      File.exists?(Path.join(project_dir, "mix.exs")) ->
+        detect_elixir(project_dir)
+
+      File.exists?(Path.join(project_dir, "package.json")) ->
+        detect_node(project_dir)
+
+      true ->
+        :not_detected
+    end
+  end
+
+  defp detect_elixir(project_dir) do
+    mix_content = File.read!(Path.join(project_dir, "mix.exs"))
+
+    if String.contains?(mix_content, ":phoenix") do
+      {:ok,
+       %__MODULE__{
+         command: "mix phx.server",
+         setup: "mix deps.get",
+         base_port: 4000,
+         port_count: 1,
+         ports: [%{name: "web", offset: 0}],
+         env: %{"MIX_ENV" => "dev"}
+       }}
+    else
+      :not_detected
+    end
+  end
+
+  defp detect_node(project_dir) do
+    case File.read(Path.join(project_dir, "package.json")) do
+      {:ok, content} ->
+        case Jason.decode(content) do
+          {:ok, pkg} ->
+            scripts = Map.get(pkg, "scripts", %{})
+
+            cond do
+              Map.has_key?(scripts, "dev") ->
+                runner = if File.exists?(Path.join(project_dir, "bun.lockb")), do: "bun", else: "npm"
+
+                {:ok,
+                 %__MODULE__{
+                   command: "#{runner} run dev",
+                   setup: "#{runner} install",
+                   base_port: 5173,
+                   port_count: 1,
+                   ports: [%{name: "web", offset: 0}],
+                   env: %{}
+                 }}
+
+              Map.has_key?(scripts, "start") ->
+                {:ok,
+                 %__MODULE__{
+                   command: "npm start",
+                   setup: "npm install",
+                   base_port: 3000,
+                   port_count: 1,
+                   ports: [%{name: "web", offset: 0}],
+                   env: %{}
+                 }}
+
+              true ->
+                :not_detected
+            end
+
+          {:error, _} ->
+            :not_detected
+        end
+
+      {:error, _} ->
+        :not_detected
+    end
+  end
 end

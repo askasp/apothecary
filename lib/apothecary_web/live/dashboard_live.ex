@@ -1641,6 +1641,17 @@ defmodule ApothecaryWeb.DashboardLive do
 
     {:ok, children} = Ingredients.children(id)
 
+    has_preview =
+      if String.starts_with?(to_string(id), "wt-") do
+        try do
+          DevServer.has_config?(id)
+        catch
+          :exit, _ -> false
+        end
+      else
+        false
+      end
+
     socket
     |> assign(:selected_task_id, id)
     |> assign(:selected_task, task)
@@ -1648,6 +1659,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:editing_field, nil)
     |> assign(:working_agent, nil)
     |> assign(:agent_output, [])
+    |> assign(:has_preview_config, has_preview)
     |> assign(:page_title, "Task #{id}")
     |> find_working_agent()
   end
