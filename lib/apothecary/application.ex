@@ -20,7 +20,16 @@ defmodule Apothecary.Application do
       Apothecary.BrewScheduler,
       Apothecary.PRMonitor,
       Hermes.Server.Registry,
-      {Apothecary.MCP.Server, transport: :streamable_http},
+      %{
+        id: :mcp_server_supervisor,
+        start:
+          {Supervisor, :start_link,
+           [
+             [{Apothecary.MCP.Server, transport: {:streamable_http, start: true}}],
+             [strategy: :one_for_one, max_restarts: 50, max_seconds: 60]
+           ]},
+        type: :supervisor
+      },
       Apothecary.WorktreeManager,
       Apothecary.DevServer,
       {Apothecary.BrewerSupervisor, []},

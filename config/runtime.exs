@@ -18,9 +18,7 @@ import Config
 # script that automatically sets the env var above.
 port = String.to_integer(System.get_env("PORT", "4000"))
 
-if System.get_env("PHX_SERVER") || config_env() == :prod do
-  config :apothecary, ApothecaryWeb.Endpoint, server: true
-end
+config :apothecary, ApothecaryWeb.Endpoint, server: true
 
 config :apothecary, ApothecaryWeb.Endpoint, http: [port: port]
 

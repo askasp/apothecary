@@ -4,12 +4,14 @@ Silent screen recording, ~3-4 minutes total. Record segment by segment, merge la
 
 ## Setup
 
-- Apothecary running at `localhost:4000`, dark theme
 - Demo app repo ready with `.apothecary/preview.yml` configured
 - `gh` CLI authenticated
+- Terminal open, `cd`'d into the demo project
 - Browser at 1440x900 or similar, no other tabs
 - `demo/title-cards.html` open in a separate browser window, fullscreen (`f` key)
 - Notifications off (Do Not Disturb)
+
+**Important:** The demo app appears twice — Segment 2 (the "before") and Segment 7 (the preview "after"). Everything else is either a terminal or the Apothecary dashboard.
 
 ## Recording Workflow
 
@@ -17,7 +19,7 @@ For each segment:
 1. Arrow to the correct title card
 2. Start recording (Cmd+Shift+5 or OBS hotkey)
 3. Hold on title card for 2-3 seconds
-4. Cmd+Tab to Apothecary
+4. Cmd+Tab to the target window (terminal or Apothecary)
 5. Perform the actions
 6. Stop recording
 7. Repeat for next segment
@@ -32,7 +34,29 @@ For each segment:
 
 ---
 
-## Segment 2 — Create Concoctions
+## Segment 2 — The App We're Improving
+
+**Title card:** "The project we're working on"
+
+1. Cmd+Tab to the demo app (already running).
+2. Quick scan — scroll around, show a couple of pages (2-3 seconds).
+3. Establish the "before" state. This is what the agents will be changing.
+
+---
+
+## Segment 3 — Point It at Your Project
+
+**Title card:** "Point it at your project"
+
+1. Cmd+Tab to a terminal already `cd`'d into the demo project.
+2. Run `apothecary` (or `apothecary start`).
+3. Show it booting — Elixir/Phoenix output scrolls briefly.
+4. Browser opens (or Cmd+Tab to it) showing the Apothecary dashboard with the project loaded.
+5. Pause on the empty dashboard for a beat — clean slate, ready to go.
+
+---
+
+## Segment 4 — Create Concoctions
 
 **Title card:** "Create concoctions"
 
@@ -47,7 +71,7 @@ For each segment:
 
 ---
 
-## Segment 3 — Start the Swarm
+## Segment 5 — Start the Swarm
 
 **Title card:** "Start the swarm"
 
@@ -64,7 +88,7 @@ For each segment:
 
 ---
 
-## Segment 4 — Inspect the Diff
+## Segment 6 — Inspect the Diff
 
 **Title card:** "Inspect the diff"
 
@@ -78,22 +102,24 @@ For each segment:
 
 ---
 
-## Segment 5 — Preview Changes Live
+## Segment 7 — Preview Changes Live
 
 **Title card:** "Preview changes live"
+
+**Note:** The demo app returns here — the viewer saw the "before" in Segment 2, now they see the "after." The contrast is the payoff.
 
 1. Cmd+Tab to dashboard.
 2. Select a completed concoction, open the detail drawer.
 3. Click **start preview** (or press `D`).
 4. Card shows "PREVIEW ◐ starting..."
 5. Flips to "PREVIEW ●" with a port link.
-6. Click the port link — demo app opens in a new tab, running from the agent's worktree.
+6. Click the port link — demo app opens in a new tab, running from the agent's worktree. URL bar shows a different port (e.g. `localhost:4001`).
 7. **Show the actual change** the agent made (dark mode toggle, footer, etc.). This is the payoff.
-8. Switch back to Apothecary dashboard.
+8. Switch back to Apothecary dashboard (`localhost:4000`).
 
 ---
 
-## Segment 6 — Merge
+## Segment 8 — Merge
 
 **Title card:** "Merge"
 
@@ -107,7 +133,7 @@ For each segment:
 
 ---
 
-## Segment 7 — Recipes
+## Segment 9 — Recipes
 
 **Title card:** "Recipes" / "Recurring scheduled work"
 
@@ -120,7 +146,7 @@ For each segment:
 
 ---
 
-## Segment 8 — Outro
+## Segment 10 — Outro
 
 **Title card:** "Apothecary" / "github.com/nomadkaraoke/apothecary"
 
