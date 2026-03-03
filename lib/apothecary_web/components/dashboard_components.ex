@@ -13,8 +13,8 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :target_count, :integer, default: 3
   attr :active_count, :integer, default: 0
   attr :working_count, :integer, default: 0
-  attr :merge_mode_setting, :atom, default: :auto
-  attr :merge_mode_effective, :atom, default: :local
+  attr :merge_mode, :atom, default: :local
+  attr :merge_auto, :boolean, default: true
   attr :gh_available, :boolean, default: false
 
   def concoct_controls(assigns) do
@@ -63,8 +63,8 @@ defmodule ApothecaryWeb.DashboardComponents do
       <span class="text-base-content/20 hidden sm:inline">│</span>
 
       <.merge_mode_toggle
-        merge_mode_setting={@merge_mode_setting}
-        merge_mode_effective={@merge_mode_effective}
+        merge_mode={@merge_mode}
+        merge_auto={@merge_auto}
         gh_available={@gh_available}
       />
     </div>
@@ -73,40 +73,35 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   # --- Merge Mode Toggle ---
 
-  attr :merge_mode_setting, :atom, default: :auto
-  attr :merge_mode_effective, :atom, default: :local
+  attr :merge_mode, :atom, default: :local
+  attr :merge_auto, :boolean, default: true
   attr :gh_available, :boolean, default: false
+
+  defp active_btn, do: "bg-base-content/15 text-base-content/80 font-medium"
+  defp inactive_btn, do: "text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5"
 
   def merge_mode_toggle(assigns) do
     ~H"""
     <div class="flex items-center gap-1.5">
+      <%!-- Mode: local vs github --%>
       <button
         phx-click="set-merge-mode"
-        phx-value-mode="auto"
+        phx-value-mode="local"
         class={[
           "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
-          if(@merge_mode_setting == :auto,
-            do: "bg-base-content/15 text-base-content/80 font-medium",
-            else: "text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5"
-          )
+          if(@merge_mode == :local, do: active_btn(), else: inactive_btn())
         ]}
-        title={"Auto-detect merge strategy (currently: #{@merge_mode_effective})"}
+        title="Merge branches locally (no PRs)"
       >
-        auto
+        local
       </button>
       <button
         phx-click="set-merge-mode"
         phx-value-mode="github"
         class={[
           "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
-          if(@merge_mode_setting == :github,
-            do: "bg-base-content/15 text-base-content/80 font-medium",
-            else: "text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5"
-          ),
-          if(!@gh_available && @merge_mode_setting != :github,
-            do: "opacity-50",
-            else: ""
-          )
+          if(@merge_mode == :github, do: active_btn(), else: inactive_btn()),
+          if(!@gh_available && @merge_mode != :github, do: "opacity-50", else: "")
         ]}
         title={
           if(@gh_available,
@@ -117,25 +112,47 @@ defmodule ApothecaryWeb.DashboardComponents do
       >
         github
       </button>
-      <button
-        phx-click="set-merge-mode"
-        phx-value-mode="local"
-        class={[
-          "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
-          if(@merge_mode_setting == :local,
-            do: "bg-base-content/15 text-base-content/80 font-medium",
-            else: "text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5"
-          )
-        ]}
-        title="Merge branches locally (no PRs)"
-      >
-        local
-      </button>
       <%= if !@gh_available do %>
         <span class="text-amber-400/50 text-[10px] hidden sm:inline" title="gh CLI not installed">
           no gh
         </span>
       <% end %>
+
+      <span class="text-base-content/10 mx-0.5">|</span>
+
+      <%!-- Sub-mode: auto vs manual --%>
+      <button
+        phx-click="set-merge-auto"
+        phx-value-auto="true"
+        class={[
+          "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
+          if(@merge_auto, do: active_btn(), else: inactive_btn())
+        ]}
+        title={
+          if(@merge_mode == :github,
+            do: "Auto-create PRs when brewer finishes",
+            else: "Auto-merge into main when brewer finishes"
+          )
+        }
+      >
+        auto
+      </button>
+      <button
+        phx-click="set-merge-auto"
+        phx-value-auto="false"
+        class={[
+          "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
+          if(!@merge_auto, do: active_btn(), else: inactive_btn())
+        ]}
+        title={
+          if(@merge_mode == :github,
+            do: "Manually trigger PR creation from dashboard",
+            else: "Manually trigger merge from dashboard"
+          )
+        }
+      >
+        manual
+      </button>
     </div>
     """
   end

@@ -12,8 +12,10 @@ config :apothecary,
   project_dir: nil,
   claude_path: "claude",
   mnesia_copies: :disc_copies,
-  # :auto (detect gh CLI), :github (always PR), :local (merge locally)
-  merge_mode: :auto
+  # :github (create PRs) or :local (merge locally)
+  merge_mode: :local,
+  # true = auto-finalize (auto-merge/auto-PR), false = manual trigger from dashboard
+  merge_auto: true
 
 # Configure the endpoint
 config :apothecary, ApothecaryWeb.Endpoint,

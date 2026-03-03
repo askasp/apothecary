@@ -192,29 +192,33 @@ defmodule Apothecary.Git do
   end
 
   @doc """
-  Get the configured merge mode setting: :auto, :github, or :local.
-  """
-  def merge_mode_setting do
-    Application.get_env(:apothecary, :merge_mode, :auto)
-  end
-
-  @doc """
-  Get the effective merge mode: :github or :local.
-  When set to :auto, detects based on `gh` CLI availability.
+  Get the configured merge mode: :github or :local.
   """
   def merge_mode do
-    case merge_mode_setting() do
-      :github -> :github
-      :local -> :local
-      :auto -> if gh_available?(), do: :github, else: :local
-    end
+    Application.get_env(:apothecary, :merge_mode, :local)
   end
 
   @doc """
-  Set the merge mode at runtime. Accepts :auto, :github, or :local.
+  Whether auto-finalization is enabled. When true, the brewer auto-merges (local)
+  or auto-creates PRs (github). When false, the user must trigger these manually.
   """
-  def set_merge_mode(mode) when mode in [:auto, :github, :local] do
+  def merge_auto? do
+    Application.get_env(:apothecary, :merge_auto, true)
+  end
+
+  @doc """
+  Set the merge mode at runtime. Accepts :github or :local.
+  """
+  def set_merge_mode(mode) when mode in [:github, :local] do
     Application.put_env(:apothecary, :merge_mode, mode)
+    :ok
+  end
+
+  @doc """
+  Set the merge auto flag at runtime.
+  """
+  def set_merge_auto(auto) when is_boolean(auto) do
+    Application.put_env(:apothecary, :merge_auto, auto)
     :ok
   end
 

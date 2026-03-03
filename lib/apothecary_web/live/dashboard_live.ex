@@ -78,8 +78,8 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:editing_recipe_id, nil)
       |> assign(:project_files, load_project_files())
       # Merge mode
-      |> assign(:merge_mode_setting, Git.merge_mode_setting())
-      |> assign(:merge_mode_effective, Git.merge_mode())
+      |> assign(:merge_mode, Git.merge_mode())
+      |> assign(:merge_auto, Git.merge_auto?())
       |> assign(:gh_available, Git.gh_available?())
 
     {:ok, socket}
@@ -359,18 +359,22 @@ defmodule ApothecaryWeb.DashboardLive do
   def handle_event("set-merge-mode", %{"mode" => mode}, socket) do
     mode_atom =
       case mode do
-        "auto" -> :auto
         "github" -> :github
         "local" -> :local
-        _ -> :auto
+        _ -> :local
       end
 
     Git.set_merge_mode(mode_atom)
 
-    {:noreply,
-     socket
-     |> assign(:merge_mode_setting, mode_atom)
-     |> assign(:merge_mode_effective, Git.merge_mode())}
+    {:noreply, assign(socket, :merge_mode, mode_atom)}
+  end
+
+  @impl true
+  def handle_event("set-merge-auto", %{"auto" => auto_str}, socket) do
+    auto = auto_str == "true"
+    Git.set_merge_auto(auto)
+
+    {:noreply, assign(socket, :merge_auto, auto)}
   end
 
   @impl true
@@ -1357,6 +1361,7 @@ defmodule ApothecaryWeb.DashboardLive do
       Enum.group_by(worktrees, fn wt ->
         cond do
           MapSet.member?(active_wt_ids, to_string(wt.id)) -> "running"
+          wt.status == "brew_done" -> "running"
           wt.status in ["open", "ready"] -> "ready"
           wt.status in ["in_progress", "claimed"] -> "ready"
           wt.status == "blocked" -> "blocked"
@@ -1462,6 +1467,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
     cond do
       MapSet.member?(active_ids, to_string(worktree.id)) -> "running"
+      worktree.status == "brew_done" -> "running"
       worktree.status in ["open", "ready", "in_progress", "claimed", "revision_needed"] -> "ready"
       worktree.status == "blocked" -> "blocked"
       worktree.status == "pr_open" -> "pr"
@@ -1646,8 +1652,8 @@ defmodule ApothecaryWeb.DashboardLive do
                   target_count={@target_count}
                   active_count={@active_count}
                   working_count={Enum.count(@agents, &(&1.status == :working))}
-                  merge_mode_setting={@merge_mode_setting}
-                  merge_mode_effective={@merge_mode_effective}
+                  merge_mode={@merge_mode}
+                  merge_auto={@merge_auto}
                   gh_available={@gh_available}
                 />
                 <.primary_input input_focused={@input_focused} />
