@@ -16,11 +16,12 @@ import Config
 #
 # Alternatively, you can use `mix phx.gen.release` to generate a `bin/server`
 # script that automatically sets the env var above.
-port = String.to_integer(System.get_env("PORT", "4000"))
+port = String.to_integer(System.get_env("PORT", "4005"))
 
 if config_env() != :test do
   config :apothecary, ApothecaryWeb.Endpoint, server: true
   config :apothecary, ApothecaryWeb.Endpoint, http: [port: port]
+  config :apothecary, port: port
 end
 
 # Apothecary project configuration

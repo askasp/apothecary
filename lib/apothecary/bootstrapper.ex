@@ -77,14 +77,10 @@ defmodule Apothecary.Bootstrapper do
   end
 
   defp start_bootstrap(parent_dir, name, path, template, opts) do
-    task =
-      Task.async(fn ->
-        result = do_create(parent_dir, name, path, template, opts)
-        broadcast({:bootstrap_complete, name, result})
-        result
-      end)
-
-    {:ok, task}
+    Task.start(fn ->
+      result = do_create(parent_dir, name, path, template, opts)
+      broadcast({:bootstrap_complete, name, result})
+    end)
   end
 
   @doc "List available templates with descriptions."

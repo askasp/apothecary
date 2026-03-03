@@ -87,7 +87,7 @@ defmodule Mix.Tasks.Apothecary.Setup do
     Mix.shell().info("Start Apothecary with:")
     Mix.shell().info("  APOTHECARY_PROJECT_DIR=#{dir} mix phx.server")
     Mix.shell().info("")
-    Mix.shell().info("Then open http://localhost:4000")
+    Mix.shell().info("Then open http://localhost:4005")
   end
 
   defp check_prerequisite(binary, name, install_hint) do

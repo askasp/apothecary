@@ -431,6 +431,18 @@ defmodule ApothecaryWeb.DashboardLive do
      )}
   end
 
+  # Catch-all for async task results (e.g. Task.async replies) to prevent crashes
+  @impl true
+  def handle_info({ref, _result}, socket) when is_reference(ref) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, socket) do
+    {:noreply, socket}
+  end
+
   # --- Event handlers ---
 
   @impl true
