@@ -1115,6 +1115,13 @@ defmodule ApothecaryWeb.DashboardComponents do
         >
           Create PR <span class="hidden sm:inline text-base-content/30 ml-1">p</span>
         </button>
+        <button
+          :if={@task.status == "merge_conflict"}
+          phx-click="approve-merge-fix"
+          class="border border-orange-400/30 text-orange-400 hover:bg-orange-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors font-bold"
+        >
+          Approve Merge Fix
+        </button>
       </div>
 
       <%!-- Ingredients section --%>
@@ -1812,6 +1819,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp status_abbrev("done"), do: "DONE"
   defp status_abbrev("closed"), do: "DONE"
   defp status_abbrev("blocked"), do: "BLK"
+  defp status_abbrev("merge_conflict"), do: "CONFLICT"
   defp status_abbrev(nil), do: "???"
   defp status_abbrev(_), do: "???"
 
@@ -1833,6 +1841,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp status_color("done"), do: "text-green-400/70"
   defp status_color("closed"), do: "text-green-400/70"
   defp status_color("blocked"), do: "text-red-400"
+  defp status_color("merge_conflict"), do: "text-orange-400"
   defp status_color(_), do: "text-base-content/30"
 
   defp priority_color(0), do: "text-red-400"

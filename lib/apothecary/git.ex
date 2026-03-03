@@ -74,7 +74,35 @@ defmodule Apothecary.Git do
     with {:ok, _} <- CLI.run("git", ["fetch", "origin", base], cd: worktree_path),
          {:ok, _} <- CLI.run("git", ["merge", "origin/#{base}", "--no-edit"], cd: worktree_path) do
       :ok
+    else
+      {:error, {_code, output}} = error ->
+        if merge_conflict?(output), do: {:error, {:merge_conflict, output}}, else: error
+
+      error ->
+        error
     end
+  end
+
+  @doc "Abort an in-progress merge."
+  def abort_merge(worktree_path) do
+    CLI.run("git", ["merge", "--abort"], cd: worktree_path)
+  end
+
+  @doc "Check if git command output indicates a merge conflict."
+  def merge_conflict?(output) when is_binary(output) do
+    String.contains?(output, "CONFLICT") or
+      String.contains?(output, "Automatic merge failed") or
+      String.contains?(output, "fix conflicts")
+  end
+
+  def merge_conflict?(_), do: false
+
+  @doc "Extract conflicting file paths from merge conflict output."
+  def conflict_files(output) when is_binary(output) do
+    ~r/CONFLICT \([^)]+\): (?:Merge conflict in |[^:]+: )(.+)/
+    |> Regex.scan(output)
+    |> Enum.map(fn [_, file] -> String.trim(file) end)
+    |> Enum.uniq()
   end
 
   @doc "Push the current branch in a worktree to origin."
