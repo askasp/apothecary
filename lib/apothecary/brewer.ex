@@ -483,7 +483,57 @@ defmodule Apothecary.Brewer do
     worktree_path = agent.worktree_path
     project_dir = agent.project_dir
 
-    # Push the branch
+    case Apothecary.Git.merge_mode() do
+      :git ->
+        push_and_finalize_git(worktree_id, agent)
+
+      :github ->
+        push_and_finalize_github(worktree_id, agent, existing_pr_url)
+    end
+  end
+
+  # Plain git mode: push branch, set to brew_done for manual merge from dashboard
+  defp push_and_finalize_git(worktree_id, agent) do
+    worktree_path = agent.worktree_path
+
+    if Apothecary.Git.has_remote?(agent.project_dir) do
+      case Apothecary.Git.push_branch(worktree_path) do
+        {:ok, _} ->
+          Logger.info("Pushed branch for concoction #{worktree_id}")
+
+          Apothecary.Ingredients.add_note(
+            worktree_id,
+            "Branch pushed. Merge from the dashboard when ready."
+          )
+
+        {:error, reason} ->
+          Logger.warning(
+            "Failed to push branch for concoction #{worktree_id}: #{inspect(reason)}"
+          )
+
+          Apothecary.Ingredients.add_note(
+            worktree_id,
+            "Push failed: #{inspect(reason)}. Branch is available locally for merge."
+          )
+      end
+    else
+      Apothecary.Ingredients.add_note(
+        worktree_id,
+        "No remote configured. Branch is available locally for merge."
+      )
+    end
+
+    Apothecary.Ingredients.update_concoction(worktree_id, %{
+      status: "brew_done",
+      assigned_brewer_id: nil
+    })
+  end
+
+  # GitHub mode: push, create PR, handle revision cycles
+  defp push_and_finalize_github(worktree_id, agent, existing_pr_url) do
+    worktree_path = agent.worktree_path
+    project_dir = agent.project_dir
+
     case Apothecary.Git.push_branch(worktree_path) do
       {:ok, _} ->
         Logger.info("Pushed branch for concoction #{worktree_id}")
