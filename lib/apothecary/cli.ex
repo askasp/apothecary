@@ -15,12 +15,14 @@ defmodule Apothecary.CLI do
     - `:cd` - working directory for the command
     - `:timeout` - max wait time in ms (default #{@default_timeout})
     - `:max_output` - max output bytes to collect (default #{@max_output_bytes})
+    - `:env` - list of `{name, value}` or `{name, false}` to set/unset env vars
   """
   @spec run(String.t(), [String.t()], keyword()) :: result()
   def run(command, args \\ [], opts \\ []) do
     cd = Keyword.get(opts, :cd)
     timeout = Keyword.get(opts, :timeout, @default_timeout)
     max_output = Keyword.get(opts, :max_output, @max_output_bytes)
+    env = Keyword.get(opts, :env)
 
     case System.find_executable(command) do
       nil ->
@@ -29,10 +31,19 @@ defmodule Apothecary.CLI do
       executable ->
         port_opts = [:binary, :exit_status, :use_stdio, :stderr_to_stdout, {:args, args}]
         port_opts = if cd, do: [{:cd, to_charlist(cd)} | port_opts], else: port_opts
+        port_opts = if env, do: [{:env, encode_env(env)} | port_opts], else: port_opts
 
         port = Port.open({:spawn_executable, executable}, port_opts)
         collect_output(port, <<>>, timeout, max_output)
     end
+  end
+
+  # Port.open expects env names/values as charlists
+  defp encode_env(env) do
+    Enum.map(env, fn
+      {name, false} -> {to_charlist(name), false}
+      {name, value} -> {to_charlist(name), to_charlist(value)}
+    end)
   end
 
   defp collect_output(port, acc, timeout, max_output) do
