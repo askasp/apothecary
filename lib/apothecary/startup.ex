@@ -51,10 +51,17 @@ defmodule Apothecary.Startup do
   end
 
   defp check_gh_binary do
+    merge_mode = Application.get_env(:apothecary, :merge_mode, :git)
+
     unless System.find_executable("gh") do
-      Logger.warning(
-        "gh (GitHub CLI) not found in PATH. PR creation will fail after agents finish work."
-      )
+      if merge_mode == :github do
+        Logger.warning(
+          "gh (GitHub CLI) not found in PATH. PR creation will fail. " <>
+            "Install gh or set merge_mode: :git in config for plain git merges."
+        )
+      else
+        Logger.info("gh (GitHub CLI) not found — using plain git merge mode.")
+      end
     end
   end
 
