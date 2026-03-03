@@ -77,10 +77,12 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :merge_auto, :boolean, default: true
   attr :gh_available, :boolean, default: false
 
-  defp active_btn, do: "bg-base-content/15 text-base-content/80 font-medium"
-  defp inactive_btn, do: "text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5"
-
   def merge_mode_toggle(assigns) do
+    assigns =
+      assigns
+      |> assign(:on, "bg-base-content/15 text-base-content/80 font-medium")
+      |> assign(:off, "text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5")
+
     ~H"""
     <div class="flex items-center gap-1.5">
       <%!-- Mode: local vs github --%>
@@ -89,7 +91,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         phx-value-mode="local"
         class={[
           "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
-          if(@merge_mode == :local, do: active_btn(), else: inactive_btn())
+          if(@merge_mode == :local, do: @on, else: @off)
         ]}
         title="Merge branches locally (no PRs)"
       >
@@ -100,7 +102,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         phx-value-mode="github"
         class={[
           "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
-          if(@merge_mode == :github, do: active_btn(), else: inactive_btn()),
+          if(@merge_mode == :github, do: @on, else: @off),
           if(!@gh_available && @merge_mode != :github, do: "opacity-50", else: "")
         ]}
         title={
@@ -126,7 +128,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         phx-value-auto="true"
         class={[
           "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
-          if(@merge_auto, do: active_btn(), else: inactive_btn())
+          if(@merge_auto, do: @on, else: @off)
         ]}
         title={
           if(@merge_mode == :github,
@@ -142,7 +144,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         phx-value-auto="false"
         class={[
           "px-2 py-1 rounded text-xs cursor-pointer transition-colors",
-          if(!@merge_auto, do: active_btn(), else: inactive_btn())
+          if(!@merge_auto, do: @on, else: @off)
         ]}
         title={
           if(@merge_mode == :github,
