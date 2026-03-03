@@ -420,6 +420,9 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("hotkey", %{"metaKey" => true}, socket), do: {:noreply, socket}
+  def handle_event("hotkey", %{"ctrlKey" => true}, socket), do: {:noreply, socket}
+
   def handle_event("hotkey", %{"key" => key}, socket) do
     cond do
       socket.assigns.input_focused and key not in ["Escape"] ->

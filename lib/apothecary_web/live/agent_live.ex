@@ -39,8 +39,11 @@ defmodule ApothecaryWeb.AgentLive do
     {:noreply, assign(socket, :output, Enum.take(output, -500))}
   end
 
-  # Hotkey dispatch
+  # Hotkey dispatch — ignore OS shortcuts (Cmd/Ctrl+key) so copy/paste works
   @impl true
+  def handle_event("hotkey", %{"metaKey" => true}, socket), do: {:noreply, socket}
+  def handle_event("hotkey", %{"ctrlKey" => true}, socket), do: {:noreply, socket}
+
   def handle_event("hotkey", %{"key" => key}, socket) do
     {:noreply, handle_hotkey(key, socket)}
   end

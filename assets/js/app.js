@@ -34,7 +34,13 @@ let Hooks = {
       // Block hotkeys when typing in an input/textarea so keys like 's'
       // don't trigger hotkey actions. Capture phase runs before LiveView's
       // phx-window-keydown handler. Allow Escape through for closing overlays.
+      // Also allow native OS shortcuts (Cmd/Ctrl+C, V, X, A, etc.) to work
+      // everywhere by blocking propagation when modifier keys are held.
       window.addEventListener("keydown", (e) => {
+        if (e.metaKey || e.ctrlKey) {
+          e.stopPropagation()
+          return
+        }
         const tag = e.target.tagName
         const isInput = tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable
         if (isInput && e.key !== "Escape" && e.key !== "Enter") {
