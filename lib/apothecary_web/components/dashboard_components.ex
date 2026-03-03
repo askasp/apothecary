@@ -8,6 +8,24 @@ defmodule ApothecaryWeb.DashboardComponents do
     router: ApothecaryWeb.Router,
     statics: ApothecaryWeb.static_paths()
 
+  @preview_example_full """
+  # .apothecary/preview.yml
+  command: mix phx.server
+  setup: mix deps.get
+  port_count: 1
+  ports:
+    - name: web
+      offset: 0
+  env:
+    MIX_ENV: dev\
+  """
+
+  @preview_example_short """
+  command: mix phx.server
+  setup: mix deps.get
+  port_count: 1\
+  """
+
   # --- Copy to clipboard button ---
 
   attr :target, :string, required: true, doc: "CSS selector of the element whose text to copy"
@@ -336,6 +354,7 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   attr :project, :any, required: true
   attr :dev_server, :any, default: nil
+  attr :has_preview_config, :boolean, default: false
 
   def project_preview(assigns) do
     ~H"""
@@ -353,7 +372,7 @@ defmodule ApothecaryWeb.DashboardComponents do
                   )
                 ]} />
                 <span class="text-xs text-base-content/60 font-apothecary">
-                  {if @dev_server.status == :running, do: "Running", else: "Starting..."}
+                  {if @dev_server.status == :running, do: "Main Branch Preview", else: "Starting..."}
                 </span>
                 <%= for port_info <- @dev_server.ports || [] do %>
                   <a
@@ -395,15 +414,35 @@ defmodule ApothecaryWeb.DashboardComponents do
               </button>
             </div>
           </div>
-        <% true -> %>
+        <% @has_preview_config -> %>
           <button
             phx-click="start-project-dev"
             class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-dashed border-base-content/15 hover:border-base-content/30 text-base-content/40 hover:text-base-content/60 transition-colors cursor-pointer"
           >
             <.icon name="hero-play" class="w-4 h-4" />
-            <span class="text-sm font-apothecary">Start Preview</span>
+            <span class="text-sm font-apothecary">Main Branch Preview</span>
           </button>
+        <% true -> %>
+          <.preview_config_example />
       <% end %>
+    </div>
+    """
+  end
+
+  defp preview_config_example(assigns) do
+    assigns = assign(assigns, :example, @preview_example_full)
+
+    ~H"""
+    <div class="rounded-lg border border-base-content/10 p-4 space-y-3">
+      <div class="flex items-center gap-2">
+        <.icon name="hero-eye-slash" class="w-4 h-4 text-base-content/30" />
+        <span class="text-sm text-base-content/50 font-apothecary">Preview not configured</span>
+      </div>
+      <p class="text-xs text-base-content/40">
+        Add a <code class="text-amber-400/70 bg-base-200/50 px-1 rounded">.apothecary/preview.yml</code>
+        to your project root to enable live preview:
+      </p>
+      <pre class="text-xs bg-base-200/50 rounded-lg p-3 text-base-content/60 overflow-x-auto"><code>{@example}</code></pre>
     </div>
     """
   end
@@ -1507,13 +1546,16 @@ defmodule ApothecaryWeb.DashboardComponents do
   end
 
   defp dev_server_detail(%{dev_server: nil, has_preview_config: false} = assigns) do
+    assigns = assign(assigns, :example, @preview_example_short)
+
     ~H"""
-    <div class="px-3 text-xs space-y-1">
+    <div class="px-3 text-xs space-y-2">
       <span class="text-base-content/30">no config found</span>
       <p class="text-base-content/40">
         Add <code class="text-amber-400/70">.apothecary/preview.yml</code>
-        to your project root to enable preview.
+        to your project root to enable preview:
       </p>
+      <pre class="text-[11px] bg-base-200/50 rounded p-2 text-base-content/50 overflow-x-auto"><code>{@example}</code></pre>
     </div>
     """
   end
@@ -1615,13 +1657,16 @@ defmodule ApothecaryWeb.DashboardComponents do
   end
 
   defp dev_server_detail(assigns) do
+    assigns = assign(assigns, :example, @preview_example_short)
+
     ~H"""
-    <div class="px-3 text-xs space-y-1">
+    <div class="px-3 text-xs space-y-2">
       <span class="text-base-content/30">no config found</span>
       <p class="text-base-content/40">
         Add <code class="text-amber-400/70">.apothecary/preview.yml</code>
-        to your project root to enable preview.
+        to your project root to enable preview:
       </p>
+      <pre class="text-[11px] bg-base-200/50 rounded p-2 text-base-content/50 overflow-x-auto"><code>{@example}</code></pre>
     </div>
     """
   end
