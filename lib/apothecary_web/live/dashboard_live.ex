@@ -2157,7 +2157,7 @@ defmodule ApothecaryWeb.DashboardLive do
                     </div>
                   <% else %>
                     <h2 class="text-base-content/50 text-lg font-semibold mb-2 font-apothecary">
-                      What shall we concoct?
+                      Ready to mix?
                     </h2>
                     <%!-- Concoct + alchemist controls --%>
                     <.concoct_controls
