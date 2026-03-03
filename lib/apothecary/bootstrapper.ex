@@ -3,7 +3,8 @@ defmodule Apothecary.Bootstrapper do
   Creates new projects from templates.
 
   Supports:
-  - Phoenix (with or without Ecto) — uses curl installer (auto-installs phx_new)
+  - Phoenix (with or without Ecto) — uses local `mix phx.new` when available,
+    falls back to curl installer
   - React (via bun)
 
   Each bootstrap runs as an async task, streaming progress via PubSub.
@@ -130,12 +131,11 @@ defmodule Apothecary.Bootstrapper do
     end
   end
 
-  # Phoenix uses the curl installer which auto-installs phx_new if needed.
-  # Only requirement is that curl and mix are available.
+  # Phoenix needs mix. Curl is only needed if phx_new archive isn't installed.
   defp check_prerequisites(:phoenix) do
     cond do
-      is_nil(System.find_executable("curl")) -> {:error, :curl_not_found}
       is_nil(System.find_executable("mix")) -> {:error, :mix_not_found}
+      not phx_new_available?() and is_nil(System.find_executable("curl")) -> {:error, :curl_not_found}
       true -> :ok
     end
   end
@@ -149,29 +149,51 @@ defmodule Apothecary.Bootstrapper do
     end
   end
 
-  # Use curl installer: automatically installs phx_new archive if not present
+  # Use local mix phx.new when available, fall back to curl installer
   defp run_template(parent_dir, name, _path, :phoenix, _opts) do
-    broadcast({:bootstrap_progress, name, "Downloading and running Phoenix installer..."})
+    if phx_new_available?() do
+      broadcast({:bootstrap_progress, name, "Running mix phx.new #{name}..."})
 
-    CLI.run("sh", ["-c", "curl -fsSL https://new.phoenixframework.org/#{name} | sh"],
-      cd: parent_dir,
-      timeout: 180_000,
-      env: clean_release_env()
-    )
+      CLI.run("mix", ["phx.new", name, "--install"],
+        cd: parent_dir,
+        timeout: 180_000,
+        env: clean_release_env()
+      )
+    else
+      broadcast({:bootstrap_progress, name, "Downloading and running Phoenix installer..."})
+
+      CLI.run("sh", ["-c", "curl -fsSL https://new.phoenixframework.org/#{name} | sh"],
+        cd: parent_dir,
+        timeout: 180_000,
+        env: clean_release_env()
+      )
+    end
   end
 
   defp run_template(parent_dir, name, _path, :phoenix_no_ecto, _opts) do
-    broadcast(
-      {:bootstrap_progress, name, "Downloading and running Phoenix installer (no database)..."}
-    )
+    if phx_new_available?() do
+      broadcast(
+        {:bootstrap_progress, name, "Running mix phx.new #{name} --no-ecto..."}
+      )
 
-    CLI.run(
-      "sh",
-      ["-c", "curl -fsSL https://new.phoenixframework.org/#{name} | sh -s -- --no-ecto"],
-      cd: parent_dir,
-      timeout: 180_000,
-      env: clean_release_env()
-    )
+      CLI.run("mix", ["phx.new", name, "--no-ecto", "--install"],
+        cd: parent_dir,
+        timeout: 180_000,
+        env: clean_release_env()
+      )
+    else
+      broadcast(
+        {:bootstrap_progress, name, "Downloading and running Phoenix installer (no database)..."}
+      )
+
+      CLI.run(
+        "sh",
+        ["-c", "curl -fsSL https://new.phoenixframework.org/#{name} | sh -s -- --no-ecto"],
+        cd: parent_dir,
+        timeout: 180_000,
+        env: clean_release_env()
+      )
+    end
   end
 
   defp run_template(parent_dir, name, _path, :react, _opts) do
@@ -181,6 +203,19 @@ defmodule Apothecary.Bootstrapper do
       cd: parent_dir,
       timeout: 60_000
     )
+  end
+
+  # Check if the phx_new archive is installed by running `mix phx.new --version`.
+  # Uses a temp dir to avoid compiling any project that might be in the current directory.
+  defp phx_new_available? do
+    case CLI.run("mix", ["phx.new", "--version"],
+           cd: System.tmp_dir!(),
+           timeout: 30_000,
+           env: clean_release_env()
+         ) do
+      {:ok, _} -> true
+      _ -> false
+    end
   end
 
   # Strip RELEASE_* env vars and clean PATH so spawned mix/elixir processes
