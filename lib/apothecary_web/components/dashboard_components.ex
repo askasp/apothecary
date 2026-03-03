@@ -135,10 +135,13 @@ defmodule ApothecaryWeb.DashboardComponents do
           <input
             type="text"
             name="path"
-            value={System.get_env("HOME", "~") <> "/"}
+            id="project-path-input"
+            value="~/"
             autofocus
             autocomplete="off"
             phx-debounce="150"
+            phx-focus="input-focus"
+            phx-blur="input-blur"
             class="moonlight-input w-full"
             style="caret-color: var(--accent); padding: 16px 20px; font-size: 14px;"
           />
@@ -177,13 +180,17 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span class="section-header">RECENT</span>
           </div>
           <%= for {project, idx} <- Enum.with_index(@projects) do %>
+            <% selected? = idx == @selected_project %>
             <.link
               navigate={~p"/projects/#{project.id}"}
               class="block px-6 py-3 cursor-pointer project-landing-item"
-              style={"text-decoration: none; #{if idx == @selected_project, do: "background: var(--surface);", else: ""}"}
+              style={"text-decoration: none; #{if selected?, do: "border-left: 2px solid var(--accent); background: var(--surface);", else: "border-left: 2px solid transparent;"}"}
             >
-              <div style={"font-size: 14px; font-weight: 600; color: #{if idx == 0, do: "var(--text)", else: "var(--dim)"};"}>
-                {project.name}
+              <div class="flex items-center justify-between">
+                <span style={"font-size: 14px; font-weight: 600; color: #{if selected?, do: "var(--text)", else: "var(--dim)"};"}>
+                  {project.name}
+                </span>
+                <span :if={selected?} style="color: var(--accent);">◂</span>
               </div>
               <div class="mt-0.5" style="color: var(--muted); font-size: var(--font-size-sm);">
                 {shorten_path(project.path)} &middot; {concoction_count_label(project.id)} &middot; {format_relative_time(project.updated_at)}
@@ -380,65 +387,66 @@ defmodule ApothecaryWeb.DashboardComponents do
     assigns = assign(assigns, :concocting?, concocting?)
 
     ~H"""
-    <div class="px-4 py-2 flex items-center gap-0" style="font-size: var(--font-size-sm);">
-      <%!-- Swarm toggle --%>
-      <span style="color: var(--dim);">s</span>&nbsp;
-      <button
-        phx-click={if @concocting?, do: "stop-swarm", else: "start-swarm"}
-        class="cursor-pointer settings-value"
-        style={"color: #{if @concocting?, do: "var(--concocting)", else: "var(--muted)"}; font-weight: 500;"}
-      >
-        {if @concocting?, do: "▶ concocting", else: "■ stopped"}
-      </button>
-
-      <span style="color: var(--border);">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
-
-      <%!-- Alchemists --%>
-      <span style="color: var(--dim);">a</span>&nbsp;
-      <span style="color: var(--dim);">alchemists:</span>
-      <%= if @editing_setting == :alchemists do %>
-        <span class="inline-flex items-center gap-1 ml-1">
-          <button phx-click="decrement-alchemists" class="cursor-pointer" style="color: var(--accent);">&minus;</button>
-          <span style="color: var(--text); font-weight: 600;">{@target_count}</span>
-          <button phx-click="increment-alchemists" class="cursor-pointer" style="color: var(--accent);">+</button>
-          <button phx-click="confirm-setting" class="cursor-pointer" style="color: var(--muted);">&#x2713;</button>
-        </span>
-      <% else %>
+    <div class="px-3 py-2" style="font-size: var(--font-size-xs);">
+      <%!-- Row 1: swarm + alchemists + auto-pr --%>
+      <div class="flex items-center gap-0">
+        <span style="color: var(--dim);">s</span>&nbsp;
         <button
-          phx-click="edit-setting"
-          phx-value-setting="alchemists"
+          phx-click={if @concocting?, do: "stop-swarm", else: "start-swarm"}
           class="cursor-pointer settings-value"
-          style="color: var(--text); font-weight: 600;"
+          style={"color: #{if @concocting?, do: "var(--concocting)", else: "var(--muted)"}; font-weight: 500;"}
         >
-          &nbsp;{@target_count}
+          {if @concocting?, do: "▶ concocting", else: "■ stopped"}
         </button>
-      <% end %>
 
-      <span style="color: var(--border);">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
+        <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
 
-      <%!-- Auto-PR --%>
-      <span style="color: var(--dim);">t</span>&nbsp;
-      <span style="color: var(--dim);">auto-pr:</span>
-      <button
-        phx-click="toggle-auto-pr"
-        class="cursor-pointer settings-value"
-        style={"color: #{if @auto_pr, do: "var(--accent)", else: "var(--muted)"}; font-weight: 500;"}
-      >
-        &nbsp;{if @auto_pr, do: "on", else: "off"}
-      </button>
+        <span style="color: var(--dim);">a</span>&nbsp;
+        <span style="color: var(--dim);">alch:</span>
+        <%= if @editing_setting == :alchemists do %>
+          <span class="inline-flex items-center gap-1 ml-1">
+            <button phx-click="decrement-alchemists" class="cursor-pointer" style="color: var(--accent);">&minus;</button>
+            <span style="color: var(--text); font-weight: 600;">{@target_count}</span>
+            <button phx-click="increment-alchemists" class="cursor-pointer" style="color: var(--accent);">+</button>
+            <button phx-click="confirm-setting" class="cursor-pointer" style="color: var(--muted);">&#x2713;</button>
+          </span>
+        <% else %>
+          <button
+            phx-click="edit-setting"
+            phx-value-setting="alchemists"
+            class="cursor-pointer settings-value"
+            style="color: var(--text); font-weight: 600;"
+          >
+            &nbsp;{@target_count}
+          </button>
+        <% end %>
 
-      <span style="color: var(--border);">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
+        <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
 
-      <%!-- Preview (main branch) --%>
-      <span style="color: var(--dim);">main</span>&nbsp;
-      <.preview_controls
-        dev_server={@dev_server}
-        has_config={@has_preview_config}
-        target_id={@project_id || "project"}
-        start_event="start-project-dev"
-        stop_event="stop-project-dev"
-        inline={true}
-      />
+        <span style="color: var(--dim);">t</span>&nbsp;
+        <span style="color: var(--dim);">auto-pr:</span>
+        <button
+          phx-click="toggle-auto-pr"
+          class="cursor-pointer settings-value"
+          style={"color: #{if @auto_pr, do: "var(--accent)", else: "var(--muted)"}; font-weight: 500;"}
+        >
+          &nbsp;{if @auto_pr, do: "on", else: "off"}
+        </button>
+      </div>
+
+      <%!-- Row 2: preview --%>
+      <div class="flex items-center gap-0 mt-1">
+        <span style="color: var(--dim);">p</span>&nbsp;
+        <span style="color: var(--dim);">main</span>&nbsp;
+        <.preview_controls
+          dev_server={@dev_server}
+          has_config={@has_preview_config}
+          target_id={@project_id || "project"}
+          start_event="start-project-dev"
+          stop_event="stop-project-dev"
+          inline={true}
+        />
+      </div>
     </div>
     """
   end

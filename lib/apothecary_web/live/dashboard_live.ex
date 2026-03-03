@@ -1138,7 +1138,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @impl true
   def handle_event("search-project-path", %{"path" => path}, socket) do
-    suggestions = list_path_suggestions(path)
+    suggestions = list_path_suggestions(expand_tilde(path))
     {:noreply, assign(socket, :project_path_suggestions, suggestions)}
   end
 
@@ -1158,7 +1158,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @impl true
   def handle_event("add-project", %{"path" => path}, socket) do
-    path = String.trim(path)
+    path = path |> String.trim() |> expand_tilde()
 
     if path == "" do
       {:noreply, assign(socket, :add_project_error, "Path cannot be empty")}
@@ -2636,7 +2636,7 @@ defmodule ApothecaryWeb.DashboardLive do
               <%!-- Split panel: tree left, detail right --%>
               <div class="flex h-full">
                 <%!-- Left panel: settings + input + tree --%>
-                <div class="h-full overflow-y-auto scroll-main flex-shrink-0" style="width: 42%; border-right: 1px solid var(--border);">
+                <div class="h-full overflow-y-auto scroll-main flex-shrink-0" style="width: 36%; min-width: 280px; max-width: 420px; border-right: 1px solid var(--border);">
                   <.settings_line
                     target_count={@target_count}
                     auto_pr={@auto_pr}
