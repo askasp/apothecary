@@ -2281,24 +2281,6 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  defp entry_group(worktree, agents) do
-    active_ids =
-      agents
-      |> Enum.flat_map(fn a ->
-        if a.current_concoction, do: [to_string(a.current_concoction.id)], else: []
-      end)
-      |> MapSet.new()
-
-    cond do
-      MapSet.member?(active_ids, to_string(worktree.id)) -> "running"
-      worktree.status == "brew_done" -> "running"
-      worktree.status in ["open", "ready", "in_progress", "claimed", "revision_needed"] -> "ready"
-      worktree.status in ["blocked", "merge_conflict"] -> "blocked"
-      worktree.status == "pr_open" -> "pr"
-      true -> "ready"
-    end
-  end
-
   defp jump_to_lane(socket, groups) do
     # Find the first card_id that belongs to one of the given groups
     lane_ids =
@@ -2425,19 +2407,6 @@ defmodule ApothecaryWeb.DashboardLive do
     end)
   end
 
-  defp project_scoped_agents(agents, nil, _dispatcher_projects), do: agents
-
-  defp project_scoped_agents(agents, project, dispatcher_projects) do
-    case dispatcher_projects[project.id] do
-      %{agents: project_agents} when is_map(project_agents) ->
-        project_pids = MapSet.new(Map.keys(project_agents))
-        Enum.filter(agents, fn a -> MapSet.member?(project_pids, a.pid) end)
-
-      _ ->
-        []
-    end
-  end
-
   defp selected_card_id(assigns) do
     Enum.at(assigns.card_ids, assigns.selected_card)
   end
@@ -2457,287 +2426,100 @@ defmodule ApothecaryWeb.DashboardLive do
         phx-throttle="100"
         class="flex flex-col h-screen outline-none"
       >
-        <%!-- Top bar: branding + project selector + tabs --%>
-        <div class="flex items-center gap-1 sm:gap-3 px-2 py-2 text-xs min-w-0">
-          <.link
-            navigate={~p"/"}
-            class="font-apothecary text-sm font-bold tracking-wide text-base-content/80 shrink-0 hover:text-base-content transition-colors"
-          >
-            <span class="hidden sm:inline">Apothecary</span>
-            <span class="sm:hidden">&#x2697;</span>
-          </.link>
-          <.project_selector
-            projects={@projects}
-            current_project={@current_project}
-          />
-          <div class="ml-auto flex items-center gap-1">
-            <.tab_navigation :if={@current_project} active_tab={@active_tab} />
-            <span
-              class="text-base-content/30 cursor-pointer shrink-0 p-1 text-xs"
-              phx-click="toggle-help"
-            >
-              ?
-            </span>
-          </div>
-        </div>
+        <%!-- Top bar --%>
+        <.top_bar
+          current_project={@current_project}
+          active_tab={@active_tab}
+          selected_task_id={@selected_task_id}
+          selected_task={@selected_task}
+          projects={@projects}
+        />
 
-        <div class="border-b border-base-content/10" />
+        <div style="border-bottom: 1px solid var(--border);" />
 
-        <%!-- Scrollable content --%>
-        <div class="flex-1 overflow-y-auto">
-          <%= if @active_tab == :oracle and @current_project do %>
-            <div class="mx-auto px-2">
-              <.oracle_view questions={@questions} agents={@agents} />
-            </div>
-          <% end %>
-          <%= if @active_tab == :recipes and @current_project do %>
-            <div class="mx-auto px-2">
-              <.recipe_list
-                recipes={@recipes}
-                show_recipe_form={@show_recipe_form}
-                recipe_form={@recipe_form}
-                editing_recipe_id={@editing_recipe_id}
+        <%!-- Main content area — single column, max ~540px --%>
+        <div class="flex-1 overflow-y-auto scroll-main">
+          <div class="max-w-[540px] mx-auto">
+            <%= if @selected_task && @selected_task_id do %>
+              <%!-- DETAIL VIEW: full takeover --%>
+              <.concoction_detail
+                task={@selected_task}
+                children={@children}
+                editing_field={@editing_field}
+                working_agent={@working_agent}
+                agent_output={@agent_output}
+                dev_server={@dev_servers[@selected_task_id]}
+                has_preview_config={@has_preview_config}
+                pending_action={@pending_action}
+                loading_action={@loading_action}
               />
-            </div>
-          <% end %>
-          <%= if @active_tab == :workbench or is_nil(@current_project) do %>
-            <div class="mx-auto px-2">
-              <%!-- Primary input — centered, narrower --%>
-              <div class="max-w-2xl mx-auto pt-3 sm:pt-6 pb-2 px-1 sm:px-0">
+            <% else %>
+              <%!-- TREE VIEW --%>
+              <%= if @active_tab == :oracle and @current_project do %>
+                <.oracle_view questions={@questions} agents={@agents} />
+              <% end %>
+
+              <%= if @active_tab == :recipes and @current_project do %>
+                <.recipe_list
+                  recipes={@recipes}
+                  show_recipe_form={@show_recipe_form}
+                  recipe_form={@recipe_form}
+                  editing_recipe_id={@editing_recipe_id}
+                />
+              <% end %>
+
+              <%= if @active_tab == :workbench or is_nil(@current_project) do %>
                 <%= if @projects == [] and is_nil(@current_project) do %>
-                  <div class="py-8 text-center">
-                    <h2 class="text-base-content/50 text-lg font-semibold mb-3 font-apothecary">
-                      No projects yet
-                    </h2>
-                    <p class="text-base-content/30 text-sm mb-4">
-                      Open a git repository to get started.
-                    </p>
-                    <div class="flex gap-3">
-                      <button
-                        phx-click="show-add-project"
-                        class="px-4 py-2 text-sm font-apothecary bg-primary/20 text-primary hover:bg-primary/30 rounded transition-colors cursor-pointer"
-                      >
-                        Open Project
-                      </button>
-                      <button
-                        phx-click="show-new-project"
-                        class="px-4 py-2 text-sm font-apothecary bg-base-content/10 text-base-content/50 hover:text-base-content/70 hover:bg-base-content/15 rounded transition-colors cursor-pointer"
-                      >
-                        New Project
-                      </button>
+                  <div class="px-3 py-8" style="color: var(--muted); font-size: var(--font-size-sm);">
+                    <div style="color: var(--dim);">no projects yet</div>
+                    <div class="mt-2 flex gap-3">
+                      <span class="action-pill cursor-pointer" phx-click="show-add-project">open project</span>
+                      <span class="action-text cursor-pointer" phx-click="show-new-project">new project</span>
                     </div>
                   </div>
                 <% else %>
                   <%= if @projects != [] and is_nil(@current_project) do %>
-                    <div class="py-8 text-center">
-                      <h2 class="text-base-content/50 text-lg font-semibold mb-3 font-apothecary">
-                        Select a project
-                      </h2>
-                      <p class="text-base-content/30 text-sm">
-                        Choose a project above to see its workbench and concoctions.
-                      </p>
+                    <div class="px-3 py-8" style="color: var(--muted); font-size: var(--font-size-sm);">
+                      select a project above
                     </div>
                   <% else %>
-                    <h2 class="text-base-content/50 text-lg font-semibold mb-2 font-apothecary">
-                      Ready to mix?
-                    </h2>
-                    <%!-- Concoct + alchemist controls --%>
-                    <% project_agents =
-                      project_scoped_agents(@agents, @current_project, @dispatcher_projects) %>
-                    <.concoct_controls
-                      swarm_status={@swarm_status}
+                    <%!-- Settings line --%>
+                    <.settings_line
                       target_count={@target_count}
-                      active_count={@active_count}
-                      working_count={Enum.count(project_agents, &(&1.status == :working))}
                       auto_pr={@auto_pr}
-                      gh_available={@gh_available}
+                      swarm_status={@swarm_status}
+                      dev_server={@dev_servers[@current_project && @current_project.id]}
                     />
-                    <.primary_input input_focused={@input_focused} />
-                    <div class="text-base-content/20 text-[10px] mt-1 px-1">
-                      Start with <span class="text-primary/40">?</span> to ask about the codebase
-                    </div>
-                    <.activity_ticker agents={project_agents} />
+
+                    <%!-- Input --%>
+                    <.concoction_input input_focused={@input_focused} />
+
+                    <%!-- Tree --%>
+                    <.concoction_tree
+                      worktrees_by_status={@worktrees_by_status}
+                      agents={@agents}
+                      dev_servers={@dev_servers}
+                      selected_card={@selected_card}
+                      card_ids={@card_ids}
+                      collapsed_done={@collapsed_done}
+                    />
                   <% end %>
                 <% end %>
-              </div>
-
-              <%!-- Project preview --%>
-              <div :if={@current_project} class="max-w-2xl mx-auto pb-2 px-1 sm:px-0">
-                <.project_preview
-                  project={@current_project}
-                  dev_server={@dev_servers[@current_project.id]}
-                  has_preview_config={@has_project_preview_config}
-                />
-              </div>
-
-              <%= if @current_project do %>
-                <%!-- Lane: STOCKROOM — ready + blocked --%>
-                <% stockroom_entries =
-                  Enum.flat_map(~w(ready blocked), fn g -> @worktrees_by_status[g] || [] end)
-                  |> Enum.sort_by(fn e -> e.worktree.priority || 99 end) %>
-                <div class="pb-2">
-                  <div class="flex items-center gap-2 py-1.5">
-                    <span class="uppercase text-xs tracking-wider font-bold text-emerald-400 font-apothecary">
-                      STOCKROOM
-                    </span>
-                    <span class="text-base-content/30 text-xs">({length(stockroom_entries)})</span>
-                    <span class="text-base-content/15 text-[10px] ml-1">1</span>
-                  </div>
-                  <%= if stockroom_entries != [] do %>
-                    <div class="overflow-x-auto pb-2 scroll-smooth scroll-lane" id="stockroom-lane">
-                      <div class="flex flex-nowrap gap-3 min-w-0">
-                        <.worktree_card
-                          :for={entry <- stockroom_entries}
-                          worktree={entry.worktree}
-                          tasks={entry.tasks}
-                          agent={entry.agent}
-                          dev_server={entry.dev_server}
-                          selected={@selected_card_id == entry.worktree.id}
-                          group={entry_group(entry.worktree, @agents)}
-                        />
-                      </div>
-                    </div>
-                  <% else %>
-                    <div class="py-3 text-base-content/20 text-xs">empty</div>
-                  <% end %>
-                </div>
-
-                <%!-- Lane: CONCOCTING — running --%>
-                <% brewing_entries =
-                  (@worktrees_by_status["running"] || [])
-                  |> Enum.sort_by(fn e -> e.worktree.priority || 99 end) %>
-                <div class="pb-2">
-                  <div class="flex items-center gap-2 py-1.5">
-                    <span class="uppercase text-xs tracking-wider font-bold text-amber-400 font-apothecary">
-                      CONCOCTING
-                    </span>
-                    <span class="text-base-content/30 text-xs">({length(brewing_entries)})</span>
-                    <span class="text-base-content/15 text-[10px] ml-1">2</span>
-                  </div>
-                  <%= if brewing_entries != [] do %>
-                    <div class="overflow-x-auto pb-2 scroll-smooth scroll-lane" id="brewing-lane">
-                      <div class="flex flex-nowrap gap-3 min-w-0">
-                        <.worktree_card
-                          :for={entry <- brewing_entries}
-                          worktree={entry.worktree}
-                          tasks={entry.tasks}
-                          agent={entry.agent}
-                          dev_server={entry.dev_server}
-                          selected={@selected_card_id == entry.worktree.id}
-                          group="running"
-                        />
-                      </div>
-                    </div>
-                  <% else %>
-                    <div class="py-3 text-base-content/20 text-xs">empty</div>
-                  <% end %>
-                </div>
-
-                <%!-- Lane: ASSAYING — pr --%>
-                <% assaying_entries =
-                  (@worktrees_by_status["pr"] || [])
-                  |> Enum.sort_by(fn e -> e.worktree.priority || 99 end) %>
-                <div class="pb-2">
-                  <div class="flex items-center gap-2 py-1.5">
-                    <span class="uppercase text-xs tracking-wider font-bold text-purple-400 font-apothecary">
-                      ASSAYING
-                    </span>
-                    <span class="text-base-content/30 text-xs">({length(assaying_entries)})</span>
-                    <span class="text-base-content/15 text-[10px] ml-1">3</span>
-                  </div>
-                  <%= if assaying_entries != [] do %>
-                    <div class="overflow-x-auto pb-2 scroll-smooth scroll-lane" id="assaying-lane">
-                      <div class="flex flex-nowrap gap-3 min-w-0">
-                        <.worktree_card
-                          :for={entry <- assaying_entries}
-                          worktree={entry.worktree}
-                          tasks={entry.tasks}
-                          agent={entry.agent}
-                          dev_server={entry.dev_server}
-                          selected={@selected_card_id == entry.worktree.id}
-                          group="pr"
-                        />
-                      </div>
-                    </div>
-                  <% else %>
-                    <div class="py-3 text-base-content/20 text-xs">empty</div>
-                  <% end %>
-                </div>
-
-                <%!-- BOTTLED — collapsible card grid --%>
-                <% done_entries = @worktrees_by_status["done"] || [] %>
-                <div class="pb-4">
-                  <div class="flex items-center gap-2">
-                    <.worktree_group_header
-                      label="BOTTLED"
-                      count={length(done_entries)}
-                      color="text-green-400/70"
-                      group="done"
-                      collapsed={@collapsed_done}
-                      collapsible={true}
-                    />
-                    <span class="text-base-content/15 text-[10px]">4</span>
-                  </div>
-                  <%= if done_entries != [] do %>
-                    <div
-                      :if={!@collapsed_done}
-                      class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 mt-1 mb-3"
-                    >
-                      <.worktree_card
-                        :for={entry <- done_entries}
-                        worktree={entry.worktree}
-                        tasks={entry.tasks}
-                        agent={entry.agent}
-                        dev_server={entry.dev_server}
-                        selected={@selected_card_id == entry.worktree.id}
-                        group="done"
-                      />
-                    </div>
-                  <% else %>
-                    <div :if={!@collapsed_done} class="py-3 text-base-content/20 text-xs">empty</div>
-                  <% end %>
-                </div>
               <% end %>
-            </div>
-          <% end %>
+            <% end %>
+          </div>
         </div>
 
-        <%!-- Footer --%>
-        <div class="border-t border-base-content/10 px-2 py-1 text-xs flex items-center justify-between">
-          <div class="flex items-center gap-3 text-base-content/30">
-            <span class="hidden sm:inline">
-              j/k:nav  1-4:lanes  enter:inspect  w/e/o:tabs  s:concoct
-            </span>
-            <span class="sm:hidden">tap card to inspect</span>
-            <button
-              :if={@orphan_count > 0}
-              phx-click="requeue-orphans"
-              class="text-amber-400 hover:text-amber-300 cursor-pointer"
-            >
-              {@orphan_count} orphan(s) [R]
-            </button>
-          </div>
-          <div class="flex items-center gap-3 text-base-content/30">
-            <Layouts.theme_toggle />
-            <span class="cursor-pointer" phx-click="toggle-help">?:help</span>
-          </div>
-        </div>
+        <%!-- Status bar --%>
+        <.moonlight_status_bar
+          selected_task={@selected_task}
+          selected_task_id={@selected_task_id}
+          worktrees_by_status={@worktrees_by_status}
+          orphan_count={@orphan_count}
+        />
       </div>
 
-      <%!-- Detail drawer --%>
-      <.task_detail_drawer
-        :if={@selected_task && @selected_task_id}
-        task={@selected_task}
-        children={@children}
-        editing_field={@editing_field}
-        working_agent={@working_agent}
-        agent_output={@agent_output}
-        dev_server={@dev_servers[@selected_task_id]}
-        has_preview_config={@has_preview_config}
-        pending_action={@pending_action}
-        loading_action={@loading_action}
-      />
-
+      <%!-- Overlays --%>
       <.which_key_overlay
         :if={@show_help}
         page={:dashboard}
