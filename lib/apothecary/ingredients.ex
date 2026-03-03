@@ -47,6 +47,27 @@ defmodule Apothecary.Ingredients do
     }
   end
 
+  @doc "Get state filtered by project_id."
+  def get_state(project_id: project_id) do
+    concoctions = list_concoctions(project_id: project_id)
+    concoction_ids = MapSet.new(concoctions, & &1.id)
+
+    ingredients =
+      list_all_ingredients()
+      |> Enum.filter(fn i -> MapSet.member?(concoction_ids, i.concoction_id) end)
+
+    all_items = concoctions ++ ingredients
+    ready = compute_ready_concoctions(concoctions)
+
+    %{
+      tasks: all_items,
+      ready_tasks: ready,
+      stats: compute_stats(all_items),
+      last_poll: DateTime.utc_now(),
+      error: nil
+    }
+  end
+
   @doc "Look up any item by ID (concoction or ingredient)."
   def show(id) do
     id = to_string(id)

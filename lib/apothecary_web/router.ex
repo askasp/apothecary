@@ -19,6 +19,8 @@ defmodule ApothecaryWeb.Router do
 
     live "/", DashboardLive
     live "/ingredients/:id", DashboardLive
+    live "/projects/:project_id", DashboardLive
+    live "/projects/:project_id/ingredients/:id", DashboardLive
     live "/brewers/:id", AgentLive
   end
 
