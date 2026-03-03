@@ -1,17 +1,17 @@
 # Apothecary Demo Recording Plan
 
-Silent screen recording, ~3-4 minutes total. Record segment by segment, merge later.
+Silent screen recording, ~4-5 minutes total. Record segment by segment, merge later.
 
 ## Setup
 
-- Demo app repo ready with `.apothecary/preview.yml` configured
+- A Phoenix demo app repo ready with `.apothecary/preview.yml` configured
 - `gh` CLI authenticated
-- Terminal open, `cd`'d into the demo project
+- Terminal open, ready to run `apothecary`
 - Browser at 1440x900 or similar, no other tabs
 - `demo/title-cards.html` open in a separate browser window, fullscreen (`f` key)
 - Notifications off (Do Not Disturb)
 
-**Important:** The demo app appears twice — Segment 2 (the "before") and Segment 7 (the preview "after"). Everything else is either a terminal or the Apothecary dashboard.
+**Important:** The demo app appears three times — Segment 4 (the "before" via main preview), Segment 7 (preview of individual changes), and Segment 8 (the merged "after"). The contrast between before/after is the payoff.
 
 ## Recording Workflow
 
@@ -34,121 +34,144 @@ For each segment:
 
 ---
 
-## Segment 2 — The App We're Improving
+## Segment 2 — Start Apothecary
 
-**Title card:** "The project we're working on"
+**Title card:** "Start Apothecary"
 
-1. Cmd+Tab to the demo app (already running).
-2. Quick scan — scroll around, show a couple of pages (2-3 seconds).
-3. Establish the "before" state. This is what the agents will be changing.
-
----
-
-## Segment 3 — Point It at Your Project
-
-**Title card:** "Point it at your project"
-
-1. Cmd+Tab to a terminal already `cd`'d into the demo project.
+1. Cmd+Tab to a terminal.
 2. Run `apothecary` (or `apothecary start`).
 3. Show it booting — Elixir/Phoenix output scrolls briefly.
-4. Browser opens (or Cmd+Tab to it) showing the Apothecary dashboard with the project loaded.
-5. Pause on the empty dashboard for a beat — clean slate, ready to go.
+4. Browser opens (or Cmd+Tab to it) showing the Apothecary dashboard.
+5. Pause on the dashboard for a beat — clean slate, no project selected yet.
 
 ---
 
-## Segment 4 — Create Concoctions
+## Segment 3 — Create a Project
+
+**Title card:** "Create a project"
+
+1. Cmd+Tab to dashboard.
+2. Click the project selector dropdown in the top-left corner.
+3. Click **New Project** (or **Open Project** if pointing at an existing Phoenix repo).
+4. For "New Project": give it a name, show the bootstrapper creating the repo.
+   For "Open Project": paste or browse to the demo Phoenix app's path.
+5. Project loads — dashboard updates to show the project name in the selector.
+6. The workbench is now scoped to this project. Pause briefly.
+
+---
+
+## Segment 4 — Preview the App (Before)
+
+**Title card:** "Preview the app" / "The 'before' state"
+
+**Note:** This establishes the baseline the viewer will compare against later.
+
+1. Cmd+Tab to dashboard.
+2. The main preview section should be visible in the workbench area.
+3. Click **Start Preview** on the main project (this runs the dev server on the main branch).
+4. Preview starts — status shows "Starting..." then flips to "Running" with a port link.
+5. Click the port link or show the embedded preview iframe.
+6. Quick scan of the app — scroll around, show a couple of pages (2-3 seconds).
+7. Establish the "before" state. This is what the agents will be changing.
+
+---
+
+## Segment 5 — Create Concoctions
 
 **Title card:** "Create concoctions"
 
-1. Cmd+Tab to dashboard. Show the empty/calm UI for a beat.
+1. Cmd+Tab to dashboard workbench.
 2. Click the "What shall we concoct?" textarea.
 3. Type: "Add a dark mode toggle with a sun/moon icon that persists preference to localStorage"
-4. Hit send. Card appears in STOCKROOM.
-5. Create 2 more quickly:
+4. Hit send. Concoction card appears.
+5. Create a second one:
    - "Add a footer component with links to GitHub and docs"
-   - "Refactor the homepage hero section into its own LiveComponent"
-6. Three cards now in STOCKROOM. Pause briefly so viewer sees them.
+6. Two concoction cards now visible. Pause briefly so viewer sees them.
 
 ---
 
-## Segment 5 — Start the Swarm
+## Segment 6 — Watch the Swarm
 
-**Title card:** "Start the swarm"
+**Title card:** "Watch the swarm" / "Parallel agents, live ingredients"
 
 1. Cmd+Tab to dashboard.
 2. Click the **Concoct** button (or press `s`). Cauldron animates.
-3. Press `+` a couple times to scale to 3 alchemists.
-4. Watch cards move from STOCKROOM → CONCOCTING as agents claim them.
-5. Activity ticker lights up at top — dots go green.
+3. Press `+` to scale to 2 alchemists (one per concoction).
+4. Watch both cards move from STOCKROOM to CONCOCTING as agents claim them simultaneously.
+5. Activity ticker lights up — dots go green.
 6. Click a CONCOCTING card (or press `Enter`) to open the detail drawer.
 7. Show agent output streaming in real-time.
 8. **Key moment:** ingredients appear as the agent self-decomposes the task. Checkboxes populate, progress bar moves.
-9. Let this run for a bit. Speed up waiting parts in post (2-4x).
-10. Close drawer (`Esc`).
+9. Close drawer (`Esc`). Click the other CONCOCTING card briefly to show both agents working in parallel.
+10. Let this run. Speed up waiting parts in post (2-4x).
 
 ---
 
-## Segment 6 — Inspect the Diff
+## Segment 7 — Preview Each Change
 
-**Title card:** "Inspect the diff"
+**Title card:** "Preview each change" / "Side-by-side, in parallel"
+
+**Note:** The demo app returns here — the viewer saw the "before" in Segment 4, now they see what each agent built. The contrast is the payoff.
 
 1. Cmd+Tab to dashboard.
-2. Select a concoction that has meaningful changes (finished or nearly finished).
-3. Press `d` — full-screen diff overlay opens.
-4. Show the file list on the left (color-coded green/red/yellow).
-5. Press `j`/`k` to navigate between files — right pane updates.
-6. Pause on a meaningful change so viewers can read it.
-7. Press `Esc` to close.
+2. Select the first completed concoction, open the detail drawer.
+3. Click **Start Preview** (or press `D`).
+4. Status shows "Starting..." then flips to "Running" with a port link.
+5. Click the port link — demo app opens running from the agent's worktree (different port, e.g. `localhost:4001`).
+6. **Show the actual change** the agent made (dark mode toggle). This is the payoff.
+7. Switch back to dashboard. Select the second concoction.
+8. Start its preview too — now two worktree previews running simultaneously.
+9. Click through to see the second change (footer). Two agents, two features, both previewable.
+10. Switch back to Apothecary dashboard.
 
 ---
 
-## Segment 7 — Preview Changes Live
+## Segment 8 — Merge & See the Result
 
-**Title card:** "Preview changes live"
-
-**Note:** The demo app returns here — the viewer saw the "before" in Segment 2, now they see the "after." The contrast is the payoff.
-
-1. Cmd+Tab to dashboard.
-2. Select a completed concoction, open the detail drawer.
-3. Click **start preview** (or press `D`).
-4. Card shows "PREVIEW ◐ starting..."
-5. Flips to "PREVIEW ●" with a port link.
-6. Click the port link — demo app opens in a new tab, running from the agent's worktree. URL bar shows a different port (e.g. `localhost:4001`).
-7. **Show the actual change** the agent made (dark mode toggle, footer, etc.). This is the payoff.
-8. Switch back to Apothecary dashboard (`localhost:4000`).
-
----
-
-## Segment 8 — Merge
-
-**Title card:** "Merge"
+**Title card:** "Merge & see the result"
 
 1. Cmd+Tab to dashboard.
 2. A concoction should be in ASSAYING lane (PR open). Select it.
 3. Show the PR URL in the detail drawer. Optionally click through to GitHub briefly.
 4. Press `m` — merge confirmation bar appears.
-5. Confirm merge.
-6. Card slides to BOTTLED lane.
-7. Show BOTTLED lane with the completed work.
+5. Confirm merge. Card slides to BOTTLED lane.
+6. Merge the second concoction too.
+7. **Key moment:** main preview auto-refreshes (or manually restart it) — now the app has both changes. Dark mode + footer, merged into main.
+8. Show the updated app briefly. The "after" state with all changes combined.
 
 ---
 
-## Segment 9 — Recipes
+## Segment 9 — Recurring Concoctions
 
-**Title card:** "Recipes" / "Recurring scheduled work"
+**Title card:** "Recurring concoctions" / "Scheduled work on autopilot"
 
 1. Cmd+Tab to dashboard.
-2. Press `e` to switch to Recipes tab.
+2. Press `e` to switch to the Recipes tab.
 3. Click **New Recipe**.
 4. Fill in: title "Weekly dependency update", schedule `0 3 * * SUN`, priority P2.
 5. Create it. Card appears with "active" badge and "next: 5d".
-6. Show pause/resume toggle briefly.
+6. Show the pause/resume toggle briefly.
+7. Mention this runs unattended — agents wake up, do the work, open a PR.
 
 ---
 
-## Segment 10 — Outro
+## Segment 10 — Ask the Oracle
 
-**Title card:** "Apothecary" / "github.com/nomadkaraoke/apothecary"
+**Title card:** "Ask the Oracle" / "Codebase Q&A, powered by agents"
+
+1. Cmd+Tab to dashboard workbench.
+2. Type a question starting with `?`: "? How does the authentication system work?"
+3. Hit send. A question concoction appears with a pulsing amber indicator.
+4. Press `o` to switch to the Oracle tab — the question is listed.
+5. Wait (or speed up in post) for the agent to analyze the codebase and produce an answer.
+6. Answer appears in the Oracle tab. Click to expand and show the detailed response.
+7. Pause so the viewer can read the first few lines.
+
+---
+
+## Segment 11 — Outro
+
+**Title card:** "Apothecary" / "github.com/askasp/apothecary"
 
 - Hold 3 seconds. End.
 
@@ -168,16 +191,19 @@ ffmpeg -f concat -i list.txt -c copy demo.mov
 
 ### Speed up waiting parts
 
-If a segment has dead time while agents work, cut it or speed it up in iMovie/kdenlive. Show a subtle ⏩ in the corner during sped-up sections if you want.
+If a segment has dead time while agents work, cut it or speed it up in iMovie/kdenlive. Show a subtle fast-forward indicator in the corner during sped-up sections if you want.
 
 ### Key moments to keep at 1x speed
 
-- Card creation (typing + send)
-- Cards sliding between lanes
+- Project creation / selection
+- Main preview starting (the "before")
+- Concoction creation (typing + send)
+- Cards moving between lanes
 - Ingredients appearing in real-time
-- Diff viewer navigation
-- Preview app loading and showing the change
-- Merge confirmation
+- Both previews loading — the parallel payoff
+- Merge confirmation and seeing the combined result
+- Oracle question being asked and answer appearing
+- Recipe creation
 
 ### Export
 
