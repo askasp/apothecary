@@ -2147,6 +2147,19 @@ defmodule ApothecaryWeb.DashboardLive do
     end)
   end
 
+  defp project_scoped_agents(agents, nil, _dispatcher_projects), do: agents
+
+  defp project_scoped_agents(agents, project, dispatcher_projects) do
+    case dispatcher_projects[project.id] do
+      %{agents: project_agents} when is_map(project_agents) ->
+        project_pids = MapSet.new(Map.keys(project_agents))
+        Enum.filter(agents, fn a -> MapSet.member?(project_pids, a.pid) end)
+
+      _ ->
+        []
+    end
+  end
+
   defp selected_card_id(assigns) do
     Enum.at(assigns.card_ids, assigns.selected_card)
   end
@@ -2243,16 +2256,17 @@ defmodule ApothecaryWeb.DashboardLive do
                       What shall we concoct?
                     </h2>
                     <%!-- Concoct + alchemist controls --%>
+                    <% project_agents = project_scoped_agents(@agents, @current_project, @dispatcher_projects) %>
                     <.concoct_controls
                       swarm_status={@swarm_status}
                       target_count={@target_count}
                       active_count={@active_count}
-                      working_count={Enum.count(@agents, &(&1.status == :working))}
+                      working_count={Enum.count(project_agents, &(&1.status == :working))}
                       auto_pr={@auto_pr}
                       gh_available={@gh_available}
                     />
                     <.primary_input input_focused={@input_focused} />
-                    <.activity_ticker agents={@agents} />
+                    <.activity_ticker agents={project_agents} />
                   <% end %>
                 <% end %>
               </div>
