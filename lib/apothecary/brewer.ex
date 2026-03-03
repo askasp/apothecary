@@ -76,7 +76,9 @@ defmodule Apothecary.Brewer do
     tasks = Apothecary.Ingredients.list_ingredients(concoction_id: worktree.id)
 
     # Write MCP config so Claude can communicate with the orchestrator
-    write_mcp_config(worktree_path, agent.id, worktree.id)
+    # Include any per-concoction MCP servers alongside project-level ones
+    extra_mcps = Map.get(worktree, :mcp_servers) || %{}
+    write_mcp_config(worktree_path, agent.id, worktree.id, extra_mcps)
 
     case spawn_claude(agent, worktree, tasks) do
       {:ok, port} ->
@@ -555,23 +557,39 @@ defmodule Apothecary.Brewer do
 
   # Private — MCP config
 
-  defp write_mcp_config(worktree_path, agent_id, worktree_id) do
+  defp write_mcp_config(worktree_path, agent_id, worktree_id, extra_mcps) do
     port = Application.get_env(:apothecary, :port, 4000)
 
-    config = %{
-      "mcpServers" => %{
-        "apothecary" => %{
-          "type" => "http",
-          "url" =>
-            "http://localhost:#{port}/mcp?brewer_id=#{agent_id}&concoction_id=#{worktree_id}"
-        }
+    apothecary_mcp = %{
+      "apothecary" => %{
+        "type" => "http",
+        "url" =>
+          "http://localhost:#{port}/mcp?brewer_id=#{agent_id}&concoction_id=#{worktree_id}"
       }
     }
+
+    # Read project-level .mcp.json to pass through user-configured MCPs
+    project_mcps = read_project_mcp_servers()
+
+    # Merge: project-level < per-concoction < apothecary (apothecary always wins)
+    merged =
+      project_mcps
+      |> Map.merge(normalize_mcp_servers(extra_mcps))
+      |> Map.merge(apothecary_mcp)
+
+    config = %{"mcpServers" => merged}
 
     mcp_path = Path.join(worktree_path, ".mcp.json")
 
     case File.write(mcp_path, Jason.encode!(config, pretty: true)) do
       :ok ->
+        extra_count = map_size(merged) - 1
+
+        if extra_count > 0 do
+          extra_names = merged |> Map.keys() |> List.delete("apothecary") |> Enum.join(", ")
+          Logger.info("MCP config: apothecary + #{extra_count} passthrough(s): #{extra_names}")
+        end
+
         :ok
 
       {:error, reason} ->
@@ -581,6 +599,30 @@ defmodule Apothecary.Brewer do
         )
     end
   end
+
+  defp read_project_mcp_servers do
+    project_dir = Application.get_env(:apothecary, :project_dir)
+
+    if project_dir do
+      mcp_path = Path.join(project_dir, ".mcp.json")
+
+      case File.read(mcp_path) do
+        {:ok, content} ->
+          case Jason.decode(content) do
+            {:ok, %{"mcpServers" => servers}} when is_map(servers) -> servers
+            _ -> %{}
+          end
+
+        {:error, _} ->
+          %{}
+      end
+    else
+      %{}
+    end
+  end
+
+  defp normalize_mcp_servers(servers) when is_map(servers), do: servers
+  defp normalize_mcp_servers(_), do: %{}
 
   # Private — Claude process
 
