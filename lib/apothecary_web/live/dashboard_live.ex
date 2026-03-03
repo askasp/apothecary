@@ -52,7 +52,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:has_preview_config, false)
       |> assign(:has_project_preview_config, false)
       |> assign(:collapsed_done, true)
-      |> assign(:selected_card, 0)
+      |> assign(:selected_card, -1)
       # Panel state
       |> assign(:selected_task_id, nil)
       |> assign(:selected_task, nil)
@@ -79,14 +79,20 @@ defmodule ApothecaryWeb.DashboardLive do
       # Auto PR
       |> assign(:auto_pr, Git.auto_pr?())
       |> assign(:gh_available, Git.gh_available?())
-      # Add project modal
-      |> assign(:show_add_project, false)
+      # Project selection (inline landing)
+      |> assign(:show_project_switcher, false)
       |> assign(:add_project_error, nil)
       |> assign(:project_path_suggestions, [])
+      |> assign(:editing_setting, nil)
       # New project (bootstrap) modal
       |> assign(:show_new_project, false)
       |> assign(:new_project_error, nil)
       |> assign(:bootstrap_progress, nil)
+      # Ingredient inline input
+      |> assign(:adding_ingredient_to, nil)
+      # Search mode
+      |> assign(:search_mode, false)
+      |> assign(:search_query, "")
       # Load state (will be refined in handle_params)
       |> load_dashboard_state(nil)
 
@@ -115,15 +121,8 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   def handle_params(_params, _uri, socket) do
-    # Auto-select first project when none is selected
-    case socket.assigns.projects do
-      [first | _] when is_nil(socket.assigns.current_project) ->
-        {:noreply, push_navigate(socket, to: ~p"/projects/#{first.id}")}
-
-      _ ->
-        socket = apply_project_scope(socket, nil)
-        {:noreply, select_task(socket, nil)}
-    end
+    socket = apply_project_scope(socket, nil)
+    {:noreply, select_task(socket, nil)}
   end
 
   defp apply_project_scope(socket, project_id) do
@@ -612,8 +611,75 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("select-task", %{"id" => id}, socket) do
+    {:noreply, push_patch(socket, to: project_path(socket) <> "?task=#{id}")}
+  end
+
+  @impl true
   def handle_event("deselect-task", _params, socket) do
     {:noreply, push_patch(socket, to: project_path(socket))}
+  end
+
+  # Inline ingredient creation
+  @impl true
+  def handle_event("add-ingredient-inline", %{"title" => title, "concoction_id" => wt_id}, socket) do
+    title = String.trim(title)
+
+    socket =
+      if title != "" do
+        Ingredients.create_ingredient(%{title: title, concoction_id: wt_id, priority: 3})
+        socket
+      else
+        socket
+      end
+
+    {:noreply, assign(socket, :adding_ingredient_to, nil)}
+  end
+
+  @impl true
+  def handle_event("ingredient-input-blur", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:adding_ingredient_to, nil)
+     |> assign(:input_focused, false)}
+  end
+
+  # Search tree
+  @impl true
+  def handle_event("search-tree", %{"query" => query}, socket) do
+    {:noreply, assign(socket, :search_query, query)}
+  end
+
+  @impl true
+  def handle_event("search-select", %{"query" => query}, socket) do
+    socket =
+      socket
+      |> assign(:search_mode, false)
+      |> assign(:search_query, "")
+
+    # Jump to first match if any
+    query_lower = String.downcase(query)
+
+    match_idx =
+      if query_lower != "" do
+        Enum.find_index(socket.assigns.card_ids, fn card_id ->
+          # Find entry title matching the query
+          entry = find_entry_by_id(socket.assigns.worktrees_by_status, card_id)
+          entry && String.contains?(String.downcase(entry.worktree.title || entry.worktree.id), query_lower)
+        end)
+      end
+
+    socket = if match_idx, do: assign(socket, :selected_card, match_idx), else: socket
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("search-blur", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:search_mode, false)
+     |> assign(:search_query, "")
+     |> assign(:input_focused, false)}
   end
 
   @impl true
@@ -1013,26 +1079,61 @@ defmodule ApothecaryWeb.DashboardLive do
     {:noreply, assign(socket, :active_tab, active_tab)}
   end
 
+  # --- Oracle event handler ---
+
+  @impl true
+  def handle_event("oracle-ask", %{"text" => text}, socket) do
+    text = String.trim(text)
+
+    if text == "" do
+      {:noreply, socket}
+    else
+      create_question(text, socket)
+    end
+  end
+
   # --- Project event handlers ---
 
   @impl true
-  def handle_event("show-add-project", _params, socket) do
-    {:noreply,
-     assign(socket,
-       show_add_project: true,
-       add_project_error: nil,
-       project_path_suggestions: []
-     )}
+  def handle_event("toggle-project-switcher", _params, socket) do
+    {:noreply, assign(socket, :show_project_switcher, !socket.assigns.show_project_switcher)}
   end
 
   @impl true
-  def handle_event("cancel-add-project", _params, socket) do
-    {:noreply,
-     assign(socket,
-       show_add_project: false,
-       add_project_error: nil,
-       project_path_suggestions: []
-     )}
+  def handle_event("close-project-switcher", _params, socket) do
+    {:noreply, assign(socket, :show_project_switcher, false)}
+  end
+
+  @impl true
+  def handle_event("edit-setting", %{"setting" => "alchemists"}, socket) do
+    {:noreply, assign(socket, :editing_setting, :alchemists)}
+  end
+
+  @impl true
+  def handle_event("confirm-setting", _params, socket) do
+    {:noreply, assign(socket, :editing_setting, nil)}
+  end
+
+  @impl true
+  def handle_event("increment-alchemists", _params, socket) do
+    count = min(socket.assigns.target_count + 1, 8)
+
+    if socket.assigns.current_project && socket.assigns.swarm_status == :running do
+      Dispatcher.set_agent_count(socket.assigns.current_project.id, count)
+    end
+
+    {:noreply, assign(socket, :target_count, count)}
+  end
+
+  @impl true
+  def handle_event("decrement-alchemists", _params, socket) do
+    count = max(socket.assigns.target_count - 1, 1)
+
+    if socket.assigns.current_project && socket.assigns.swarm_status == :running do
+      Dispatcher.set_agent_count(socket.assigns.current_project.id, count)
+    end
+
+    {:noreply, assign(socket, :target_count, count)}
   end
 
   @impl true
@@ -1070,14 +1171,14 @@ defmodule ApothecaryWeb.DashboardLive do
 
               {:noreply,
                socket
-               |> assign(projects: projects, show_add_project: false, add_project_error: nil)
+               |> assign(projects: projects, add_project_error: nil)
                |> put_flash(:info, "Project added: #{project.name}")
                |> push_navigate(to: ~p"/projects/#{project.id}")}
 
             {:error, {:already_exists, existing}} ->
               {:noreply,
                socket
-               |> assign(show_add_project: false, add_project_error: nil)
+               |> assign(add_project_error: nil)
                |> push_navigate(to: ~p"/projects/#{existing.id}")}
 
             {:error, reason} ->
@@ -1289,6 +1390,20 @@ defmodule ApothecaryWeb.DashboardLive do
 
   defp handle_hotkey("Escape", socket) do
     cond do
+      socket.assigns.adding_ingredient_to ->
+        assign(socket, :adding_ingredient_to, nil)
+
+      socket.assigns.search_mode ->
+        socket
+        |> assign(:search_mode, false)
+        |> assign(:search_query, "")
+
+      socket.assigns.show_project_switcher ->
+        assign(socket, :show_project_switcher, false)
+
+      socket.assigns.editing_setting ->
+        assign(socket, :editing_setting, nil)
+
       socket.assigns.pending_action ->
         socket
         |> assign(:pending_action, nil)
@@ -1378,8 +1493,35 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  defp handle_hotkey(key, socket) when key in ["/", "c"] do
+  defp handle_hotkey("c", socket) do
     push_event(socket, "focus-element", %{selector: "#primary-input"})
+  end
+
+  defp handle_hotkey("/", socket) do
+    socket
+    |> assign(:search_mode, true)
+    |> assign(:search_query, "")
+    |> push_event("focus-element", %{selector: "#tree-search-input"})
+  end
+
+  defp handle_hotkey("a", socket) do
+    card_ids = socket.assigns.card_ids
+    selected = socket.assigns.selected_card
+
+    case Enum.at(card_ids, selected) do
+      nil ->
+        # No card selected — edit alchemists
+        assign(socket, :editing_setting, :alchemists)
+
+      card_id ->
+        if String.starts_with?(to_string(card_id), "wt-") do
+          socket
+          |> assign(:adding_ingredient_to, card_id)
+          |> push_event("focus-element", %{selector: "#ingredient-input-#{card_id}"})
+        else
+          assign(socket, :editing_setting, :alchemists)
+        end
+    end
   end
 
   defp handle_hotkey(key, socket) when key in ["+", "="] do
@@ -2342,6 +2484,12 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:selected_card, idx)
   end
 
+  defp find_entry_by_id(worktrees_by_status, card_id) do
+    Enum.find_value(worktrees_by_status, fn {_status, entries} ->
+      Enum.find(entries, fn e -> e.worktree.id == card_id end)
+    end)
+  end
+
   defp extract_ingredient_ids(tasks) do
     tasks
     |> Enum.filter(&String.starts_with?(to_string(&1.id), "t-"))
@@ -2433,81 +2581,164 @@ defmodule ApothecaryWeb.DashboardLive do
           selected_task_id={@selected_task_id}
           selected_task={@selected_task}
           projects={@projects}
+          show_project_switcher={@show_project_switcher}
+          worktrees_by_status={@worktrees_by_status}
         />
 
         <div style="border-bottom: 1px solid var(--border);" />
 
-        <%!-- Main content area — single column, max ~540px --%>
-        <div class="flex-1 overflow-y-auto scroll-main">
-          <div class="max-w-[540px] mx-auto">
-            <%= if @selected_task && @selected_task_id do %>
-              <%!-- DETAIL VIEW: full takeover --%>
-              <.concoction_detail
-                task={@selected_task}
-                children={@children}
-                editing_field={@editing_field}
-                working_agent={@working_agent}
-                agent_output={@agent_output}
-                dev_server={@dev_servers[@selected_task_id]}
-                has_preview_config={@has_preview_config}
-                pending_action={@pending_action}
-                loading_action={@loading_action}
-              />
-            <% else %>
-              <%!-- TREE VIEW --%>
-              <%= if @active_tab == :oracle and @current_project do %>
-                <.oracle_view questions={@questions} agents={@agents} />
-              <% end %>
+        <%!-- Main content area --%>
+        <div class="flex-1 overflow-hidden">
+          <%= cond do %>
+            <% @show_project_switcher -> %>
+              <div class="h-full overflow-y-auto scroll-main">
+                <div class="max-w-[540px] mx-auto">
+                  <.project_switcher
+                    projects={@projects}
+                    current_project={@current_project}
+                    dispatcher_projects={@dispatcher_projects}
+                  />
+                </div>
+              </div>
 
-              <%= if @active_tab == :recipes and @current_project do %>
-                <.recipe_list
-                  recipes={@recipes}
-                  show_recipe_form={@show_recipe_form}
-                  recipe_form={@recipe_form}
-                  editing_recipe_id={@editing_recipe_id}
-                />
-              <% end %>
+            <% is_nil(@current_project) -> %>
+              <div class="h-full overflow-y-auto scroll-main">
+                <div class="max-w-[540px] mx-auto">
+                  <.project_landing
+                    projects={@projects}
+                    project_path_suggestions={@project_path_suggestions}
+                    add_project_error={@add_project_error}
+                    selected_project={@selected_card}
+                  />
+                </div>
+              </div>
 
-              <%= if @active_tab == :workbench or is_nil(@current_project) do %>
-                <%= if @projects == [] and is_nil(@current_project) do %>
-                  <div class="px-3 py-8" style="color: var(--muted); font-size: var(--font-size-sm);">
-                    <div style="color: var(--dim);">no projects yet</div>
-                    <div class="mt-2 flex gap-3">
-                      <span class="action-pill cursor-pointer" phx-click="show-add-project">open project</span>
-                      <span class="action-text cursor-pointer" phx-click="show-new-project">new project</span>
-                    </div>
-                  </div>
-                <% else %>
-                  <%= if @projects != [] and is_nil(@current_project) do %>
-                    <div class="px-3 py-8" style="color: var(--muted); font-size: var(--font-size-sm);">
-                      select a project above
-                    </div>
+            <% @active_tab == :oracle -> %>
+              <div class="h-full overflow-y-auto scroll-main">
+                <div class="max-w-[540px] mx-auto">
+                  <.oracle_view questions={@questions} agents={@agents} />
+                </div>
+              </div>
+
+            <% @active_tab == :recipes -> %>
+              <div class="h-full overflow-y-auto scroll-main">
+                <div class="max-w-[540px] mx-auto">
+                  <.recipe_list
+                    recipes={@recipes}
+                    show_recipe_form={@show_recipe_form}
+                    recipe_form={@recipe_form}
+                    editing_recipe_id={@editing_recipe_id}
+                  />
+                </div>
+              </div>
+
+            <% @active_tab == :workbench -> %>
+              <%!-- Split panel: tree left, detail right --%>
+              <div class="flex h-full">
+                <%!-- Left panel: settings + input + tree --%>
+                <div class="h-full overflow-y-auto scroll-main flex-shrink-0" style="width: 42%; border-right: 1px solid var(--border);">
+                  <.settings_line
+                    target_count={@target_count}
+                    auto_pr={@auto_pr}
+                    swarm_status={@swarm_status}
+                    dev_server={@dev_servers[@current_project && @current_project.id]}
+                    has_preview_config={@has_project_preview_config}
+                    project_id={@current_project && @current_project.id}
+                    editing_setting={@editing_setting}
+                  />
+
+                  <.concoction_input input_focused={@input_focused} />
+
+                  <.concoction_tree
+                    worktrees_by_status={@worktrees_by_status}
+                    agents={@agents}
+                    dev_servers={@dev_servers}
+                    selected_card={@selected_card}
+                    card_ids={@card_ids}
+                    collapsed_done={@collapsed_done}
+                    adding_ingredient_to={@adding_ingredient_to}
+                    search_mode={@search_mode}
+                    search_query={@search_query}
+                  />
+                </div>
+
+                <%!-- Right panel: detail or placeholder --%>
+                <div class="flex-1 h-full overflow-y-auto scroll-main">
+                  <%= if @selected_task && @selected_task_id do %>
+                    <.concoction_detail
+                      task={@selected_task}
+                      children={@children}
+                      editing_field={@editing_field}
+                      working_agent={@working_agent}
+                      agent_output={@agent_output}
+                      dev_server={@dev_servers[@selected_task_id]}
+                      has_preview_config={@has_preview_config}
+                      pending_action={@pending_action}
+                      loading_action={@loading_action}
+                    />
                   <% else %>
-                    <%!-- Settings line --%>
-                    <.settings_line
-                      target_count={@target_count}
-                      auto_pr={@auto_pr}
-                      swarm_status={@swarm_status}
-                      dev_server={@dev_servers[@current_project && @current_project.id]}
-                    />
+                    <% running = @worktrees_by_status["running"] || []
+                       pr = @worktrees_by_status["pr"] || []
+                       ready_blocked = (@worktrees_by_status["ready"] || []) ++ (@worktrees_by_status["blocked"] || [])
+                       all_entries = running ++ pr ++ ready_blocked ++ (@worktrees_by_status["done"] || [])
+                       all_tasks = Enum.flat_map(all_entries, fn e -> e.tasks end)
+                       done_tasks = Enum.count(all_tasks, fn t -> t.status in ["done", "closed"] end)
+                       total_tasks = length(all_tasks) %>
+                    <div class="h-full flex items-center justify-center" style="color: var(--muted); font-size: var(--font-size-sm);">
+                      <div class="text-center">
+                        <%!-- Diamond icons --%>
+                        <div class="flex items-center justify-center gap-2 mb-4" style="font-size: 20px; color: var(--dim);">
+                          <span>&#x25C7;</span>
+                          <span style="color: var(--muted);">&#x2500;</span>
+                          <span>&#x25C7;</span>
+                        </div>
 
-                    <%!-- Input --%>
-                    <.concoction_input input_focused={@input_focused} />
+                        <div class="mb-4" style="color: var(--dim);">select a concoction to inspect</div>
 
-                    <%!-- Tree --%>
-                    <.concoction_tree
-                      worktrees_by_status={@worktrees_by_status}
-                      agents={@agents}
-                      dev_servers={@dev_servers}
-                      selected_card={@selected_card}
-                      card_ids={@card_ids}
-                      collapsed_done={@collapsed_done}
-                    />
+                        <div class="mb-1" style="font-size: var(--font-size-xs);">
+                          <span style="font-weight: 600;">j/k</span> navigate
+                          <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+                          <span style="font-weight: 600;">enter</span> inspect
+                        </div>
+                        <div class="mb-1" style="font-size: var(--font-size-xs);">
+                          <span style="font-weight: 600;">a</span> add ingredient
+                          <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+                          <span style="font-weight: 600;">x</span> delete
+                        </div>
+                        <div class="mb-4" style="font-size: var(--font-size-xs);">
+                          <span style="font-weight: 600;">s</span> stop brewing
+                        </div>
+
+                        <div style="border-top: 1px solid var(--border); margin: 0 auto; max-width: 280px;" class="pt-4">
+                          <div class="flex items-center justify-center gap-6 mb-2" style="font-size: var(--font-size-xs);">
+                            <div>
+                              <span style="color: var(--concocting);">&#x25CF;</span>
+                              <span style="color: var(--dim); font-weight: 600;">{length(running)}</span>
+                              <div style="color: var(--muted);">concocting</div>
+                            </div>
+                            <div>
+                              <span style="color: var(--assaying);">&#x25CE;</span>
+                              <span style="color: var(--dim); font-weight: 600;">{length(pr)}</span>
+                              <div style="color: var(--muted);">assaying</div>
+                            </div>
+                            <div>
+                              <span style="color: var(--muted);">&#x25CB;</span>
+                              <span style="color: var(--dim); font-weight: 600;">{length(ready_blocked)}</span>
+                              <div style="color: var(--muted);">queued</div>
+                            </div>
+                          </div>
+                          <div :if={total_tasks > 0} class="mt-2" style="color: var(--dim); font-size: var(--font-size-xs);">
+                            {done_tasks}/{total_tasks} ingredients complete
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   <% end %>
-                <% end %>
-              <% end %>
-            <% end %>
-          </div>
+                </div>
+              </div>
+
+            <% true -> %>
+          <% end %>
         </div>
 
         <%!-- Status bar --%>
@@ -2516,6 +2747,10 @@ defmodule ApothecaryWeb.DashboardLive do
           selected_task_id={@selected_task_id}
           worktrees_by_status={@worktrees_by_status}
           orphan_count={@orphan_count}
+          current_project={@current_project}
+          active_tab={@active_tab}
+          show_project_switcher={@show_project_switcher}
+          project_count={length(@projects)}
         />
       </div>
 
@@ -2527,12 +2762,6 @@ defmodule ApothecaryWeb.DashboardLive do
       />
 
       <.diff_overlay :if={@diff_view} diff_view={@diff_view} />
-
-      <.add_project_modal
-        :if={@show_add_project}
-        error={@add_project_error}
-        suggestions={@project_path_suggestions}
-      />
 
       <.new_project_modal
         :if={@show_new_project}

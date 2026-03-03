@@ -69,112 +69,300 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :selected_task_id, :string, default: nil
   attr :selected_task, :any, default: nil
   attr :projects, :list, default: []
+  attr :show_project_switcher, :boolean, default: false
+  attr :worktrees_by_status, :map, default: %{}
 
   def top_bar(assigns) do
     ~H"""
-    <div class="flex items-center justify-between px-3 py-2" style="font-size: var(--font-size-sm);">
+    <div class="flex items-center justify-between px-4 py-3" style={"font-size: var(--font-size-sm); #{if @show_project_switcher, do: "background: var(--surface);", else: ""}"}>
       <div class="flex items-center gap-0 min-w-0">
-        <%= if @selected_task_id && @selected_task do %>
+        <%= if is_nil(@current_project) do %>
           <span style="color: var(--accent);">apothecary</span>
-          <span style="color: var(--dim);">
-            &nbsp;/ {if @current_project, do: @current_project.name, else: "—"}
-          </span>
-          <span style="color: var(--concocting);">
-            &nbsp;/ {@selected_task_id}
-          </span>
         <% else %>
-          <.link navigate={~p"/"} style="color: var(--accent); text-decoration: none;">
-            apothecary
-          </.link>
-          <%= if @current_project do %>
-            <span style="color: var(--dim);">&nbsp;/ </span>
-            <div class="relative inline-block" id="project-dropdown" phx-hook=".ProjectDropdown">
-              <button
-                phx-click={toggle_dropdown()}
-                type="button"
-                class="cursor-pointer"
-                style="color: var(--dim);"
-              >
-                {@current_project.name}
-              </button>
-              <div
-                id="project-dropdown-menu"
-                class="hidden absolute left-0 top-full mt-1 z-50 py-1"
-                style="background: var(--surface); border: 1px solid var(--border); min-width: 200px;"
-              >
-                <.link
-                  :for={project <- @projects}
-                  navigate={~p"/projects/#{project.id}"}
-                  class="block px-3 py-1.5 cursor-pointer"
-                  style={"color: #{if @current_project && @current_project.id == project.id, do: "var(--text)", else: "var(--dim)"}; font-size: var(--font-size-sm); text-decoration: none;"}
-                >
-                  {project.name}
-                </.link>
-                <div style="border-top: 1px solid var(--border); margin: 4px 0;" />
-                <button
-                  phx-click="show-add-project"
-                  class="block w-full text-left px-3 py-1.5 cursor-pointer"
-                  style="color: var(--muted); font-size: var(--font-size-sm);"
-                >
-                  open project
-                </button>
-                <button
-                  phx-click="show-new-project"
-                  class="block w-full text-left px-3 py-1.5 cursor-pointer"
-                  style="color: var(--muted); font-size: var(--font-size-sm);"
-                >
-                  new project
-                </button>
-              </div>
-            </div>
-          <% else %>
-            <span style="color: var(--muted);">&nbsp;/ select a project</span>
-          <% end %>
+          <span style="color: var(--accent);">apothecary</span>
+          <span style="color: var(--dim);">&nbsp;/ </span>
+          <button
+            phx-click="toggle-project-switcher"
+            type="button"
+            class="cursor-pointer"
+            style={"color: var(--dim); #{if @show_project_switcher, do: "text-decoration: underline; text-decoration-color: var(--accent);", else: ""}"}
+          >
+            {@current_project.name}
+          </button>
         <% end %>
       </div>
-      <div :if={@current_project && !(@selected_task_id && @selected_task)} class="flex items-center gap-3">
-        <button
-          :for={{tab, label} <- [workbench: "workbench", oracle: "oracle", recipes: "recurring"]}
-          phx-click="switch-tab"
-          phx-value-tab={tab}
-          class="cursor-pointer"
-          style={"color: #{if @active_tab == tab, do: "var(--text)", else: "var(--muted)"}; font-size: var(--font-size-sm);"}
-        >
-          {label}
-        </button>
-      </div>
-      <div :if={@selected_task_id && @selected_task}>
-        <span style="color: var(--muted); font-size: var(--font-size-xs);">esc back</span>
-      </div>
+      <%= cond do %>
+        <% @show_project_switcher -> %>
+          <span style="color: var(--muted); font-size: var(--font-size-xs);">esc cancel</span>
+
+        <% @current_project -> %>
+          <div class="flex items-center gap-3">
+            <button
+              :for={{tab, label} <- [workbench: "workbench", oracle: "oracle", recipes: "recurring"]}
+              phx-click="switch-tab"
+              phx-value-tab={tab}
+              class="cursor-pointer"
+              style={"color: #{if @active_tab == tab, do: "var(--text)", else: "var(--muted)"}; font-size: var(--font-size-sm);"}
+            >
+              {label}
+            </button>
+          </div>
+
+        <% true -> %>
+      <% end %>
     </div>
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".ProjectDropdown">
-      export default {
-        mounted() {
-          this.menu = this.el.querySelector("#project-dropdown-menu")
-          this.closeHandler = (e) => {
-            if (!this.el.contains(e.target)) {
-              this.menu.classList.add("hidden")
-            }
-          }
-          document.addEventListener("click", this.closeHandler)
-          this.handleEvent("close-dropdown", () => {
-            this.menu.classList.add("hidden")
-          })
-        },
-        destroyed() {
-          document.removeEventListener("click", this.closeHandler)
-        }
-      }
-    </script>
     """
   end
 
-  defp toggle_dropdown do
-    Phoenix.LiveView.JS.toggle(
-      to: "#project-dropdown-menu",
-      in: {"ease-out duration-100", "opacity-0", "opacity-100"},
-      out: {"ease-in duration-75", "opacity-100", "opacity-0"}
-    )
+  # ── Project Landing ──────────────────────────────────────
+
+  attr :projects, :list, default: []
+  attr :project_path_suggestions, :list, default: []
+  attr :add_project_error, :string, default: nil
+  attr :selected_project, :integer, default: 0
+
+  def project_landing(assigns) do
+    ~H"""
+    <div class="px-6 py-10 flex flex-col items-center">
+      <%!-- Centered header --%>
+      <div class="mb-8" style="color: var(--dim); font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase;">
+        NO PROJECT OPEN
+      </div>
+
+      <%!-- Path input — full width within the column --%>
+      <div class="w-full max-w-[480px]">
+        <form phx-submit="add-project" phx-change="search-project-path" class="relative">
+          <input
+            type="text"
+            name="path"
+            value={System.get_env("HOME", "~") <> "/"}
+            autofocus
+            autocomplete="off"
+            phx-debounce="150"
+            class="moonlight-input w-full"
+            style="caret-color: var(--accent); padding: 16px 20px; font-size: 14px;"
+          />
+          <div
+            :if={@project_path_suggestions != []}
+            class="absolute left-0 right-0 top-full mt-1 max-h-48 overflow-y-auto z-50"
+            style="background: var(--surface); border: 1px solid var(--border);"
+          >
+            <button
+              :for={s <- @project_path_suggestions}
+              type="button"
+              phx-click="select-project-path"
+              phx-value-path={s.path}
+              class="w-full text-left px-3 py-1.5 flex items-center gap-2 cursor-pointer file-ac-item"
+            >
+              <span :if={s.is_git} style="color: var(--accent);">&#x25CF;</span>
+              <span :if={!s.is_git} style="color: var(--muted);">&#x25CB;</span>
+              <span style="color: var(--text);">{s.name}</span>
+              <span class="ml-auto truncate max-w-[180px]" style="color: var(--muted); font-size: var(--font-size-xs);">{s.path}</span>
+            </button>
+          </div>
+        </form>
+        <div class="mt-2 text-center" style="color: var(--dim); font-size: var(--font-size-sm);">
+          path to project root, or select below
+        </div>
+        <p :if={@add_project_error} class="mt-1 text-center" style="color: var(--error); font-size: var(--font-size-xs);">
+          {@add_project_error}
+        </p>
+      </div>
+
+      <%!-- Recent projects --%>
+      <%= if @projects != [] do %>
+        <div class="w-full mt-10">
+          <div class="flex items-center gap-1 mb-3 px-3">
+            <span style="color: var(--dim);">&#x25BE;</span>
+            <span class="section-header">RECENT</span>
+          </div>
+          <%= for {project, idx} <- Enum.with_index(@projects) do %>
+            <.link
+              navigate={~p"/projects/#{project.id}"}
+              class="block px-6 py-3 cursor-pointer project-landing-item"
+              style={"text-decoration: none; #{if idx == @selected_project, do: "background: var(--surface);", else: ""}"}
+            >
+              <div style={"font-size: 14px; font-weight: 600; color: #{if idx == 0, do: "var(--text)", else: "var(--dim)"};"}>
+                {project.name}
+              </div>
+              <div class="mt-0.5" style="color: var(--muted); font-size: var(--font-size-sm);">
+                {shorten_path(project.path)} &middot; {concoction_count_label(project.id)} &middot; {format_relative_time(project.updated_at)}
+              </div>
+            </.link>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+    """
+  end
+
+  defp shorten_path(nil), do: ""
+
+  defp shorten_path(path) do
+    home = System.get_env("HOME", "")
+
+    if home != "" and String.starts_with?(path, home) do
+      "~" <> String.trim_leading(path, home)
+    else
+      path
+    end
+  end
+
+  # ── Project Switcher (inline dropdown) ──────────────────
+
+  attr :projects, :list, default: []
+  attr :current_project, :any, default: nil
+  attr :dispatcher_projects, :map, default: %{}
+
+  def project_switcher(assigns) do
+    ~H"""
+    <div class="px-3 py-3">
+      <%= for project <- @projects do %>
+        <% is_current = @current_project && @current_project.id == project.id %>
+        <% project_status = @dispatcher_projects[project.id] %>
+        <.link
+          navigate={~p"/projects/#{project.id}"}
+          class="block px-4 py-3 cursor-pointer project-landing-item"
+          style={"text-decoration: none; #{if is_current, do: "background: var(--surface);", else: ""}"}
+        >
+          <div class="flex items-center justify-between">
+            <span style={"font-size: 14px; font-weight: 600; color: #{if is_current, do: "var(--text)", else: "var(--dim)"};"}>
+              {project.name}
+            </span>
+            <span :if={is_current} style="color: var(--accent); font-size: var(--font-size-sm);">current</span>
+          </div>
+          <div class="flex items-center gap-1 mt-0.5" style="color: var(--muted); font-size: var(--font-size-sm);">
+            <span>{shorten_path(project.path)}</span>
+            <span>&middot;</span>
+            <.project_status_dots status={project_status} />
+          </div>
+        </.link>
+      <% end %>
+
+      <div class="mt-3 mx-4" style="border-top: 1px solid var(--border);"></div>
+
+      <.link
+        navigate={~p"/"}
+        class="block px-4 py-3 cursor-pointer"
+        style="text-decoration: none;"
+      >
+        <span style="color: var(--accent);">+</span>
+        <span style="color: var(--dim); font-size: var(--font-size-sm);">&nbsp;open another project</span>
+      </.link>
+    </div>
+    """
+  end
+
+  defp project_status_dots(assigns) do
+    running = if assigns.status, do: assigns.status[:active_count] || 0, else: 0
+    target = if assigns.status, do: assigns.status[:target_count] || 0, else: 0
+    is_idle = running == 0 and target == 0
+
+    assigns =
+      assigns
+      |> assign(:running, running)
+      |> assign(:is_idle, is_idle)
+
+    ~H"""
+    <%= if @is_idle do %>
+      <span>idle</span>
+    <% else %>
+      <span :if={@running > 0} style="color: var(--concocting);">&#x25C9;{@running}</span>
+    <% end %>
+    """
+  end
+
+  # ── Preview Controls (reusable) ──────────────────────────
+
+  @doc """
+  Inline preview controls. Shows config status, start/stop, and port link.
+
+  Modes:
+  - `inline: true` — compact for settings bar (no section header)
+  - `inline: false` — full block for concoction detail (with PREVIEW header)
+  """
+  attr :dev_server, :any, default: nil
+  attr :has_config, :boolean, default: false
+  attr :target_id, :string, required: true
+  attr :start_event, :string, default: "start-dev"
+  attr :stop_event, :string, default: "stop-dev"
+  attr :inline, :boolean, default: false
+
+  def preview_controls(assigns) do
+    port =
+      case assigns.dev_server do
+        %{ports: [%{port: p} | _]} -> p
+        _ -> nil
+      end
+
+    assigns = assign(assigns, :port, port)
+
+    ~H"""
+    <%= if @inline do %>
+      <%!-- Inline mode for settings bar --%>
+      <%= cond do %>
+        <% @dev_server && @dev_server.status == :running -> %>
+          <span style="color: var(--accent); font-weight: 500;">
+            <a
+              href={"http://localhost:#{@port}"}
+              target="_blank"
+              style="color: var(--accent); text-decoration: none;"
+            >
+              :{@port} &#x2197;
+            </a>
+          </span>
+          <span style="color: var(--border);">&nbsp;</span>
+          <button phx-click={@stop_event} phx-value-id={@target_id} class="cursor-pointer" style="color: var(--muted); font-size: var(--font-size-xs);">
+            stop
+          </button>
+
+        <% @dev_server && @dev_server.status == :starting -> %>
+          <span style="color: var(--concocting);">starting...</span>
+
+        <% @has_config -> %>
+          <button phx-click={@start_event} phx-value-id={@target_id} class="cursor-pointer settings-value" style="color: var(--muted);">
+            start
+          </button>
+
+        <% true -> %>
+          <span style="color: var(--muted);">
+            no <span style="font-family: monospace; font-size: var(--font-size-xs);">.apothecary/preview.yml</span>
+          </span>
+      <% end %>
+    <% else %>
+      <%!-- Block mode for detail panel --%>
+      <div class="mb-5">
+        <div class="section-header mb-2">PREVIEW</div>
+        <%= cond do %>
+          <% @dev_server && @dev_server.status == :running -> %>
+            <div class="flex items-center gap-2" style="font-size: var(--font-size-sm);">
+              <span class="action-text" phx-click="open-preview" phx-value-id={@target_id}>
+                p open :{@port}
+              </span>
+              <span style="color: var(--border);">&middot;</span>
+              <span class="action-text" phx-click="view-diff" phx-value-id={@target_id}>d view diff</span>
+              <span style="color: var(--border);">&middot;</span>
+              <button phx-click={@stop_event} phx-value-id={@target_id} class="action-text">stop</button>
+            </div>
+
+          <% @dev_server && @dev_server.status == :starting -> %>
+            <span style="color: var(--concocting); font-size: var(--font-size-sm);">starting...</span>
+
+          <% @has_config -> %>
+            <div style="font-size: var(--font-size-sm);">
+              <span class="action-text" phx-click={@start_event} phx-value-id={@target_id}>
+                p start preview
+              </span>
+            </div>
+
+          <% true -> %>
+            <div style="color: var(--muted); font-size: var(--font-size-sm);">
+              add <span style="font-family: monospace;">.apothecary/preview.yml</span> to enable preview
+            </div>
+        <% end %>
+      </div>
+    <% end %>
+    """
   end
 
   # ── Settings Line ────────────────────────────────────────
@@ -183,29 +371,74 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :auto_pr, :boolean, default: false
   attr :swarm_status, :atom, default: :paused
   attr :dev_server, :any, default: nil
-  attr :port, :integer, default: 4005
+  attr :has_preview_config, :boolean, default: false
+  attr :project_id, :string, default: nil
+  attr :editing_setting, :atom, default: nil
 
   def settings_line(assigns) do
-    port =
-      case assigns.dev_server do
-        %{ports: [%{port: p} | _]} -> p
-        _ -> assigns.port
-      end
-
-    assigns = assign(assigns, :display_port, port)
+    concocting? = assigns.swarm_status == :running
+    assigns = assign(assigns, :concocting?, concocting?)
 
     ~H"""
-    <div class="px-3 py-1" style="font-size: var(--font-size-xs);">
+    <div class="px-4 py-2 flex items-center gap-0" style="font-size: var(--font-size-sm);">
+      <%!-- Swarm toggle --%>
+      <span style="color: var(--dim);">s</span>&nbsp;
+      <button
+        phx-click={if @concocting?, do: "stop-swarm", else: "start-swarm"}
+        class="cursor-pointer settings-value"
+        style={"color: #{if @concocting?, do: "var(--concocting)", else: "var(--muted)"}; font-weight: 500;"}
+      >
+        {if @concocting?, do: "▶ concocting", else: "■ stopped"}
+      </button>
+
+      <span style="color: var(--border);">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
+
+      <%!-- Alchemists --%>
+      <span style="color: var(--dim);">a</span>&nbsp;
       <span style="color: var(--dim);">alchemists:</span>
-      <span style="color: var(--text);">&nbsp;{@target_count}</span>
-      <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+      <%= if @editing_setting == :alchemists do %>
+        <span class="inline-flex items-center gap-1 ml-1">
+          <button phx-click="decrement-alchemists" class="cursor-pointer" style="color: var(--accent);">&minus;</button>
+          <span style="color: var(--text); font-weight: 600;">{@target_count}</span>
+          <button phx-click="increment-alchemists" class="cursor-pointer" style="color: var(--accent);">+</button>
+          <button phx-click="confirm-setting" class="cursor-pointer" style="color: var(--muted);">&#x2713;</button>
+        </span>
+      <% else %>
+        <button
+          phx-click="edit-setting"
+          phx-value-setting="alchemists"
+          class="cursor-pointer settings-value"
+          style="color: var(--text); font-weight: 600;"
+        >
+          &nbsp;{@target_count}
+        </button>
+      <% end %>
+
+      <span style="color: var(--border);">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
+
+      <%!-- Auto-PR --%>
+      <span style="color: var(--dim);">t</span>&nbsp;
       <span style="color: var(--dim);">auto-pr:</span>
-      <span style={"color: #{if @auto_pr, do: "var(--accent)", else: "var(--text)"};"}>
+      <button
+        phx-click="toggle-auto-pr"
+        class="cursor-pointer settings-value"
+        style={"color: #{if @auto_pr, do: "var(--accent)", else: "var(--muted)"}; font-weight: 500;"}
+      >
         &nbsp;{if @auto_pr, do: "on", else: "off"}
-      </span>
-      <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
-      <span style="color: var(--dim);">main</span>
-      <span style="color: var(--text);">&nbsp;:{@display_port}</span>
+      </button>
+
+      <span style="color: var(--border);">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
+
+      <%!-- Preview (main branch) --%>
+      <span style="color: var(--dim);">main</span>&nbsp;
+      <.preview_controls
+        dev_server={@dev_server}
+        has_config={@has_preview_config}
+        target_id={@project_id || "project"}
+        start_event="start-project-dev"
+        stop_event="stop-project-dev"
+        inline={true}
+      />
     </div>
     """
   end
@@ -216,7 +449,7 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   def concoction_input(assigns) do
     ~H"""
-    <div class="px-3 py-2">
+    <div class="px-4 py-3">
       <div class="relative">
         <textarea
           id="primary-input"
@@ -226,7 +459,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           phx-blur="input-blur"
           autocomplete="off"
           class="moonlight-input w-full resize-none"
-          style="min-height: 32px; max-height: 120px;"
+          style="min-height: 40px; max-height: 120px;"
         ></textarea>
         <div
           id="file-autocomplete-dropdown"
@@ -279,6 +512,9 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :selected_card, :integer, default: 0
   attr :card_ids, :list, default: []
   attr :collapsed_done, :boolean, default: true
+  attr :adding_ingredient_to, :string, default: nil
+  attr :search_mode, :boolean, default: false
+  attr :search_query, :string, default: ""
 
   def concoction_tree(assigns) do
     # Map status groups to display categories
@@ -293,6 +529,23 @@ defmodule ApothecaryWeb.DashboardComponents do
     queued = ready ++ blocked
     bottled = done
 
+    # Apply search filter
+    query = String.downcase(assigns.search_query || "")
+
+    {concocting, assaying, queued, bottled} =
+      if query != "" do
+        f = fn entries ->
+          Enum.filter(entries, fn e ->
+            title = (e.worktree.title || e.worktree.id) |> String.downcase()
+            String.contains?(title, query)
+          end)
+        end
+
+        {f.(concocting), f.(assaying), f.(queued), f.(bottled)}
+      else
+        {concocting, assaying, queued, bottled}
+      end
+
     assigns =
       assigns
       |> assign(:concocting, concocting)
@@ -301,7 +554,24 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> assign(:bottled, bottled)
 
     ~H"""
-    <div class="px-3 py-2">
+    <div class="px-4 py-3">
+      <%!-- Search input --%>
+      <div :if={@search_mode} class="mb-3 flex items-center gap-2">
+        <span style="color: var(--muted);">/</span>
+        <form phx-submit="search-select" phx-change="search-tree" class="flex-1">
+          <input
+            name="query"
+            id="tree-search-input"
+            autofocus
+            placeholder="search..."
+            class="search-input"
+            value={@search_query}
+            phx-focus="input-focus"
+            phx-blur="search-blur"
+          />
+        </form>
+      </div>
+
       <%!-- Concocting group --%>
       <.tree_group
         :if={@concocting != []}
@@ -309,11 +579,13 @@ defmodule ApothecaryWeb.DashboardComponents do
         count={length(@concocting)}
         color="var(--concocting)"
         entries={@concocting}
-        dot="◉"
+        dot="●"
         dot_class="dot-pulse"
         title_color="var(--text)"
         card_ids={@card_ids}
         selected_card={@selected_card}
+        adding_ingredient_to={@adding_ingredient_to}
+        animated_header_dot={true}
       />
 
       <%!-- Assaying group --%>
@@ -328,6 +600,8 @@ defmodule ApothecaryWeb.DashboardComponents do
         title_color="var(--dim)"
         card_ids={@card_ids}
         selected_card={@selected_card}
+        status_label="awaiting review"
+        adding_ingredient_to={@adding_ingredient_to}
       />
 
       <%!-- Queued group --%>
@@ -343,6 +617,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         opacity="0.5"
         card_ids={@card_ids}
         selected_card={@selected_card}
+        adding_ingredient_to={@adding_ingredient_to}
       />
 
       <%!-- Bottled group (collapsed by default) --%>
@@ -367,6 +642,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           title_color="var(--bottled)"
           card_ids={@card_ids}
           selected_card={@selected_card}
+          adding_ingredient_to={@adding_ingredient_to}
         />
       <% end %>
 
@@ -393,12 +669,16 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :opacity, :string, default: "1"
   attr :card_ids, :list, default: []
   attr :selected_card, :integer, default: 0
+  attr :status_label, :string, default: nil
+  attr :adding_ingredient_to, :string, default: nil
+  attr :animated_header_dot, :boolean, default: false
 
   defp tree_group(assigns) do
     ~H"""
     <div style={"opacity: #{@opacity};"}>
       <div :if={@label} class="py-1" style={"color: #{@color}; font-size: var(--font-size-sm);"}>
         {@label} ({@count})
+        <span :if={@animated_header_dot} class="concocting-snake"><span></span><span></span><span></span></span>
       </div>
       <div style="font-size: var(--font-size-sm);">
         <%= for {entry, idx} <- Enum.with_index(@entries) do %>
@@ -409,8 +689,10 @@ defmodule ApothecaryWeb.DashboardComponents do
              done_count = Enum.count(tasks, &(&1.status in ["done", "closed"]))
              total_count = length(tasks)
              port = entry_port(entry.dev_server) %>
+          <%!-- Leading connector from group label --%>
+          <div :if={@label && idx == 0} class="tree-char pl-1" style="font-size: var(--font-size-sm);">│</div>
           <div
-            style={"background: #{if selected?, do: "var(--surface)", else: "transparent"};"}
+            style={"#{if selected?, do: "border-left: 2px solid var(--accent); background: var(--surface);", else: "border-left: 2px solid transparent;"}"}
             class="cursor-pointer"
             phx-click="select-task"
             phx-value-id={wt.id}
@@ -418,21 +700,55 @@ defmodule ApothecaryWeb.DashboardComponents do
             data-selected={if(selected?, do: "true")}
           >
             <%!-- Tree line + dot + title --%>
-            <div class="flex items-baseline gap-1 py-0.5 px-1">
+            <div class="flex items-baseline gap-1.5 py-1 px-1">
               <span class="tree-char">{if last?, do: "└─", else: "├─"}</span>
               <span class={@dot_class} style={"color: #{@color};"}>{@dot}</span>
-              <span style={"color: #{@title_color};"}>{wt.title || wt.id}</span>
+              <span style={"color: #{@title_color}; font-weight: 500;"}>{wt.title || wt.id}</span>
+              <span :if={selected?} style="color: var(--accent); margin-left: auto; padding-right: 4px;">◂</span>
             </div>
             <%!-- Metadata line --%>
-            <div class="flex items-center gap-1 pl-7 pb-1" style="color: var(--muted); font-size: var(--font-size-xs);">
+            <div class="flex items-center gap-1 pl-8 pb-1.5" style="color: var(--muted); font-size: var(--font-size-xs);">
               <span>{wt.id}</span>
               <span :if={total_count > 0}>
-                &middot; {done_count}/{total_count}
+                &middot; {done_count}/{total_count} {progress_bar(done_count, total_count)}
               </span>
               <span :if={port}>
                 &middot; :{port}
               </span>
+              <span :if={@status_label}>
+                &middot; {@status_label}
+              </span>
             </div>
+          </div>
+          <%!-- Inline ingredients sub-tree --%>
+          <%= if tasks != [] do %>
+            <div class="pl-8" style="font-size: var(--font-size-xs);">
+              <%= for {task, tidx} <- Enum.with_index(tasks) do %>
+                <% tlast? = tidx == length(tasks) - 1
+                   {ing_dot, ing_dot_color, ing_dot_class} = ingredient_dot(task.status)
+                   ing_text_color = ingredient_text_color(task.status) %>
+                <div class="flex items-baseline gap-1.5 py-0.5 px-1">
+                  <span class="tree-char">{if tlast?, do: "└─", else: "├─"}</span>
+                  <span class={ing_dot_class} style={"color: #{ing_dot_color};"}>{ing_dot}</span>
+                  <span style={"color: #{ing_text_color};"}>{task.title}</span>
+                </div>
+              <% end %>
+            </div>
+          <% end %>
+          <%!-- Inline ingredient input --%>
+          <div :if={@adding_ingredient_to == wt.id} class="pl-8 py-1">
+            <form phx-submit="add-ingredient-inline">
+              <input type="hidden" name="concoction_id" value={wt.id} />
+              <input
+                name="title"
+                id={"ingredient-input-#{wt.id}"}
+                autofocus
+                phx-blur="ingredient-input-blur"
+                placeholder="new ingredient..."
+                class="ingredient-inline-input"
+                phx-focus="input-focus"
+              />
+            </form>
           </div>
           <%!-- Connector line between entries (not after last) --%>
           <div :if={!last?} class="tree-char pl-1" style="font-size: var(--font-size-sm);">│</div>
@@ -441,6 +757,22 @@ defmodule ApothecaryWeb.DashboardComponents do
     </div>
     """
   end
+
+  defp progress_bar(done, total) when total > 0 do
+    filled = round(done / total * 6)
+    String.duplicate("▓", filled) <> String.duplicate("░", 6 - filled)
+  end
+
+  defp progress_bar(_, _), do: ""
+
+  defp ingredient_dot(status) when status in ["done", "closed"], do: {"●", "var(--accent)", ""}
+  defp ingredient_dot("in_progress"), do: {"∷", "var(--concocting)", "ingredient-dot-active"}
+  defp ingredient_dot("blocked"), do: {"○", "var(--error)", ""}
+  defp ingredient_dot(_), do: {"○", "var(--muted)", ""}
+
+  defp ingredient_text_color(status) when status in ["done", "closed"], do: "var(--dim)"
+  defp ingredient_text_color("in_progress"), do: "var(--text)"
+  defp ingredient_text_color(_), do: "var(--muted)"
 
   defp selected_entry?(card_ids, selected_card, wt_id) do
     case Enum.at(card_ids, selected_card) do
@@ -489,9 +821,11 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> assign(:loading?, assigns.loading_action != nil)
 
     ~H"""
-    <div class="px-3 py-3 scroll-main overflow-y-auto flex-1">
+    <div class="px-4 py-4 scroll-main overflow-y-auto flex-1">
       <%!-- 1. Title + Status --%>
-      <div class="mb-4">
+      <div class="mb-5">
+        <div class="flex items-start justify-between">
+          <div class="flex-1 min-w-0">
         <%= if @editing_field == :title do %>
           <.form for={%{}} phx-submit="save-edit" class="mb-2">
             <input type="hidden" name="field" value="title" />
@@ -503,7 +837,7 @@ defmodule ApothecaryWeb.DashboardComponents do
               phx-focus="input-focus"
               phx-blur="input-blur"
               class="moonlight-input w-full"
-              style="font-size: var(--font-size-title);"
+              style="font-size: 18px; font-weight: 600;"
             />
             <div class="flex items-center gap-2 mt-1">
               <button type="submit" class="action-pill">save</button>
@@ -515,21 +849,25 @@ defmodule ApothecaryWeb.DashboardComponents do
             phx-click="start-edit"
             phx-value-field="title"
             class="cursor-pointer"
-            style="font-size: var(--font-size-title); color: var(--text);"
+            style="font-size: 18px; font-weight: 600; color: var(--text);"
           >
             {@task.title}
           </div>
         <% end %>
-        <div class="flex items-center gap-2 mt-1" style="font-size: var(--font-size-xs);">
-          <span style={"color: #{@status_color};"}>{@status_dot}</span>
-          <span style={"color: #{@status_color};"}>{@status_group}</span>
+        <div class="flex items-center gap-2 mt-1" style="font-size: var(--font-size-xs); color: var(--muted);">
+          <span>{@task.id}</span>
           <span :if={@brewer_label} style="color: var(--dim);">&middot; {@brewer_label}</span>
-          <span :if={@time_ago} style="color: var(--muted);">&middot; {@time_ago}</span>
+          <span :if={@time_ago}>&middot; {@time_ago}</span>
+        </div>
+          </div>
+          <button phx-click="deselect-task" class="cursor-pointer flex-shrink-0" style="color: var(--muted); font-size: var(--font-size-xs);">
+            esc
+          </button>
         </div>
       </div>
 
       <%!-- 2. Actions --%>
-      <div class="flex items-center gap-3 mb-4" style="font-size: var(--font-size-sm);">
+      <div class="flex items-center gap-3 mb-5" style="font-size: var(--font-size-sm);">
         <%= if @loading? do %>
           <div class="flex items-center gap-2">
             <.spinner class="w-3 h-3" />
@@ -554,68 +892,63 @@ defmodule ApothecaryWeb.DashboardComponents do
       </div>
 
       <%!-- 3. INGREDIENTS --%>
-      <div class="mb-4">
+      <div class="mb-5">
         <div class="section-header mb-2">INGREDIENTS</div>
         <%= if @children == [] do %>
           <div style="color: var(--muted); font-size: var(--font-size-sm);">none</div>
         <% else %>
-          <div :for={child <- @children} class="flex items-center gap-2 py-0.5" style="font-size: var(--font-size-sm);">
+          <div :for={child <- @children} class="flex items-center gap-2 py-1" style="font-size: var(--font-size-sm);">
             <span style={"color: #{if child.status in ["done", "closed"], do: "var(--accent)", else: "var(--concocting)"};"}>
               {if child.status in ["done", "closed"], do: "✓", else: "◌"}
             </span>
             <span style={"color: #{if child.status in ["done", "closed"], do: "var(--dim)", else: "var(--text)"};"}>
               {child.title}
             </span>
-            <span class="ml-auto" style="color: var(--muted); font-size: var(--font-size-xs);">
+            <span class="ml-auto" style="color: var(--muted); font-size: var(--font-size-xxs);">
               {child.id}
             </span>
           </div>
         <% end %>
+        <div class="mt-1">
+          <span class="action-text" style="color: var(--accent); font-size: var(--font-size-sm);">+ add ingredient</span>
+        </div>
       </div>
 
       <%!-- 4. GIT --%>
-      <div :if={@last_commit || @git_changes} class="mb-4">
+      <div :if={@last_commit || @git_changes} class="mb-5">
         <div class="section-header mb-2">GIT</div>
-        <div :if={@last_commit} style="color: var(--dim); font-size: var(--font-size-sm);" class="mb-1">
-          <span style="color: var(--muted);">{String.slice(@last_commit.hash || "", 0..6)}</span>
-          &nbsp;{@last_commit.message}
+        <div :if={@last_commit} style="font-size: var(--font-size-sm);" class="mb-2">
+          <span style="color: var(--text); font-weight: 600;">{String.slice(@last_commit.hash || "", 0..6)}</span>
+          <span style="color: var(--dim);">&nbsp;{@last_commit.message}</span>
         </div>
         <div :if={@git_changes} style="font-size: var(--font-size-xs);">
           <div :for={file <- @git_changes.files || []} class="flex items-center gap-2 py-0.5">
             <span style="color: var(--muted);">{file.path}</span>
-            <span :if={file.additions > 0} style="color: var(--accent);">+{file.additions}</span>
-            <span :if={file.deletions > 0} style="color: var(--error);">-{file.deletions}</span>
+            <span :if={file.additions > 0} style="color: var(--accent); font-weight: 600;">+{file.additions}</span>
+            <span :if={file.deletions > 0} style="color: var(--error); font-weight: 600;">-{file.deletions}</span>
+          </div>
+          <% file_count = length(@git_changes.files || []) %>
+          <% total_add = Enum.sum(Enum.map(@git_changes.files || [], & &1.additions)) %>
+          <% total_del = Enum.sum(Enum.map(@git_changes.files || [], & &1.deletions)) %>
+          <div class="mt-1" style="color: var(--muted); font-size: var(--font-size-xs);">
+            {file_count} {if file_count == 1, do: "file", else: "files"} &middot; +{total_add} -{total_del}
           </div>
         </div>
-        <div class="mt-1">
+        <div class="mt-2">
           <span class="action-text" phx-click="view-diff" phx-value-id={@task.id}>d view diff</span>
         </div>
       </div>
 
       <%!-- 5. PREVIEW --%>
-      <div :if={@dev_server || @has_preview_config} class="mb-4">
-        <div class="section-header mb-2">PREVIEW</div>
-        <%= cond do %>
-          <% @dev_server && @dev_server.status == :running -> %>
-            <% port = List.first(@dev_server.ports || []) %>
-            <span class="action-text" phx-click="open-preview" phx-value-id={@task.id}>
-              p open :{port && port.port}
-            </span>
-            <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
-            <span class="action-text" phx-click="view-diff" phx-value-id={@task.id}>d view diff</span>
-          <% @dev_server && @dev_server.status == :starting -> %>
-            <span style="color: var(--concocting); font-size: var(--font-size-sm);">starting...</span>
-          <% @has_preview_config -> %>
-            <span class="action-text" phx-click="start-dev" phx-value-id={@task.id}>
-              start preview
-            </span>
-          <% true -> %>
-            <span style="color: var(--muted); font-size: var(--font-size-sm);">no preview config</span>
-        <% end %>
-      </div>
+      <.preview_controls
+        dev_server={@dev_server}
+        has_config={@has_preview_config}
+        target_id={@task.id}
+        inline={false}
+      />
 
       <%!-- 6. OUTPUT --%>
-      <div :if={@agent_output != []} class="mb-4">
+      <div :if={@agent_output != []} class="mb-5">
         <div class="section-header mb-2">
           OUTPUT &middot; {length(@agent_output)} lines
         </div>
@@ -623,7 +956,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       </div>
 
       <%!-- 7. PR link --%>
-      <div :if={@pr_url} class="mb-4">
+      <div :if={@pr_url} class="mb-5">
         <div class="section-header mb-2">PULL REQUEST</div>
         <a
           href={@pr_url}
@@ -635,7 +968,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       </div>
 
       <%!-- 8. Description --%>
-      <div :if={@task.description && @task.description != ""} class="mb-4">
+      <div :if={@task.description && @task.description != ""} class="mb-5">
         <div class="section-header mb-2">DESCRIPTION</div>
         <%= if @editing_field == :description do %>
           <.form for={%{}} phx-submit="save-edit">
@@ -666,7 +999,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       </div>
 
       <%!-- Notes --%>
-      <div :if={@task.notes && @task.notes != ""} class="mb-4">
+      <div :if={@task.notes && @task.notes != ""} class="mb-5">
         <div class="section-header mb-2">NOTES</div>
         <div
           id="task-notes-content"
@@ -675,6 +1008,19 @@ defmodule ApothecaryWeb.DashboardComponents do
           {@task.notes}
         </div>
         <.copy_button target="#task-notes-content" />
+      </div>
+
+      <%!-- 9. MCP SERVERS --%>
+      <div class="mb-5">
+        <div class="section-header mb-2">MCP SERVERS</div>
+        <div style="font-size: var(--font-size-sm);">
+          <%= if @task.mcp_servers && map_size(@task.mcp_servers) > 0 do %>
+            <span style="color: var(--dim);">{map_size(@task.mcp_servers)} configured</span>
+          <% else %>
+            <span style="color: var(--dim);">inherited from project</span>
+          <% end %>
+          <span style="color: var(--accent); font-weight: 600;">&nbsp;+ add</span>
+        </div>
       </div>
     </div>
     """
@@ -708,6 +1054,10 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :selected_task_id, :string, default: nil
   attr :worktrees_by_status, :map, default: %{}
   attr :orphan_count, :integer, default: 0
+  attr :current_project, :any, default: nil
+  attr :active_tab, :atom, default: :workbench
+  attr :show_project_switcher, :boolean, default: false
+  attr :project_count, :integer, default: 0
 
   def moonlight_status_bar(assigns) do
     running_count = length(assigns.worktrees_by_status["running"] || [])
@@ -724,37 +1074,84 @@ defmodule ApothecaryWeb.DashboardComponents do
 
     ~H"""
     <div class="status-bar flex items-center justify-between">
-      <%= if @selected_task_id && @selected_task do %>
-        <div class="flex items-center gap-2">
-          <span>esc back</span>
-          <span style="color: var(--border);">&middot;</span>
-          <span>c pr</span>
-          <span style="color: var(--border);">&middot;</span>
-          <span>m merge</span>
-          <span style="color: var(--border);">&middot;</span>
-          <span>d diff</span>
-        </div>
-        <div>
-          <span style={"color: #{group_color(task_status_group(@selected_task))};"}>
-            {task_status_group(@selected_task)}
-          </span>
-        </div>
-      <% else %>
-        <div class="flex items-center gap-2">
-          <span>j/k nav</span>
-          <span style="color: var(--border);">&middot;</span>
-          <span>enter expand</span>
-          <span style="color: var(--border);">&middot;</span>
-          <span>s concoct</span>
-          <span style="color: var(--border);">&middot;</span>
-          <span>? help</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <span style="color: var(--concocting);">◉{@running_count}</span>
-          <span style="color: var(--assaying);">◎{@pr_count}</span>
-          <span style="color: var(--muted);">○{@queued_count}</span>
-          <span style="color: var(--bottled);">●{@done_count}</span>
-        </div>
+      <%= cond do %>
+        <% @show_project_switcher -> %>
+          <%!-- Switcher status bar --%>
+          <div class="flex items-center gap-2">
+            <span>&#x2191;/&#x2193; select</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>enter switch</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>esc cancel</span>
+          </div>
+          <div style="color: var(--muted);">{@project_count} projects</div>
+
+        <% is_nil(@current_project) -> %>
+          <%!-- Landing status bar --%>
+          <div class="flex items-center gap-2">
+            <span>enter open</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>&#x2191;/&#x2193; select</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>tab autocomplete path</span>
+          </div>
+          <div style="color: var(--muted);">v0.1.0</div>
+
+        <% @active_tab == :oracle -> %>
+          <%!-- Oracle status bar --%>
+          <div class="flex items-center gap-2">
+            <span>&#x2191;/&#x2193; history</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>enter send</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>esc clear</span>
+          </div>
+          <div style="color: var(--muted);">
+            context: <span style="font-weight: 600;">main</span>
+          </div>
+
+        <% @active_tab == :workbench && @selected_task_id && @selected_task -> %>
+          <%!-- Workbench with selected task --%>
+          <div class="flex items-center gap-2">
+            <span>j/k nav</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>esc close</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>p preview</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>d diff</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>c pr</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>m merge</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span style="color: var(--concocting);">&#x25CF;{@running_count}</span>
+            <span style="color: var(--assaying);">&#x25CE;{@pr_count}</span>
+            <span style="color: var(--muted);">&#x25CB;{@queued_count}</span>
+            <span style="color: var(--bottled);">&#x25CF;{@done_count}</span>
+          </div>
+
+        <% true -> %>
+          <%!-- Workbench / default status bar --%>
+          <div class="flex items-center gap-2">
+            <span>j/k nav</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>enter inspect</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>esc deselect</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>a add</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>s stop</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span :if={@running_count > 0} class="snake-dots"><span></span><span></span><span></span></span>
+            <span style="color: var(--concocting);">&#x25CF;{@running_count}</span>
+            <span style="color: var(--assaying);">&#x25CE;{@pr_count}</span>
+            <span style="color: var(--muted);">&#x25CB;{@queued_count}</span>
+            <span style="color: var(--bottled);">&#x25CF;{@done_count}</span>
+          </div>
       <% end %>
     </div>
     """
@@ -1051,53 +1448,203 @@ defmodule ApothecaryWeb.DashboardComponents do
       end)
       |> MapSet.new()
 
-    sorted = Enum.sort_by(assigns.questions, fn q -> q.created_at || "" end, :desc)
+    sorted = Enum.sort_by(assigns.questions, fn q -> q.created_at || "" end, :asc)
     assigns = assign(assigns, sorted: sorted, active_wt_ids: active_wt_ids)
 
     ~H"""
-    <div class="px-3 py-3">
-      <div class="section-header mb-2">ORACLE</div>
-      <div style="color: var(--muted); font-size: var(--font-size-xs);" class="mb-3">
-        type ? in the input to ask about the codebase
+    <div class="px-3 py-3 flex-1 flex flex-col" style="min-height: 0;">
+      <div class="mb-3" style="color: var(--muted); font-size: var(--font-size-xs);">
+        context: <span style="font-weight: 600;">main</span> &middot; read-only &middot; no mutations
       </div>
+
       <%= if @sorted == [] do %>
-        <div style="color: var(--muted); font-size: var(--font-size-sm);" class="py-6">
-          no questions yet
+        <div class="flex-1 flex items-center justify-center" style="color: var(--muted); font-size: var(--font-size-sm);">
+          <div class="text-center">
+            <div class="mb-1">no questions yet</div>
+            <div style="font-size: var(--font-size-xs);">ask about the codebase below</div>
+          </div>
+        </div>
+      <% else %>
+        <div id="oracle-messages" class="flex-1 overflow-y-auto scroll-main" phx-hook=".OracleScroll">
+          <%= for q <- @sorted do %>
+            <%!-- User question --%>
+            <div class="mb-3">
+              <div class="mb-1" style="color: var(--muted); font-size: var(--font-size-xs);">
+                you &middot; {format_relative_time(q.created_at)}
+              </div>
+              <div style="color: var(--text); font-size: var(--font-size-sm); font-weight: 600;">
+                {q.title}
+              </div>
+            </div>
+
+            <%!-- Oracle response --%>
+            <%= if q.notes && q.notes != "" do %>
+              <div class="oracle-response mb-4 py-2 px-3">
+                <div class="mb-1" style="color: var(--muted); font-size: var(--font-size-xs);">
+                  oracle &middot; {format_relative_time(q.created_at)}
+                </div>
+                <div class="oracle-body" style="font-size: var(--font-size-sm);">
+                  {format_oracle_response(q.notes)}
+                </div>
+              </div>
+            <% else %>
+              <div :if={MapSet.member?(@active_wt_ids, q.id)} class="mb-4 py-2 px-3" style="background: var(--surface); border-left: 2px solid var(--concocting);">
+                <div class="flex items-center gap-2" style="color: var(--concocting); font-size: var(--font-size-xs);">
+                  <span class="dot-pulse">&#x25C9;</span>
+                  <span>thinking...</span>
+                </div>
+              </div>
+            <% end %>
+          <% end %>
         </div>
       <% end %>
-      <div :for={q <- @sorted} class="mb-3 p-3" style="border: 1px solid var(--border);">
-        <div class="flex items-start gap-2">
-          <span style={"color: #{cond do
-            MapSet.member?(@active_wt_ids, q.id) -> "var(--concocting)"
-            q.status == "done" -> "var(--accent)"
-            true -> "var(--muted)"
-          end};"}>
-            {cond do
-              MapSet.member?(@active_wt_ids, q.id) -> "◉"
-              q.status == "done" -> "●"
-              true -> "○"
-            end}
-          </span>
-          <div class="flex-1">
-            <div style="color: var(--text); font-size: var(--font-size-sm);">{q.title}</div>
-            <div style="color: var(--muted); font-size: var(--font-size-xs);">{q.id}</div>
-          </div>
+
+      <%!-- Oracle input --%>
+      <div class="pt-2 mt-auto">
+        <div class="relative">
+          <textarea
+            id="oracle-input"
+            rows="1"
+            phx-hook=".OracleInput"
+            autocomplete="off"
+            class="moonlight-input w-full resize-none"
+            style="min-height: 32px; max-height: 120px;"
+            placeholder="ask about the codebase"
+          ></textarea>
+          <button
+            id="oracle-input-send"
+            phx-hook=".OracleSend"
+            type="button"
+            class="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer p-1"
+            style="color: var(--muted);"
+            title="Send (Enter)"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+              <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" />
+            </svg>
+          </button>
+          <script :type={Phoenix.LiveView.ColocatedHook} name=".OracleSend">
+            export default {
+              mounted() {
+                this.el.addEventListener("click", () => {
+                  const textarea = document.getElementById("oracle-input")
+                  if (textarea) {
+                    const text = textarea.value.trim()
+                    if (text) {
+                      this.pushEvent("oracle-ask", { text })
+                      textarea.value = ""
+                    }
+                  }
+                })
+              }
+            }
+          </script>
+          <script :type={Phoenix.LiveView.ColocatedHook} name=".OracleInput">
+            export default {
+              mounted() {
+                this.el.addEventListener("keydown", (e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault()
+                    const text = this.el.value.trim()
+                    if (text) {
+                      this.pushEvent("oracle-ask", { text })
+                      this.el.value = ""
+                    }
+                  }
+                })
+              }
+            }
+          </script>
+          <script :type={Phoenix.LiveView.ColocatedHook} name=".OracleScroll">
+            export default {
+              mounted() { this.scrollToBottom() },
+              updated() { this.scrollToBottom() },
+              scrollToBottom() {
+                this.el.scrollTop = this.el.scrollHeight
+              }
+            }
+          </script>
         </div>
-        <%= if q.notes && q.notes != "" do %>
-          <div class="mt-2 pt-2" style="border-top: 1px solid var(--border); color: var(--dim); font-size: var(--font-size-xs); white-space: pre-wrap;">
-            {format_question_answer(q.notes)}
-          </div>
-        <% end %>
+        <div class="mt-1" style="color: var(--muted); font-size: var(--font-size-xs);">
+          ask about the codebase &mdash; oracle reads but never writes
+        </div>
       </div>
     </div>
     """
   end
 
-  defp format_question_answer(notes) do
-    case String.split(notes, "Answer:\n", parts: 2) do
-      [_before, answer] -> String.trim(answer)
-      _ -> notes
-    end
+  defp format_oracle_response(notes) do
+    answer =
+      case String.split(notes, "Answer:\n", parts: 2) do
+        [_before, answer] -> String.trim(answer)
+        _ -> notes
+      end
+
+    answer
+    |> split_oracle_blocks()
+    |> Enum.map(&render_oracle_block/1)
+    |> Enum.join()
+    |> Phoenix.HTML.raw()
+  end
+
+  defp split_oracle_blocks(text) do
+    parts = Regex.split(~r/```(\w*)\n(.*?)```/s, text, include_captures: true)
+
+    Enum.flat_map(parts, fn part ->
+      case Regex.run(~r/\A```(\w*)\n(.*?)```\z/s, part) do
+        [_, lang, code] -> [{:code, lang, code}]
+        _ -> [{:text, part}]
+      end
+    end)
+  end
+
+  defp render_oracle_block({:code, _lang, code}) do
+    escaped = Phoenix.HTML.html_escape(String.trim_trailing(code))
+
+    "<div class=\"oracle-code-block\"><pre><code>" <>
+      Phoenix.HTML.safe_to_string(escaped) <>
+      "</code></pre></div>"
+  end
+
+  defp render_oracle_block({:text, text}) do
+    text
+    |> Phoenix.HTML.html_escape()
+    |> Phoenix.HTML.safe_to_string()
+    |> highlight_bold()
+    |> highlight_inline_code()
+    |> highlight_file_paths()
+    |> highlight_numbered_lists()
+    |> String.replace("\n", "<br>")
+  end
+
+  defp highlight_bold(text) do
+    Regex.replace(~r/\*\*(.+?)\*\*/, text, "<strong style=\"color: var(--text);\">\\1</strong>")
+  end
+
+  defp highlight_inline_code(text) do
+    Regex.replace(
+      ~r/`([^`]+?)`/,
+      text,
+      "<code style=\"color: var(--accent); background: var(--surface); padding: 1px 4px; border-radius: 3px;\">\\1</code>"
+    )
+  end
+
+  @file_path_regex ~r/(?<![<&\w\/])([a-zA-Z_][a-zA-Z0-9_.\/\-]*\.[a-zA-Z]{1,6}(?::\d+)?)/
+
+  defp highlight_file_paths(text) do
+    Regex.replace(
+      @file_path_regex,
+      text,
+      "<span class=\"oracle-file-path\">\\1</span>"
+    )
+  end
+
+  defp highlight_numbered_lists(text) do
+    Regex.replace(
+      ~r/(\d+)\. /,
+      text,
+      "<span style=\"color: var(--accent);\">\\1.</span> "
+    )
   end
 
   # ── Recipe List ──────────────────────────────────────────
@@ -1108,28 +1655,70 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :editing_recipe_id, :string, default: nil
 
   def recipe_list(assigns) do
+    active = Enum.filter(assigns.recipes, & &1.enabled)
+    paused = Enum.reject(assigns.recipes, & &1.enabled)
+
+    next_run =
+      active
+      |> Enum.map(& &1.next_run_at)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.sort()
+      |> List.first()
+
+    assigns =
+      assigns
+      |> assign(:active, active)
+      |> assign(:paused, paused)
+      |> assign(:next_run, next_run)
+
     ~H"""
     <div class="px-3 py-3">
-      <div class="flex items-center justify-between mb-3">
-        <div class="section-header">RECURRING CONCOCTIONS</div>
-        <button
-          :if={!@show_recipe_form}
-          phx-click="show-recipe-form"
-          class="action-text"
-        >
-          + new recipe
-        </button>
+      <%!-- Summary line --%>
+      <div class="mb-3" style="font-size: var(--font-size-xs);">
+        <span style="color: var(--dim);">active:</span>
+        <span style="color: var(--text);">&nbsp;{length(@active)}</span>
+        <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+        <span style="color: var(--dim);">paused:</span>
+        <span style="color: var(--text);">&nbsp;{length(@paused)}</span>
+        <span :if={@next_run} style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+        <span :if={@next_run} style="color: var(--dim);">next run {format_relative_time(@next_run)}</span>
       </div>
 
       <.recipe_form :if={@show_recipe_form} form={@recipe_form} editing_id={@editing_recipe_id} />
 
       <%= if @recipes == [] and !@show_recipe_form do %>
         <div style="color: var(--muted); font-size: var(--font-size-sm);" class="py-6">
-          no recipes yet
+          no recurring concoctions yet
         </div>
       <% else %>
-        <.recipe_card :for={recipe <- @recipes} recipe={recipe} />
+        <%!-- Active group --%>
+        <.recipe_tree_group
+          :if={@active != []}
+          label="active"
+          count={length(@active)}
+          color="var(--accent)"
+          entries={@active}
+          symbol="↻"
+          opacity="1"
+        />
+
+        <%!-- Paused group --%>
+        <.recipe_tree_group
+          :if={@paused != []}
+          label="paused"
+          count={length(@paused)}
+          color="var(--muted)"
+          entries={@paused}
+          symbol="⏸"
+          opacity="0.5"
+        />
       <% end %>
+
+      <div :if={!@show_recipe_form} class="mt-3">
+        <button phx-click="show-recipe-form" style="color: var(--muted); font-size: var(--font-size-sm); cursor: pointer;">
+          + new recipe
+        </button>
+      </div>
     </div>
     """
   end
@@ -1199,36 +1788,44 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
-  attr :recipe, :any, required: true
+  attr :label, :string, required: true
+  attr :count, :integer, required: true
+  attr :color, :string, required: true
+  attr :entries, :list, required: true
+  attr :symbol, :string, required: true
+  attr :opacity, :string, default: "1"
 
-  defp recipe_card(assigns) do
+  defp recipe_tree_group(assigns) do
     ~H"""
-    <div class="mb-2 p-3" style={"border: 1px solid var(--border); opacity: #{if @recipe.enabled, do: "1", else: "0.5"};"}>
-      <div class="flex items-start justify-between gap-3">
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2">
-            <span style="color: var(--text); font-size: var(--font-size-sm);">{@recipe.title}</span>
-            <span style={"color: #{if @recipe.enabled, do: "var(--accent)", else: "var(--muted)"}; font-size: var(--font-size-xs);"}>
-              {if(@recipe.enabled, do: "active", else: "paused")}
-            </span>
+    <div style={"opacity: #{@opacity};"}>
+      <div class="py-1" style={"color: #{@color}; font-size: var(--font-size-sm);"}>
+        {@label} ({@count})
+      </div>
+      <div style="font-size: var(--font-size-sm);">
+        <%= for {recipe, idx} <- Enum.with_index(@entries) do %>
+          <% last? = idx == length(@entries) - 1 %>
+          <div class="cursor-pointer" phx-click="edit-recipe" phx-value-id={recipe.id}>
+            <div class="flex items-baseline gap-1 py-0.5 px-1">
+              <span class="tree-char">{if last?, do: "└─", else: "├─"}</span>
+              <span style={"color: #{@color};"}>{@symbol}</span>
+              <span style="color: var(--text);">{recipe.title}</span>
+            </div>
+            <div class="flex items-center gap-1 pl-7 pb-1" style="color: var(--muted); font-size: var(--font-size-xs);">
+              <span style="color: var(--dim);">{recipe.schedule}</span>
+              <span :if={recipe.last_run_at}>&middot; last: {format_relative_time(recipe.last_run_at)}</span>
+              <span :if={recipe.next_run_at}>&middot; next: {format_relative_time(recipe.next_run_at)}</span>
+              <span class="ml-auto flex items-center gap-1">
+                <button phx-click="toggle-recipe" phx-value-id={recipe.id} class="action-text" style="font-size: var(--font-size-xs);">
+                  {if(recipe.enabled, do: "pause", else: "resume")}
+                </button>
+                <button phx-click="delete-recipe" phx-value-id={recipe.id} class="action-text" style="font-size: var(--font-size-xs);" data-confirm="Delete this recipe?">
+                  delete
+                </button>
+              </span>
+            </div>
           </div>
-          <div :if={@recipe.description} class="mt-1" style="color: var(--muted); font-size: var(--font-size-xs);">
-            {@recipe.description}
-          </div>
-          <div class="flex items-center gap-3 mt-1" style="font-size: var(--font-size-xs); color: var(--muted);">
-            <span style="color: var(--dim);">{@recipe.schedule}</span>
-            <span :if={@recipe.next_run_at}>next: {format_relative_time(@recipe.next_run_at)}</span>
-          </div>
-        </div>
-        <div class="flex items-center gap-1 shrink-0">
-          <button phx-click="toggle-recipe" phx-value-id={@recipe.id} class="action-text">
-            {if(@recipe.enabled, do: "pause", else: "resume")}
-          </button>
-          <button phx-click="edit-recipe" phx-value-id={@recipe.id} class="action-text">edit</button>
-          <button phx-click="delete-recipe" phx-value-id={@recipe.id} class="action-text" data-confirm="Delete this recipe?">
-            delete
-          </button>
-        </div>
+          <div :if={!last?} class="tree-char pl-1" style="font-size: var(--font-size-sm);">│</div>
+        <% end %>
       </div>
     </div>
     """
@@ -1329,6 +1926,16 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp loading_label(:direct_merging), do: "creating PR & merging..."
   defp loading_label(:creating_pr), do: "creating PR..."
   defp loading_label(_), do: "working..."
+
+  defp concoction_count_label(project_id) do
+    count = length(Apothecary.Ingredients.list_concoctions(project_id: project_id))
+
+    case count do
+      0 -> "0 concoctions"
+      1 -> "1 concoction"
+      n -> "#{n} concoctions"
+    end
+  end
 
   defp format_relative_time(nil), do: nil
 

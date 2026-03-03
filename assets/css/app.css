@@ -28,11 +28,11 @@
 
   /* Typography */
   --font-mono: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
-  --font-size-base: 12px;
-  --font-size-sm: 11px;
-  --font-size-xs: 10px;
-  --font-size-xxs: 9px;
-  --font-size-title: 13px;
+  --font-size-base: 14px;
+  --font-size-sm: 14px;
+  --font-size-xs: 12px;
+  --font-size-xxs: 11px;
+  --font-size-title: 16px;
 }
 
 /* ── Base ────────────────────────────────────────────────── */
@@ -44,7 +44,7 @@ html, body {
   color: var(--text);
   font-family: var(--font-mono);
   font-size: var(--font-size-base);
-  line-height: 1.5;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -67,7 +67,7 @@ html, body {
 /* Make LiveView wrapper divs transparent for layout */
 [data-phx-session], [data-phx-teleported-src] { display: contents; }
 
-/* ── Moonlight utility classes ───────────────────────────── */
+/* ── Moonlight utility classes ────────────────────────────── */
 
 /* Colors */
 .color-bg       { color: var(--bg); }
@@ -113,6 +113,55 @@ html, body {
   animation: pulse-dot 2s ease-in-out infinite;
 }
 
+/* ── Snake animation (concocting status) ──────────────── */
+
+@keyframes snake-chase {
+  0%, 100% { opacity: 0.15; }
+  33% { opacity: 1; }
+  66% { opacity: 0.4; }
+}
+
+.snake-dots {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  margin-right: 2px;
+}
+
+.snake-dots span {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--concocting);
+  animation: snake-chase 1.2s ease-in-out infinite;
+}
+
+.snake-dots span:nth-child(1) { animation-delay: 0s; }
+.snake-dots span:nth-child(2) { animation-delay: 0.2s; }
+.snake-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+/* Snake dots for tree header */
+.concocting-snake {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  margin-left: 4px;
+}
+
+.concocting-snake span {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--concocting);
+  animation: snake-chase 1.4s ease-in-out infinite;
+}
+
+.concocting-snake span:nth-child(1) { animation-delay: 0s; }
+.concocting-snake span:nth-child(2) { animation-delay: 0.25s; }
+.concocting-snake span:nth-child(3) { animation-delay: 0.5s; }
+
 /* ── Tree characters ─────────────────────────────────────── */
 
 .tree-char {
@@ -125,11 +174,12 @@ html, body {
 .moonlight-input {
   background: var(--surface);
   border: 1px solid var(--border);
+  border-radius: 6px;
   color: var(--text);
   font-family: var(--font-mono);
   font-size: var(--font-size-base);
   outline: none;
-  padding: 8px 12px;
+  padding: 12px 16px;
   width: 100%;
 }
 
@@ -146,6 +196,7 @@ html, body {
 .output-box {
   background: var(--surface);
   border: 1px solid var(--border);
+  border-radius: 6px;
   max-height: 140px;
   overflow-y: auto;
   font-size: var(--font-size-sm);
@@ -163,6 +214,7 @@ html, body {
   background: var(--accent);
   color: var(--bg);
   padding: 2px 8px;
+  border-radius: 4px;
   font-size: var(--font-size-sm);
   font-family: var(--font-mono);
   cursor: pointer;
@@ -191,7 +243,7 @@ html, body {
   border-top: 1px solid var(--border);
   font-size: var(--font-size-xs);
   color: var(--dim);
-  padding: 4px 12px;
+  padding: 6px 16px;
 }
 
 /* ── Diff view ───────────────────────────────────────────── */
@@ -237,6 +289,7 @@ html, body {
 .flash-info {
   background: var(--surface);
   border: 1px solid var(--accent);
+  border-radius: 6px;
   color: var(--text);
   padding: 8px 12px;
   font-size: var(--font-size-sm);
@@ -245,9 +298,23 @@ html, body {
 .flash-error {
   background: var(--surface);
   border: 1px solid var(--error);
+  border-radius: 6px;
   color: var(--error);
   padding: 8px 12px;
   font-size: var(--font-size-sm);
+}
+
+/* ── Settings value hover ────────────────────────────────── */
+
+.settings-value:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+}
+
+/* ── Project landing hover ──────────────────────────────── */
+
+.project-landing-item:hover {
+  background: var(--surface);
 }
 
 /* ── Opacity helpers for queued state ────────────────────── */
@@ -263,3 +330,78 @@ html, body {
   100% { background-color: transparent; }
 }
 .ingredient-new { animation: ingredient-glow 1.5s ease-out forwards; }
+
+/* ── Oracle view ────────────────────────────────────────── */
+
+.oracle-response {
+  background: var(--surface);
+  border-left: 2px solid var(--accent);
+}
+
+.oracle-body {
+  color: var(--dim);
+  line-height: 1.6;
+}
+
+.oracle-body br {
+  display: block;
+  content: "";
+  margin-top: 0.25em;
+}
+
+.oracle-file-path {
+  color: var(--accent);
+}
+
+.oracle-code-block {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 6px 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+}
+
+.oracle-code-block pre {
+  margin: 0;
+  white-space: pre;
+}
+
+.oracle-code-block code {
+  color: var(--text);
+  font-size: var(--font-size-sm);
+}
+
+#oracle-input::placeholder {
+  color: var(--muted);
+}
+
+/* ── Ingredient inline styles ─────────────────────────── */
+
+.ingredient-dot-active {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.ingredient-inline-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  outline: none;
+  padding: 2px 0;
+  width: 100%;
+}
+
+.search-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  outline: none;
+  width: 100%;
+  padding: 4px 0;
+}
