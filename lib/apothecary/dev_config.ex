@@ -184,10 +184,13 @@ defmodule Apothecary.DevConfig do
                  }}
 
               Map.has_key?(scripts, "start") ->
+                runner =
+                  if File.exists?(Path.join(project_dir, "bun.lockb")), do: "bun", else: "npm"
+
                 {:ok,
                  %__MODULE__{
-                   command: "npm start",
-                   setup: "npm install",
+                   command: "#{runner} start",
+                   setup: "#{runner} install",
                    base_port: 3000,
                    port_count: 1,
                    ports: [%{name: "web", offset: 0}],

@@ -112,8 +112,15 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   def handle_params(_params, _uri, socket) do
-    socket = apply_project_scope(socket, nil)
-    {:noreply, select_task(socket, nil)}
+    # Auto-select first project when none is selected
+    case socket.assigns.projects do
+      [first | _] when is_nil(socket.assigns.current_project) ->
+        {:noreply, push_navigate(socket, to: ~p"/projects/#{first.id}")}
+
+      _ ->
+        socket = apply_project_scope(socket, nil)
+        {:noreply, select_task(socket, nil)}
+    end
   end
 
   defp apply_project_scope(socket, project_id) do
@@ -167,15 +174,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
     worktrees_by_status = build_worktree_groups(task_items, agents, dev_servers)
 
-    project_name =
-      cond do
-        project -> project.name
-        socket.assigns[:projects] == [] -> "Apothecary"
-        true -> "All Projects"
-      end
-
     socket
-    |> assign(:project_name, project_name)
     |> assign(:stats, task_state.stats)
     |> assign(:ready_tasks, task_state.ready_tasks)
     |> assign(:last_poll, task_state.last_poll)
@@ -378,6 +377,11 @@ defmodule ApothecaryWeb.DashboardLive do
   def handle_info({:bootstrap_complete, _name, {:ok, project}}, socket) do
     projects = Projects.list_active()
 
+    # Auto-start dev server for the new project
+    if DevServer.has_config_for_path?(project.path) do
+      DevServer.start_project_server(project.id, project.path)
+    end
+
     {:noreply,
      socket
      |> assign(
@@ -551,6 +555,43 @@ defmodule ApothecaryWeb.DashboardLive do
   def handle_event("stop-dev", %{"id" => wt_id}, socket) do
     DevServer.stop_server(wt_id)
     {:noreply, put_flash(socket, :info, "Preview stopped for #{wt_id}")}
+  end
+
+  # Project-level dev server controls
+  @impl true
+  def handle_event("start-project-dev", _params, socket) do
+    project = socket.assigns.current_project
+
+    if project do
+      case DevServer.start_project_server(project.id, project.path) do
+        {:ok, _base_port} ->
+          {:noreply, put_flash(socket, :info, "Starting dev server for #{project.name}")}
+
+        {:error, :no_dev_config} ->
+          {:noreply,
+           put_flash(socket, :error, "Could not detect dev server config for this project")}
+
+        {:error, :already_running} ->
+          {:noreply, put_flash(socket, :info, "Dev server already running")}
+
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Failed to start: #{inspect(reason)}")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("stop-project-dev", _params, socket) do
+    project = socket.assigns.current_project
+
+    if project do
+      DevServer.stop_server(project.id)
+      {:noreply, put_flash(socket, :info, "Dev server stopped")}
+    else
+      {:noreply, socket}
+    end
   end
 
   # Card inline task creation
@@ -1020,6 +1061,9 @@ defmodule ApothecaryWeb.DashboardLive do
 
           {:error, :already_exists} ->
             {:noreply, assign(socket, :new_project_error, "Directory already exists")}
+
+          {:error, msg} when is_binary(msg) ->
+            {:noreply, assign(socket, :new_project_error, msg)}
 
           {:error, reason} ->
             {:noreply, assign(socket, :new_project_error, "Failed: #{inspect(reason)}")}
@@ -2242,13 +2286,15 @@ defmodule ApothecaryWeb.DashboardLive do
             projects={@projects}
             current_project={@current_project}
           />
-          <.tab_navigation :if={@current_project} active_tab={@active_tab} />
-          <span
-            class="ml-auto text-base-content/30 cursor-pointer shrink-0 p-1"
-            phx-click="toggle-help"
-          >
-            ?
-          </span>
+          <div class="ml-auto flex items-center gap-1">
+            <.tab_navigation :if={@current_project} active_tab={@active_tab} />
+            <span
+              class="text-base-content/30 cursor-pointer shrink-0 p-1 text-xs"
+              phx-click="toggle-help"
+            >
+              ?
+            </span>
+          </div>
         </div>
 
         <div class="border-b border-base-content/10" />
@@ -2274,9 +2320,6 @@ defmodule ApothecaryWeb.DashboardLive do
             <div class="mx-auto px-2">
               <%!-- Primary input — centered, narrower --%>
               <div class="max-w-2xl mx-auto pt-3 sm:pt-6 pb-2 px-1 sm:px-0">
-                <div class="text-base-content/30 text-xs tracking-wider uppercase mb-1 font-apothecary">
-                  {@project_name}
-                </div>
                 <%= if @projects == [] and is_nil(@current_project) do %>
                   <div class="py-8 text-center">
                     <h2 class="text-base-content/50 text-lg font-semibold mb-3 font-apothecary">
@@ -2330,6 +2373,14 @@ defmodule ApothecaryWeb.DashboardLive do
                     <.activity_ticker agents={@agents} />
                   <% end %>
                 <% end %>
+              </div>
+
+              <%!-- Project preview --%>
+              <div :if={@current_project} class="max-w-2xl mx-auto pb-2 px-1 sm:px-0">
+                <.project_preview
+                  project={@current_project}
+                  dev_server={@dev_servers[@current_project.id]}
+                />
               </div>
 
               <%= if @current_project do %>

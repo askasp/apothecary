@@ -18,9 +18,10 @@ import Config
 # script that automatically sets the env var above.
 port = String.to_integer(System.get_env("PORT", "4000"))
 
-config :apothecary, ApothecaryWeb.Endpoint, server: true
-
-config :apothecary, ApothecaryWeb.Endpoint, http: [port: port]
+if config_env() != :test do
+  config :apothecary, ApothecaryWeb.Endpoint, server: true
+  config :apothecary, ApothecaryWeb.Endpoint, http: [port: port]
+end
 
 # Apothecary project configuration
 auto_pr =
