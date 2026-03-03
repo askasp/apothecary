@@ -26,7 +26,7 @@ echo "==> Building release ${TAG} (was ${CURRENT})"
 
 # --- Bump version in mix.exs ---
 if [ "$VERSION" != "$CURRENT" ]; then
-  sed -i "s/version: \"${CURRENT}\"/version: \"${VERSION}\"/" "$MIX_FILE"
+  sed -i '' "s/version: \"${CURRENT}\"/version: \"${VERSION}\"/" "$MIX_FILE"
   echo "==> Bumped version in mix.exs to ${VERSION}"
 fi
 
