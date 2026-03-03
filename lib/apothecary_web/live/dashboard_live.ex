@@ -50,6 +50,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:input_focused, false)
       |> assign(:dev_servers, dev_servers)
       |> assign(:has_preview_config, false)
+      |> assign(:has_project_preview_config, false)
       |> assign(:collapsed_done, true)
       |> assign(:selected_card, 0)
       # Panel state
@@ -136,6 +137,7 @@ defmodule ApothecaryWeb.DashboardLive do
       is_nil(project_id) && not is_nil(current) ->
         socket
         |> assign(:current_project, nil)
+        |> assign(:has_project_preview_config, false)
         |> apply_swarm_state(nil)
         |> load_dashboard_state(nil)
 
@@ -144,6 +146,7 @@ defmodule ApothecaryWeb.DashboardLive do
           {:ok, project} ->
             socket
             |> assign(:current_project, project)
+            |> assign(:has_project_preview_config, DevServer.has_config_for_path?(project.path))
             |> apply_swarm_state(project)
             |> load_dashboard_state(project)
 
@@ -2491,6 +2494,7 @@ defmodule ApothecaryWeb.DashboardLive do
                 <.project_preview
                   project={@current_project}
                   dev_server={@dev_servers[@current_project.id]}
+                  has_preview_config={@has_project_preview_config}
                 />
               </div>
 
