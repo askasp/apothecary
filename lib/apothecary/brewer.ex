@@ -77,16 +77,19 @@ defmodule Apothecary.Brewer do
     broadcast_state(agent)
 
     agent = %{agent | status: :working, output: []}
-    tasks = Apothecary.Ingredients.list_ingredients(concoction_id: worktree.id)
+    is_question = worktree.kind == "question"
 
-    # Write MCP config so Claude can communicate with the orchestrator
-    # Include any per-concoction MCP servers alongside project-level ones
-    extra_mcps = Map.get(worktree, :mcp_servers) || %{}
-    write_mcp_config(worktree_path, agent.id, worktree.id, extra_mcps, project_dir)
-
-    # Write apothecary CLAUDE.md to the worktree's .claude/ directory
-    # so it doesn't conflict with the user's own CLAUDE.md in the repo root
-    write_claude_md(worktree_path)
+    tasks =
+      if is_question do
+        []
+      else
+        # Write MCP config so Claude can communicate with the orchestrator
+        extra_mcps = Map.get(worktree, :mcp_servers) || %{}
+        write_mcp_config(worktree_path, agent.id, worktree.id, extra_mcps, project_dir)
+        # Write apothecary CLAUDE.md to the worktree's .claude/ directory
+        write_claude_md(worktree_path)
+        Apothecary.Ingredients.list_ingredients(concoction_id: worktree.id)
+      end
 
     case spawn_claude(agent, worktree, tasks) do
       {:ok, port} ->
@@ -205,12 +208,18 @@ defmodule Apothecary.Brewer do
     Logger.info("Brewer #{agent.id} completed concoction #{state.worktree_id}")
 
     worktree_id = state.worktree_id
+    concoction = agent.current_concoction
 
-    # Record session summary on clean exit
-    add_session_summary(worktree_id, agent)
-
-    # Finalize the concoction (push, PR, close)
-    finalize_concoction(worktree_id, agent)
+    if concoction && concoction.kind == "question" do
+      # Questions: save the response as notes and close — no push/PR
+      response = Enum.join(output, "\n")
+      Apothecary.Ingredients.add_note(worktree_id, "Answer:\n#{response}")
+      Apothecary.Ingredients.close_concoction(worktree_id)
+    else
+      # Tasks: record session summary, push, and create PR
+      add_session_summary(worktree_id, agent)
+      finalize_concoction(worktree_id, agent)
+    end
 
     # Trigger refresh and go idle
     Apothecary.Ingredients.force_refresh()
@@ -630,6 +639,7 @@ defmodule Apothecary.Brewer do
         extra_mcps: extra_mcps,
         project_dir: project_dir
       )
+
     merged = config["mcpServers"]
 
     mcp_path = Path.join(worktree_path, ".mcp.json")
@@ -680,7 +690,10 @@ defmodule Apothecary.Brewer do
     unless claude_exe do
       {:error, "Claude Code executable not found: #{claude_path}"}
     else
-      prompt = build_prompt(worktree, tasks, agent.worktree_path)
+      prompt =
+        if worktree.kind == "question",
+          do: build_question_prompt(worktree, agent.worktree_path),
+          else: build_prompt(worktree, tasks, agent.worktree_path)
 
       Logger.info(
         "Brewer #{agent.id} spawning claude (#{byte_size(prompt)} byte prompt) " <>
@@ -729,6 +742,29 @@ defmodule Apothecary.Brewer do
           {:error, Exception.message(e)}
       end
     end
+  end
+
+  defp build_question_prompt(worktree, project_dir) do
+    project_digest =
+      if project_dir, do: Apothecary.ProjectDigest.generate(project_dir), else: ""
+
+    """
+    You are a codebase expert answering a question about the project in: #{project_dir}
+
+    ## Question
+    #{worktree.title}
+    #{if worktree.description && worktree.description != worktree.title, do: "\n#{worktree.description}", else: ""}
+
+    ## Project Structure
+    #{project_digest}
+
+    ## Rules
+    - This is a READ-ONLY inquiry. Do NOT modify any files.
+    - Do NOT create commits, branches, or PRs.
+    - Do NOT run destructive commands.
+    - Answer the question thoroughly by reading relevant source files.
+    - Be concise but complete. Use code references (file:line) where helpful.
+    """
   end
 
   defp build_prompt(worktree, tasks, worktree_path) do

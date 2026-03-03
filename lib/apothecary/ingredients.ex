@@ -198,6 +198,7 @@ defmodule Apothecary.Ingredients do
          notes: nil,
          pr_url: nil,
          mcp_servers: attrs[:mcp_servers],
+         kind: Map.get(attrs, :kind, "task"),
          created_at: now,
          updated_at: now,
          blockers: [],
@@ -222,9 +223,7 @@ defmodule Apothecary.Ingredients do
   end
 
   def list_concoctions do
-    :mnesia.dirty_match_object(
-      {:apothecary_concoctions, :_, :_, :_, :_, :_, :_, :_, :_, :_, :_}
-    )
+    :mnesia.dirty_match_object({:apothecary_concoctions, :_, :_, :_, :_, :_, :_, :_, :_, :_, :_})
     |> Enum.map(&Apothecary.Concoction.from_record/1)
   end
 

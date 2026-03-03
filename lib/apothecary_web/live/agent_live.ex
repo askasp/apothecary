@@ -105,7 +105,10 @@ defmodule ApothecaryWeb.AgentLive do
           <% end %>
 
           <div class="space-y-1">
-            <.section label="output" />
+            <div class="flex items-center gap-2">
+              <div class="flex-1"><.section label="output" /></div>
+              <.copy_button :if={@output != []} target="#agent-output" />
+            </div>
             <div
               id="agent-output"
               phx-hook="ScrollBottom"

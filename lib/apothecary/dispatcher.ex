@@ -293,28 +293,34 @@ defmodule Apothecary.Dispatcher do
     # Atomically claim the concoction
     case Apothecary.Ingredients.claim_concoction(concoction.id, brewer_id) do
       {:ok, claimed} ->
-        # Look up the project directory for this concoction
         project_dir = resolve_project_dir(concoction)
 
-        # Create/get git worktree
-        case ensure_git_worktree(concoction, project_dir) do
-          {:ok, path, branch} ->
-            # Update concoction record with git info
-            Apothecary.Ingredients.update_concoction(concoction.id, %{
-              git_path: path,
-              git_branch: branch
-            })
+        if concoction.kind == "question" do
+          # Questions run read-only against the project directory — no worktree needed
+          [_ | rest_idle] = state.idle_agents
+          Apothecary.Brewer.assign_concoction(brewer_pid, claimed, project_dir, nil, project_dir)
+          %{state | idle_agents: rest_idle}
+        else
+          # Task concoctions get their own git worktree
+          case ensure_git_worktree(concoction, project_dir) do
+            {:ok, path, branch} ->
+              Apothecary.Ingredients.update_concoction(concoction.id, %{
+                git_path: path,
+                git_branch: branch
+              })
 
-            # Assign to brewer
-            [_ | rest_idle] = state.idle_agents
-            Apothecary.Brewer.assign_concoction(brewer_pid, claimed, path, branch, project_dir)
-            %{state | idle_agents: rest_idle}
+              [_ | rest_idle] = state.idle_agents
+              Apothecary.Brewer.assign_concoction(brewer_pid, claimed, path, branch, project_dir)
+              %{state | idle_agents: rest_idle}
 
-          {:error, reason} ->
-            Logger.error("Failed to create git worktree for #{concoction.id}: #{inspect(reason)}")
+            {:error, reason} ->
+              Logger.error(
+                "Failed to create git worktree for #{concoction.id}: #{inspect(reason)}"
+              )
 
-            Apothecary.Ingredients.release_concoction(concoction.id)
-            dispatch_first_available(rest, state)
+              Apothecary.Ingredients.release_concoction(concoction.id)
+              dispatch_first_available(rest, state)
+          end
         end
 
       {:error, _} ->

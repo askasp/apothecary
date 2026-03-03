@@ -17,6 +17,7 @@ defmodule Apothecary.Concoction do
           pr_url: String.t() | nil,
           notes: String.t() | nil,
           mcp_servers: map() | nil,
+          kind: String.t(),
           type: String.t(),
           parent: String.t() | nil,
           assigned_to: String.t() | nil,
@@ -40,6 +41,7 @@ defmodule Apothecary.Concoction do
     :pr_url,
     :notes,
     :mcp_servers,
+    kind: "task",
     type: "concoction",
     parent: nil,
     assigned_to: nil,
@@ -68,6 +70,7 @@ defmodule Apothecary.Concoction do
       notes: data[:notes],
       pr_url: data[:pr_url],
       mcp_servers: data[:mcp_servers],
+      kind: data[:kind] || "task",
       created_at: data[:created_at],
       updated_at: data[:updated_at],
       blockers: data[:blockers] || [],
@@ -77,13 +80,14 @@ defmodule Apothecary.Concoction do
 
   @doc "Convert to a Mnesia record tuple."
   def to_record(%__MODULE__{} = wt) do
-    {:apothecary_concoctions, wt.id, wt.project_id, wt.status, wt.title, wt.priority,
-     wt.git_path, wt.git_branch, wt.parent_concoction_id, wt.assigned_brewer_id,
+    {:apothecary_concoctions, wt.id, wt.project_id, wt.status, wt.title, wt.priority, wt.git_path,
+     wt.git_branch, wt.parent_concoction_id, wt.assigned_brewer_id,
      %{
        description: wt.description,
        notes: wt.notes,
        pr_url: wt.pr_url,
        mcp_servers: wt.mcp_servers,
+       kind: wt.kind,
        created_at: wt.created_at,
        updated_at: wt.updated_at,
        blockers: wt.blockers,

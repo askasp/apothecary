@@ -44,9 +44,7 @@ defmodule Apothecary.Git do
 
   @doc "Get the main/master branch name."
   def main_branch(project_dir) do
-    case CLI.run("git", ["symbolic-ref", "refs/remotes/origin/HEAD", "--short"],
-           cd: project_dir
-         ) do
+    case CLI.run("git", ["symbolic-ref", "refs/remotes/origin/HEAD", "--short"], cd: project_dir) do
       {:ok, ref} ->
         ref |> String.trim() |> String.split("/") |> List.last()
 
@@ -162,9 +160,7 @@ defmodule Apothecary.Git do
 
   @doc "Get PR status from GitHub. Returns {:ok, map} or {:error, reason}."
   def pr_status(project_dir, pr_url) do
-    case CLI.run("gh", ["pr", "view", pr_url, "--json", "state,reviewDecision"],
-           cd: project_dir
-         ) do
+    case CLI.run("gh", ["pr", "view", pr_url, "--json", "state,reviewDecision"], cd: project_dir) do
       {:ok, output} ->
         case Jason.decode(String.trim(output)) do
           {:ok, data} -> {:ok, data}

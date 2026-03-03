@@ -1,7 +1,16 @@
 defmodule ApothecaryWeb.DashboardLive do
   use ApothecaryWeb, :live_view
 
-  alias Apothecary.{Brewer, DevServer, DiffParser, FileTree, Git, Ingredients, Dispatcher, Projects}
+  alias Apothecary.{
+    Brewer,
+    DevServer,
+    DiffParser,
+    FileTree,
+    Git,
+    Ingredients,
+    Dispatcher,
+    Projects
+  }
 
   @pubsub Apothecary.PubSub
 
@@ -148,7 +157,15 @@ defmodule ApothecaryWeb.DashboardLive do
     agents = socket.assigns[:agents] || []
     dev_servers = socket.assigns[:dev_servers] || %{}
     active_task_ids = active_task_ids_from_agents(agents)
-    worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
+
+    # Separate questions from task concoctions
+    {questions, task_items} =
+      Enum.split_with(task_state.tasks, fn item ->
+        String.starts_with?(to_string(item.id), "wt-") and
+          Map.get(item, :kind) == "question"
+      end)
+
+    worktrees_by_status = build_worktree_groups(task_items, agents, dev_servers)
 
     project_name =
       cond do
@@ -169,6 +186,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:card_ids, build_card_ids(worktrees_by_status))
     |> assign(:known_ingredient_ids, extract_ingredient_ids(task_state.tasks))
     |> assign(:project_files, load_project_files(project))
+    |> assign(:questions, questions)
   end
 
   # --- PubSub handlers ---
@@ -193,7 +211,14 @@ defmodule ApothecaryWeb.DashboardLive do
 
     agents = socket.assigns.agents
     active_task_ids = active_task_ids_from_agents(agents)
-    worktrees_by_status = build_worktree_groups(state.tasks, agents, socket.assigns.dev_servers)
+
+    {questions, task_items} =
+      Enum.split_with(state.tasks, fn item ->
+        String.starts_with?(to_string(item.id), "wt-") and
+          Map.get(item, :kind) == "question"
+      end)
+
+    worktrees_by_status = build_worktree_groups(task_items, agents, socket.assigns.dev_servers)
 
     socket =
       socket
@@ -205,6 +230,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:orphan_count, compute_orphan_count(state.tasks, active_task_ids))
       |> assign(:worktrees_by_status, worktrees_by_status)
       |> assign(:known_ingredient_ids, new_ids)
+      |> assign(:questions, questions)
       |> rebuild_card_ids(worktrees_by_status)
 
     socket =
@@ -227,7 +253,14 @@ defmodule ApothecaryWeb.DashboardLive do
     # Rebuild card groups since agent assignments affect which lane cards appear in
     task_state = scoped_get_state(socket)
     dev_servers = socket.assigns.dev_servers
-    worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
+
+    {questions, task_items} =
+      Enum.split_with(task_state.tasks, fn item ->
+        String.starts_with?(to_string(item.id), "wt-") and
+          Map.get(item, :kind) == "question"
+      end)
+
+    worktrees_by_status = build_worktree_groups(task_items, agents, dev_servers)
 
     socket =
       socket
@@ -236,6 +269,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:active_count, status.active_count)
       |> assign(:agents, agents)
       |> assign(:worktrees_by_status, worktrees_by_status)
+      |> assign(:questions, questions)
       |> rebuild_card_ids(worktrees_by_status)
 
     socket =
@@ -585,6 +619,10 @@ defmodule ApothecaryWeb.DashboardLive do
         socket = assign(socket, :pending_action, nil)
         {:noreply, execute_merge(socket, task_id, pr_url)}
 
+      {:direct_merge, task_id, git_path} ->
+        socket = assign(socket, :pending_action, nil)
+        {:noreply, execute_direct_merge(socket, task_id, git_path)}
+
       _ ->
         {:noreply, assign(socket, :pending_action, nil)}
     end
@@ -593,6 +631,22 @@ defmodule ApothecaryWeb.DashboardLive do
   @impl true
   def handle_event("cancel-merge", _params, socket) do
     {:noreply, assign(socket, :pending_action, nil)}
+  end
+
+  @impl true
+  def handle_event("direct-merge", _params, socket) do
+    task = socket.assigns.selected_task
+
+    cond do
+      is_nil(task) || task.status != "brew_done" ->
+        {:noreply, put_flash(socket, :error, "Concoction is not ready for merge")}
+
+      is_nil(task.git_path) ->
+        {:noreply, put_flash(socket, :error, "No git path found for this concoction")}
+
+      true ->
+        {:noreply, assign(socket, :pending_action, {:direct_merge, task.id, task.git_path})}
+    end
   end
 
   @impl true
@@ -1240,11 +1294,14 @@ defmodule ApothecaryWeb.DashboardLive do
     task = socket.assigns.selected_task
 
     cond do
-      is_nil(task) || task.status != "pr_open" ->
+      is_nil(task) ->
         socket
 
-      Map.get(task, :pr_url) ->
+      task.status == "pr_open" && Map.get(task, :pr_url) ->
         assign(socket, :pending_action, {:merge, task.id, task.pr_url})
+
+      task.status == "brew_done" && task.git_path ->
+        assign(socket, :pending_action, {:direct_merge, task.id, task.git_path})
 
       true ->
         socket
@@ -1332,9 +1389,10 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:collapsed_done, false)
   end
 
-  # Tab switching: w=workbench, e=recipes
+  # Tab switching: w=workbench, e=recipes, o=oracle
   defp handle_hotkey("w", socket), do: assign(socket, :active_tab, :workbench)
   defp handle_hotkey("e", socket), do: assign(socket, :active_tab, :recipes)
+  defp handle_hotkey("o", socket), do: assign(socket, :active_tab, :oracle)
 
   defp handle_hotkey(_key, socket), do: socket
 
@@ -1371,6 +1429,10 @@ defmodule ApothecaryWeb.DashboardLive do
         socket = assign(socket, :pending_action, nil)
         execute_merge(socket, task_id, pr_url)
 
+      {:direct_merge, task_id, git_path} ->
+        socket = assign(socket, :pending_action, nil)
+        execute_direct_merge(socket, task_id, git_path)
+
       _ ->
         assign(socket, :pending_action, nil)
     end
@@ -1399,6 +1461,28 @@ defmodule ApothecaryWeb.DashboardLive do
 
       {:error, reason} ->
         put_flash(socket, :error, "Merge failed: #{inspect(reason)}")
+    end
+  end
+
+  defp execute_direct_merge(socket, task_id, git_path) do
+    project_dir = resolve_project_dir_for_concoction(task_id)
+    task = socket.assigns.selected_task
+    title = "[#{task_id}] #{(task && task.title) || task_id}"
+
+    with {:ok, pr_url} <- Git.create_pr(project_dir, git_path, title),
+         :ok <- Git.merge_pr(project_dir, pr_url) do
+      Ingredients.add_note(
+        task_id,
+        "Direct merge from dashboard (PR created and merged): #{pr_url}"
+      )
+
+      Ingredients.update_concoction(task_id, %{pr_url: pr_url})
+      Ingredients.cleanup_merged_concoction(task_id)
+      put_flash(socket, :info, "PR created and merged: #{pr_url}")
+    else
+      {:error, reason} ->
+        Ingredients.add_note(task_id, "Direct merge failed: #{inspect(reason)}")
+        put_flash(socket, :error, "Direct merge failed: #{inspect(reason)}")
     end
   end
 
@@ -1510,6 +1594,40 @@ defmodule ApothecaryWeb.DashboardLive do
   # --- Input handlers ---
 
   defp create_from_input(text, socket) do
+    # Detect question prefix: "? question text"
+    if String.starts_with?(text, "?") do
+      question_text = text |> String.trim_leading("?") |> String.trim()
+      create_question(question_text, socket)
+    else
+      create_task_from_input(text, socket)
+    end
+  end
+
+  defp create_question(text, socket) do
+    project_id =
+      if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
+
+    case Ingredients.create_concoction(%{
+           title: text,
+           kind: "question",
+           priority: 2,
+           project_id: project_id
+         }) do
+      {:ok, item} when not is_nil(item) ->
+        {:noreply,
+         socket
+         |> assign(:active_tab, :oracle)
+         |> put_flash(:info, "Question submitted")}
+
+      {:ok, nil} ->
+        {:noreply, put_flash(socket, :error, "Failed to submit question")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
+    end
+  end
+
+  defp create_task_from_input(text, socket) do
     {title, parent_id, dep_ids} = parse_smart_input(text)
 
     if parent_id do
@@ -1648,7 +1766,15 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:agent_output, [])
     |> assign(:has_preview_config, has_preview)
     |> assign(:page_title, "Task #{id}")
+    |> sync_selected_card(id)
     |> find_working_agent()
+  end
+
+  defp sync_selected_card(socket, id) do
+    case Enum.find_index(socket.assigns.card_ids, &(&1 == id)) do
+      nil -> socket
+      idx -> assign(socket, :selected_card, idx)
+    end
   end
 
   defp refresh_selected_task(socket) do
@@ -1888,7 +2014,9 @@ defmodule ApothecaryWeb.DashboardLive do
     name_chars = String.graphemes(name)
 
     case match_chars(query_chars, name_chars, 0, 0) do
-      nil -> 0
+      nil ->
+        0
+
       {matched, consecutive_bonus} ->
         # Boost: consecutive matches, prefix matches, length similarity
         prefix_bonus = if String.starts_with?(name, query), do: 10, else: 0
@@ -2103,7 +2231,10 @@ defmodule ApothecaryWeb.DashboardLive do
       >
         <%!-- Top bar: branding + project selector + tabs --%>
         <div class="flex items-center gap-1 sm:gap-3 px-2 py-2 text-xs min-w-0">
-          <.link navigate={~p"/"} class="font-apothecary text-sm font-bold tracking-wide text-base-content/80 shrink-0 hover:text-base-content transition-colors">
+          <.link
+            navigate={~p"/"}
+            class="font-apothecary text-sm font-bold tracking-wide text-base-content/80 shrink-0 hover:text-base-content transition-colors"
+          >
             <span class="hidden sm:inline">Apothecary</span>
             <span class="sm:hidden">&#x2697;</span>
           </.link>
@@ -2124,6 +2255,11 @@ defmodule ApothecaryWeb.DashboardLive do
 
         <%!-- Scrollable content --%>
         <div class="flex-1 overflow-y-auto">
+          <%= if @active_tab == :oracle and @current_project do %>
+            <div class="mx-auto px-2">
+              <.oracle_view questions={@questions} agents={@agents} />
+            </div>
+          <% end %>
           <%= if @active_tab == :recipes and @current_project do %>
             <div class="mx-auto px-2">
               <.recipe_list
@@ -2133,7 +2269,8 @@ defmodule ApothecaryWeb.DashboardLive do
                 editing_recipe_id={@editing_recipe_id}
               />
             </div>
-          <% else %>
+          <% end %>
+          <%= if @active_tab == :workbench or is_nil(@current_project) do %>
             <div class="mx-auto px-2">
               <%!-- Primary input — centered, narrower --%>
               <div class="max-w-2xl mx-auto pt-3 sm:pt-6 pb-2 px-1 sm:px-0">
@@ -2175,7 +2312,7 @@ defmodule ApothecaryWeb.DashboardLive do
                     </div>
                   <% else %>
                     <h2 class="text-base-content/50 text-lg font-semibold mb-2 font-apothecary">
-                      What shall we concoct?
+                      Ready to mix?
                     </h2>
                     <%!-- Concoct + alchemist controls --%>
                     <.concoct_controls
@@ -2187,138 +2324,141 @@ defmodule ApothecaryWeb.DashboardLive do
                       gh_available={@gh_available}
                     />
                     <.primary_input input_focused={@input_focused} />
+                    <div class="text-base-content/20 text-[10px] mt-1 px-1">
+                      Start with <span class="text-primary/40">?</span> to ask about the codebase
+                    </div>
                     <.activity_ticker agents={@agents} />
                   <% end %>
                 <% end %>
               </div>
 
               <%= if @current_project do %>
-              <%!-- Lane: STOCKROOM — ready + blocked --%>
-              <% stockroom_entries =
-                Enum.flat_map(~w(ready blocked), fn g -> @worktrees_by_status[g] || [] end)
-                |> Enum.sort_by(fn e -> e.worktree.priority || 99 end) %>
-              <div class="pb-2">
-                <div class="flex items-center gap-2 py-1.5">
-                  <span class="uppercase text-xs tracking-wider font-bold text-emerald-400 font-apothecary">
-                    STOCKROOM
-                  </span>
-                  <span class="text-base-content/30 text-xs">({length(stockroom_entries)})</span>
-                  <span class="text-base-content/15 text-[10px] ml-1">1</span>
-                </div>
-                <%= if stockroom_entries != [] do %>
-                  <div class="overflow-x-auto pb-2 scroll-smooth scroll-lane" id="stockroom-lane">
-                    <div class="flex flex-nowrap gap-3 min-w-0">
-                      <.worktree_card
-                        :for={entry <- stockroom_entries}
-                        worktree={entry.worktree}
-                        tasks={entry.tasks}
-                        agent={entry.agent}
-                        dev_server={entry.dev_server}
-                        selected={@selected_card_id == entry.worktree.id}
-                        group={entry_group(entry.worktree, @agents)}
-                      />
-                    </div>
+                <%!-- Lane: STOCKROOM — ready + blocked --%>
+                <% stockroom_entries =
+                  Enum.flat_map(~w(ready blocked), fn g -> @worktrees_by_status[g] || [] end)
+                  |> Enum.sort_by(fn e -> e.worktree.priority || 99 end) %>
+                <div class="pb-2">
+                  <div class="flex items-center gap-2 py-1.5">
+                    <span class="uppercase text-xs tracking-wider font-bold text-emerald-400 font-apothecary">
+                      STOCKROOM
+                    </span>
+                    <span class="text-base-content/30 text-xs">({length(stockroom_entries)})</span>
+                    <span class="text-base-content/15 text-[10px] ml-1">1</span>
                   </div>
-                <% else %>
-                  <div class="py-3 text-base-content/20 text-xs">empty</div>
-                <% end %>
-              </div>
-
-              <%!-- Lane: CONCOCTING — running --%>
-              <% brewing_entries =
-                (@worktrees_by_status["running"] || [])
-                |> Enum.sort_by(fn e -> e.worktree.priority || 99 end) %>
-              <div class="pb-2">
-                <div class="flex items-center gap-2 py-1.5">
-                  <span class="uppercase text-xs tracking-wider font-bold text-amber-400 font-apothecary">
-                    CONCOCTING
-                  </span>
-                  <span class="text-base-content/30 text-xs">({length(brewing_entries)})</span>
-                  <span class="text-base-content/15 text-[10px] ml-1">2</span>
-                </div>
-                <%= if brewing_entries != [] do %>
-                  <div class="overflow-x-auto pb-2 scroll-smooth scroll-lane" id="brewing-lane">
-                    <div class="flex flex-nowrap gap-3 min-w-0">
-                      <.worktree_card
-                        :for={entry <- brewing_entries}
-                        worktree={entry.worktree}
-                        tasks={entry.tasks}
-                        agent={entry.agent}
-                        dev_server={entry.dev_server}
-                        selected={@selected_card_id == entry.worktree.id}
-                        group="running"
-                      />
+                  <%= if stockroom_entries != [] do %>
+                    <div class="overflow-x-auto pb-2 scroll-smooth scroll-lane" id="stockroom-lane">
+                      <div class="flex flex-nowrap gap-3 min-w-0">
+                        <.worktree_card
+                          :for={entry <- stockroom_entries}
+                          worktree={entry.worktree}
+                          tasks={entry.tasks}
+                          agent={entry.agent}
+                          dev_server={entry.dev_server}
+                          selected={@selected_card_id == entry.worktree.id}
+                          group={entry_group(entry.worktree, @agents)}
+                        />
+                      </div>
                     </div>
-                  </div>
-                <% else %>
-                  <div class="py-3 text-base-content/20 text-xs">empty</div>
-                <% end %>
-              </div>
-
-              <%!-- Lane: ASSAYING — pr --%>
-              <% assaying_entries =
-                (@worktrees_by_status["pr"] || [])
-                |> Enum.sort_by(fn e -> e.worktree.priority || 99 end) %>
-              <div class="pb-2">
-                <div class="flex items-center gap-2 py-1.5">
-                  <span class="uppercase text-xs tracking-wider font-bold text-purple-400 font-apothecary">
-                    ASSAYING
-                  </span>
-                  <span class="text-base-content/30 text-xs">({length(assaying_entries)})</span>
-                  <span class="text-base-content/15 text-[10px] ml-1">3</span>
+                  <% else %>
+                    <div class="py-3 text-base-content/20 text-xs">empty</div>
+                  <% end %>
                 </div>
-                <%= if assaying_entries != [] do %>
-                  <div class="overflow-x-auto pb-2 scroll-smooth scroll-lane" id="assaying-lane">
-                    <div class="flex flex-nowrap gap-3 min-w-0">
-                      <.worktree_card
-                        :for={entry <- assaying_entries}
-                        worktree={entry.worktree}
-                        tasks={entry.tasks}
-                        agent={entry.agent}
-                        dev_server={entry.dev_server}
-                        selected={@selected_card_id == entry.worktree.id}
-                        group="pr"
-                      />
+
+                <%!-- Lane: CONCOCTING — running --%>
+                <% brewing_entries =
+                  (@worktrees_by_status["running"] || [])
+                  |> Enum.sort_by(fn e -> e.worktree.priority || 99 end) %>
+                <div class="pb-2">
+                  <div class="flex items-center gap-2 py-1.5">
+                    <span class="uppercase text-xs tracking-wider font-bold text-amber-400 font-apothecary">
+                      CONCOCTING
+                    </span>
+                    <span class="text-base-content/30 text-xs">({length(brewing_entries)})</span>
+                    <span class="text-base-content/15 text-[10px] ml-1">2</span>
+                  </div>
+                  <%= if brewing_entries != [] do %>
+                    <div class="overflow-x-auto pb-2 scroll-smooth scroll-lane" id="brewing-lane">
+                      <div class="flex flex-nowrap gap-3 min-w-0">
+                        <.worktree_card
+                          :for={entry <- brewing_entries}
+                          worktree={entry.worktree}
+                          tasks={entry.tasks}
+                          agent={entry.agent}
+                          dev_server={entry.dev_server}
+                          selected={@selected_card_id == entry.worktree.id}
+                          group="running"
+                        />
+                      </div>
                     </div>
-                  </div>
-                <% else %>
-                  <div class="py-3 text-base-content/20 text-xs">empty</div>
-                <% end %>
-              </div>
-
-              <%!-- BOTTLED — collapsible card grid --%>
-              <% done_entries = @worktrees_by_status["done"] || [] %>
-              <div class="pb-4">
-                <div class="flex items-center gap-2">
-                  <.worktree_group_header
-                    label="BOTTLED"
-                    count={length(done_entries)}
-                    color="text-green-400/70"
-                    group="done"
-                    collapsed={@collapsed_done}
-                    collapsible={true}
-                  />
-                  <span class="text-base-content/15 text-[10px]">4</span>
+                  <% else %>
+                    <div class="py-3 text-base-content/20 text-xs">empty</div>
+                  <% end %>
                 </div>
-                <%= if done_entries != [] do %>
-                  <div
-                    :if={!@collapsed_done}
-                    class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 mt-1 mb-3"
-                  >
-                    <.worktree_card
-                      :for={entry <- done_entries}
-                      worktree={entry.worktree}
-                      tasks={entry.tasks}
-                      agent={entry.agent}
-                      dev_server={entry.dev_server}
-                      selected={@selected_card_id == entry.worktree.id}
+
+                <%!-- Lane: ASSAYING — pr --%>
+                <% assaying_entries =
+                  (@worktrees_by_status["pr"] || [])
+                  |> Enum.sort_by(fn e -> e.worktree.priority || 99 end) %>
+                <div class="pb-2">
+                  <div class="flex items-center gap-2 py-1.5">
+                    <span class="uppercase text-xs tracking-wider font-bold text-purple-400 font-apothecary">
+                      ASSAYING
+                    </span>
+                    <span class="text-base-content/30 text-xs">({length(assaying_entries)})</span>
+                    <span class="text-base-content/15 text-[10px] ml-1">3</span>
+                  </div>
+                  <%= if assaying_entries != [] do %>
+                    <div class="overflow-x-auto pb-2 scroll-smooth scroll-lane" id="assaying-lane">
+                      <div class="flex flex-nowrap gap-3 min-w-0">
+                        <.worktree_card
+                          :for={entry <- assaying_entries}
+                          worktree={entry.worktree}
+                          tasks={entry.tasks}
+                          agent={entry.agent}
+                          dev_server={entry.dev_server}
+                          selected={@selected_card_id == entry.worktree.id}
+                          group="pr"
+                        />
+                      </div>
+                    </div>
+                  <% else %>
+                    <div class="py-3 text-base-content/20 text-xs">empty</div>
+                  <% end %>
+                </div>
+
+                <%!-- BOTTLED — collapsible card grid --%>
+                <% done_entries = @worktrees_by_status["done"] || [] %>
+                <div class="pb-4">
+                  <div class="flex items-center gap-2">
+                    <.worktree_group_header
+                      label="BOTTLED"
+                      count={length(done_entries)}
+                      color="text-green-400/70"
                       group="done"
+                      collapsed={@collapsed_done}
+                      collapsible={true}
                     />
+                    <span class="text-base-content/15 text-[10px]">4</span>
                   </div>
-                <% else %>
-                  <div :if={!@collapsed_done} class="py-3 text-base-content/20 text-xs">empty</div>
-                <% end %>
-              </div>
+                  <%= if done_entries != [] do %>
+                    <div
+                      :if={!@collapsed_done}
+                      class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 mt-1 mb-3"
+                    >
+                      <.worktree_card
+                        :for={entry <- done_entries}
+                        worktree={entry.worktree}
+                        tasks={entry.tasks}
+                        agent={entry.agent}
+                        dev_server={entry.dev_server}
+                        selected={@selected_card_id == entry.worktree.id}
+                        group="done"
+                      />
+                    </div>
+                  <% else %>
+                    <div :if={!@collapsed_done} class="py-3 text-base-content/20 text-xs">empty</div>
+                  <% end %>
+                </div>
               <% end %>
             </div>
           <% end %>
@@ -2328,7 +2468,7 @@ defmodule ApothecaryWeb.DashboardLive do
         <div class="border-t border-base-content/10 px-2 py-1 text-xs flex items-center justify-between">
           <div class="flex items-center gap-3 text-base-content/30">
             <span class="hidden sm:inline">
-              j/k:nav  1-4:lanes  enter:inspect  w/e:tabs  s:concoct
+              j/k:nav  1-4:lanes  enter:inspect  w/e/o:tabs  s:concoct
             </span>
             <span class="sm:hidden">tap card to inspect</span>
             <button
