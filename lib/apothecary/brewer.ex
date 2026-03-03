@@ -675,7 +675,14 @@ defmodule Apothecary.Brewer do
         {executable, args} =
           if script_exe do
             Logger.info("Brewer #{agent.id} using PTY wrapper (script)")
-            {script_exe, ["-qfec", cmd, "/dev/null"]}
+
+            case :os.type() do
+              {:unix, :darwin} ->
+                {script_exe, ["-q", "/dev/null", "/bin/sh", "-c", cmd]}
+
+              _ ->
+                {script_exe, ["-qfec", cmd, "/dev/null"]}
+            end
           else
             Logger.info("Brewer #{agent.id} using direct sh (no PTY)")
             sh = System.find_executable("sh") || "/bin/sh"
