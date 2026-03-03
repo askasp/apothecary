@@ -18,6 +18,15 @@ import Config
 # script that automatically sets the env var above.
 port = String.to_integer(System.get_env("PORT", "4005"))
 
+# Pin Mnesia data to ~/.apothecary/data so it survives release upgrades
+# (Burrito unpacks each release to a new temp dir, so the default CWD-relative
+# Mnesia directory would be lost on every update)
+if config_env() != :test do
+  mnesia_dir = Path.join([System.user_home!(), ".apothecary", "data"])
+  File.mkdir_p!(mnesia_dir)
+  config :mnesia, dir: String.to_charlist(mnesia_dir)
+end
+
 if config_env() != :test do
   config :apothecary, ApothecaryWeb.Endpoint, server: true
   config :apothecary, ApothecaryWeb.Endpoint, http: [port: port]
