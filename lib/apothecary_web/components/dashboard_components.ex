@@ -900,7 +900,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         <%!-- Scrollable content --%>
         <div class="flex-1 overflow-y-auto">
           <%!-- Merge confirmation bar --%>
-          <.merge_confirmation :if={@pending_action} task={@task} />
+          <.merge_confirmation :if={@pending_action} task={@task} pending_action={@pending_action} />
 
           <%!-- Panel content --%>
           <.task_detail_panel
@@ -921,13 +921,16 @@ defmodule ApothecaryWeb.DashboardComponents do
   # --- Merge Confirmation Bar ---
 
   attr :task, :map, required: true
+  attr :pending_action, :any, required: true
 
   def merge_confirmation(assigns) do
+    assigns = assign(assigns, :direct?, match?({:direct_merge, _, _}, assigns.pending_action))
+
     ~H"""
     <div class="bg-amber-400/10 border-b border-amber-400/30 px-3 py-3">
       <div class="flex items-center gap-3">
         <span class="text-amber-400 text-sm font-apothecary">
-          Merge this PR?
+          {if @direct?, do: "Merge directly?", else: "Merge this PR?"}
         </span>
         <span class="text-base-content/50 text-xs truncate flex-1">
           "{@task.title}"
@@ -938,7 +941,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           phx-click="confirm-merge"
           class="bg-green-500/20 hover:bg-green-500/30 text-green-400 px-3 py-1 rounded text-xs cursor-pointer transition-colors font-bold"
         >
-          Merge PR
+          {if @direct?, do: "Create PR & Merge", else: "Merge PR"}
         </button>
         <button
           phx-click="cancel-merge"
@@ -1100,8 +1103,15 @@ defmodule ApothecaryWeb.DashboardComponents do
         </button>
         <button
           :if={@task.status == "brew_done"}
+          phx-click="direct-merge"
+          class="border border-green-400/30 text-green-400 hover:bg-green-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors font-bold"
+        >
+          Merge <span class="hidden sm:inline text-base-content/30 ml-1">m</span>
+        </button>
+        <button
+          :if={@task.status == "brew_done"}
           phx-click="promote-to-assaying"
-          class="border border-purple-400/30 text-purple-400 hover:bg-purple-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors font-bold"
+          class="border border-purple-400/30 text-purple-400 hover:bg-purple-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors"
         >
           Create PR <span class="hidden sm:inline text-base-content/30 ml-1">p</span>
         </button>

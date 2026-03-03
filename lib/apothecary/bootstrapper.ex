@@ -49,7 +49,11 @@ defmodule Apothecary.Bootstrapper do
   def templates do
     [
       %{id: :phoenix, name: "Phoenix", description: "Full-stack Elixir web app with Ecto"},
-      %{id: :phoenix_no_ecto, name: "Phoenix (no DB)", description: "Phoenix app without Ecto/database"},
+      %{
+        id: :phoenix_no_ecto,
+        name: "Phoenix (no DB)",
+        description: "Phoenix app without Ecto/database"
+      },
       %{id: :react, name: "React", description: "React app via bun create"}
     ]
   end
