@@ -1052,19 +1052,13 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   def merge_confirmation(assigns) do
     assigns =
-      assigns
-      |> assign(:direct?, match?({:direct_merge, _, _}, assigns.pending_action))
-      |> assign(:git_mode?, Apothecary.Git.merge_mode() == :git)
+      assign(assigns, :direct?, match?({:direct_merge, _, _}, assigns.pending_action))
 
     ~H"""
     <div class="bg-amber-400/10 border-b border-amber-400/30 px-3 py-3">
       <div class="flex items-center gap-3">
         <span class="text-amber-400 text-sm font-apothecary">
-          {cond do
-            @direct? && @git_mode? -> "Merge branch into main?"
-            @direct? -> "Merge directly?"
-            true -> "Merge this PR?"
-          end}
+          {if @direct?, do: "Merge branch into main?", else: "Merge this PR?"}
         </span>
         <span class="text-base-content/50 text-xs truncate flex-1">
           "{@task.title}"
@@ -1075,11 +1069,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           phx-click="confirm-merge"
           class="bg-green-500/20 hover:bg-green-500/30 text-green-400 px-3 py-1 rounded text-xs cursor-pointer transition-colors font-bold"
         >
-          {cond do
-            @direct? && @git_mode? -> "Merge into main"
-            @direct? -> "Create PR & Merge"
-            true -> "Merge PR"
-          end}
+          {if @direct?, do: "Merge into main", else: "Merge PR"}
         </button>
         <button
           phx-click="cancel-merge"
@@ -1234,7 +1224,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           Close <span class="hidden sm:inline text-base-content/30 ml-1">x</span>
         </button>
         <button
-          :if={@task.status == "pr_open"}
+          :if={@task.status == "pr_open" && @gh_available}
           phx-click="merge-pr"
           class="border border-green-400/30 text-green-400 hover:bg-green-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors font-bold"
         >
@@ -1245,10 +1235,10 @@ defmodule ApothecaryWeb.DashboardComponents do
           phx-click="direct-merge"
           class="border border-green-400/30 text-green-400 hover:bg-green-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors font-bold"
         >
-          Merge <span class="hidden sm:inline text-base-content/30 ml-1">m</span>
+          Merge PR <span class="hidden sm:inline text-base-content/30 ml-1">m</span>
         </button>
         <button
-          :if={@task.status == "brew_done" && Apothecary.Git.merge_mode() == :github}
+          :if={@task.status == "brew_done" && @gh_available}
           phx-click="promote-to-assaying"
           class="border border-purple-400/30 text-purple-400 hover:bg-purple-400/10 cursor-pointer py-1.5 px-3 rounded text-xs transition-colors"
         >

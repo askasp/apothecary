@@ -1417,7 +1417,7 @@ defmodule ApothecaryWeb.DashboardLive do
       is_nil(task) ->
         socket
 
-      task.status == "pr_open" && Map.get(task, :pr_url) ->
+      task.status == "pr_open" && Map.get(task, :pr_url) && socket.assigns.gh_available ->
         assign(socket, :pending_action, {:merge, task.id, task.pr_url})
 
       task.status == "brew_done" && task.git_path ->
@@ -1431,7 +1431,7 @@ defmodule ApothecaryWeb.DashboardLive do
   defp handle_hotkey("p", socket) do
     task = socket.assigns.selected_task
 
-    if task && task.status == "brew_done" do
+    if task && task.status == "brew_done" && socket.assigns.gh_available do
       promote_to_assaying(socket, task)
     else
       socket
@@ -2698,6 +2698,7 @@ defmodule ApothecaryWeb.DashboardLive do
         dev_server={@dev_servers[@selected_task_id]}
         has_preview_config={@has_preview_config}
         pending_action={@pending_action}
+        gh_available={@gh_available}
       />
 
       <.which_key_overlay

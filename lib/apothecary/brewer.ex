@@ -480,9 +480,6 @@ defmodule Apothecary.Brewer do
   end
 
   defp push_and_finalize(worktree_id, agent, existing_pr_url) do
-    worktree_path = agent.worktree_path
-    project_dir = agent.project_dir
-
     case Apothecary.Git.merge_mode() do
       :git ->
         push_and_finalize_git(worktree_id, agent)
