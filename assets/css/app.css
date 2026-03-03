@@ -1,240 +1,265 @@
-/* See the Tailwind configuration guide for advanced usage
-   https://tailwindcss.com/docs/configuration */
+/* Apothecary — Moonlight theme
+   No daisyUI. Custom properties + Tailwind utility classes only. */
 
 @import "tailwindcss" source(none);
 @source "../css";
 @source "../js";
 @source "../../lib/apothecary_web";
 
-/* A Tailwind plugin that makes "hero-#{ICON}" classes available.
-   The heroicons installation itself is managed by your mix.exs */
 @plugin "../vendor/heroicons";
 
-/* daisyUI Tailwind Plugin. You can update this file by fetching the latest version with:
-   curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui.js
-   Make sure to look at the daisyUI changelog: https://daisyui.com/docs/changelog/ */
-@plugin "../vendor/daisyui" {
-  themes: false;
+/* ── Moonlight Color Palette ─────────────────────────────── */
+
+:root {
+  --bg:       #0a0e10;
+  --surface:  #101618;
+  --border:   #1a2428;
+  --text:     #b0c8d0;
+  --dim:      #5a7a82;
+  --muted:    #2a3e44;
+  --accent:   #5aaa9a;
+
+  /* Status */
+  --concocting: #c4aa4e;
+  --assaying:   #c48060;
+  --queued:     #2a3e44;
+  --bottled:    #3a5a58;
+  --error:      #c45a5a;
+
+  /* Typography */
+  --font-mono: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+  --font-size-base: 12px;
+  --font-size-sm: 11px;
+  --font-size-xs: 10px;
+  --font-size-xxs: 9px;
+  --font-size-title: 13px;
 }
 
-/* daisyUI theme plugin. You can update this file by fetching the latest version with:
-  curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui-theme.js
-  We ship with two themes, a light one inspired on Phoenix colors and a dark one inspired
-  on Elixir colors. Build your own at: https://daisyui.com/theme-generator/ */
-@plugin "../vendor/daisyui-theme" {
-  name: "dark";
-  default: true;
-  prefersdark: true;
-  color-scheme: "dark";
-  --color-base-100: oklch(22% 0.02 150);
-  --color-base-200: oklch(18% 0.018 150);
-  --color-base-300: oklch(14% 0.015 150);
-  --color-base-content: oklch(95% 0.02 90);
-  --color-primary: oklch(62% 0.17 155);
-  --color-primary-content: oklch(95% 0.015 155);
-  --color-secondary: oklch(62% 0.17 155);
-  --color-secondary-content: oklch(95% 0.015 155);
-  --color-accent: oklch(72% 0.15 75);
-  --color-accent-content: oklch(20% 0.02 75);
-  --color-neutral: oklch(30% 0.03 150);
-  --color-neutral-content: oklch(95% 0.01 90);
-  --color-info: oklch(60% 0.13 200);
-  --color-info-content: oklch(95% 0.01 200);
-  --color-success: oklch(62% 0.12 155);
-  --color-success-content: oklch(95% 0.01 155);
-  --color-warning: oklch(68% 0.16 65);
-  --color-warning-content: oklch(95% 0.02 65);
-  --color-error: oklch(60% 0.20 20);
-  --color-error-content: oklch(95% 0.015 20);
-  --radius-selector: 0.25rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.75rem;
-  --size-selector: 0.21875rem;
-  --size-field: 0.21875rem;
-  --border: 1.5px;
-  --depth: 1;
-  --noise: 0;
+/* ── Base ────────────────────────────────────────────────── */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-@plugin "../vendor/daisyui-theme" {
-  name: "light";
-  default: false;
-  prefersdark: false;
-  color-scheme: "light";
-  --color-base-100: oklch(97% 0.008 80);
-  --color-base-200: oklch(94% 0.012 80);
-  --color-base-300: oklch(90% 0.015 80);
-  --color-base-content: oklch(21% 0.006 285.885);
-  --color-primary: oklch(50% 0.18 155);
-  --color-primary-content: oklch(98% 0.016 73.684);
-  --color-secondary: oklch(55% 0.027 264.364);
-  --color-secondary-content: oklch(98% 0.002 247.839);
-  --color-accent: oklch(65% 0.15 75);
-  --color-accent-content: oklch(20% 0.02 75);
-  --color-neutral: oklch(44% 0.017 285.786);
-  --color-neutral-content: oklch(98% 0 0);
-  --color-info: oklch(62% 0.214 259.815);
-  --color-info-content: oklch(97% 0.014 254.604);
-  --color-success: oklch(70% 0.14 182.503);
-  --color-success-content: oklch(98% 0.014 180.72);
-  --color-warning: oklch(66% 0.179 58.318);
-  --color-warning-content: oklch(98% 0.022 95.277);
-  --color-error: oklch(58% 0.253 17.585);
-  --color-error-content: oklch(96% 0.015 12.422);
-  --radius-selector: 0.25rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.75rem;
-  --size-selector: 0.21875rem;
-  --size-field: 0.21875rem;
-  --border: 1.5px;
-  --depth: 1;
-  --noise: 0;
+*, *::before, *::after {
+  border-color: var(--border);
 }
 
-/* Add variants based on LiveView classes */
+::selection {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+/* ── Tailwind LiveView variants ──────────────────────────── */
+
 @custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
 @custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
 @custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
 
-/* Use the data attribute for dark mode  */
-@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
-
 /* Make LiveView wrapper divs transparent for layout */
-[data-phx-session], [data-phx-teleported-src] { display: contents }
+[data-phx-session], [data-phx-teleported-src] { display: contents; }
 
-/* This file is for your main application CSS */
+/* ── Moonlight utility classes ───────────────────────────── */
 
-/* --- Cauldron stirring animation (header when brewing) --- */
-@keyframes cauldron-stir {
-  0%   { transform: rotate(0deg) translateY(0); }
-  25%  { transform: rotate(-6deg) translateY(-1px); }
-  50%  { transform: rotate(0deg) translateY(0); }
-  75%  { transform: rotate(6deg) translateY(-1px); }
-  100% { transform: rotate(0deg) translateY(0); }
-}
-.cauldron-stir {
-  display: inline-block;
-  animation: cauldron-stir 2s ease-in-out infinite;
-  transform-origin: center bottom;
-}
+/* Colors */
+.color-bg       { color: var(--bg); }
+.color-surface  { color: var(--surface); }
+.color-border   { color: var(--border); }
+.color-text     { color: var(--text); }
+.color-dim      { color: var(--dim); }
+.color-muted    { color: var(--muted); }
+.color-accent   { color: var(--accent); }
 
-/* --- Brewing animations --- */
+.bg-moonlight        { background: var(--bg); }
+.bg-surface          { background: var(--surface); }
+.border-moonlight    { border-color: var(--border); }
 
-/* Gentle float for flask icon on active cards */
-@keyframes brew-bubble {
-  0%, 100% { transform: translateY(0) rotate(0deg); opacity: 0.2; }
-  50% { transform: translateY(-6px) rotate(3deg); opacity: 0.4; }
-}
-.brew-icon { display: inline-block; animation: brew-bubble 2s ease-in-out infinite; }
+/* Status colors */
+.color-concocting { color: var(--concocting); }
+.color-assaying  { color: var(--assaying); }
+.color-queued    { color: var(--queued); }
+.color-bottled   { color: var(--bottled); }
+.color-error     { color: var(--error); }
 
-/* Cycling brew status text — 4 stacked spans, one visible at a time over 8s */
-.brew-cycle { position: relative; display: inline-flex; min-width: 10rem; }
-.brew-cycle span { position: absolute; left: 0; opacity: 0; animation: brew-phase 8s linear infinite; }
-.brew-cycle span:nth-child(1) { animation-delay: 0s; }
-.brew-cycle span:nth-child(2) { animation-delay: 2s; }
-.brew-cycle span:nth-child(3) { animation-delay: 4s; }
-.brew-cycle span:nth-child(4) { animation-delay: 6s; }
-@keyframes brew-phase {
-  0% { opacity: 0; } 5% { opacity: 1; } 20% { opacity: 1; } 25% { opacity: 0; } 100% { opacity: 0; }
-}
+.bg-concocting { background: var(--concocting); }
+.bg-assaying  { background: var(--assaying); }
+.bg-accent    { background: var(--accent); }
 
-/* Ingredient discovered flash — green glow that fades once */
-@keyframes ingredient-glow {
-  0% { background-color: oklch(60% 0.15 160 / 0.3); }
-  100% { background-color: transparent; }
-}
-.ingredient-new { animation: ingredient-glow 1.5s ease-out forwards; }
+/* ── Section headers ─────────────────────────────────────── */
 
-/* Heading font — system serif stack for section labels */
-.font-apothecary {
-  font-family: "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
-  letter-spacing: 0.025em;
+.section-header {
+  font-size: var(--font-size-xxs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
 }
 
-/* Horizontal scroll lane — thin themed scrollbar */
-.scroll-lane {
+/* ── Pulsing dot animation (concocting status) ───────────── */
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.dot-pulse {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* ── Tree characters ─────────────────────────────────────── */
+
+.tree-char {
+  color: var(--muted);
+  user-select: none;
+}
+
+/* ── Input ───────────────────────────────────────────────── */
+
+.moonlight-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-base);
+  outline: none;
+  padding: 8px 12px;
+  width: 100%;
+}
+
+.moonlight-input:focus {
+  border-color: var(--dim);
+}
+
+.moonlight-input::placeholder {
+  color: transparent;
+}
+
+/* ── Scrollable output box ───────────────────────────────── */
+
+.output-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  max-height: 140px;
+  overflow-y: auto;
+  font-size: var(--font-size-sm);
   scrollbar-width: thin;
-  scrollbar-color: oklch(40% 0.02 150) transparent;
-}
-.scroll-lane::-webkit-scrollbar { height: 6px; }
-.scroll-lane::-webkit-scrollbar-track { background: transparent; }
-.scroll-lane::-webkit-scrollbar-thumb { background: oklch(40% 0.02 150); border-radius: 3px; }
-
-/* Card sizing for horizontal scroll */
-.scroll-card { min-width: min(280px, 85vw); max-width: 340px; flex-shrink: 0; }
-
-/* Mobile: stack cards vertically */
-@media (max-width: 640px) {
-  .scroll-card { min-width: 100%; max-width: 100%; }
+  scrollbar-color: var(--muted) transparent;
 }
 
-/* --- Cauldron SVG animation --- */
-.cauldron-svg { display: inline-block; }
+.output-box::-webkit-scrollbar { width: 4px; }
+.output-box::-webkit-scrollbar-track { background: transparent; }
+.output-box::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
 
-/* Gentle rock when brewing */
-.cauldron-brewing {
-  animation: cauldron-rock 4s ease-in-out infinite;
-  transform-origin: center 70%;
-}
-@keyframes cauldron-rock {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(-1.5deg); }
-  75% { transform: rotate(1.5deg); }
-}
+/* ── Action pills ────────────────────────────────────────── */
 
-/* Stirring ladle — elliptical stir inside the cauldron */
-@keyframes ladle-stir {
-  0%   { transform: translateX(6px)  translateY(0);    }
-  25%  { transform: translateX(0)    translateY(2px);  }
-  50%  { transform: translateX(-6px) translateY(0);    }
-  75%  { transform: translateX(0)    translateY(-2px); }
-  100% { transform: translateX(6px)  translateY(0);    }
-}
-.cauldron-ladle {
-  animation: ladle-stir 2.5s ease-in-out infinite;
+.action-pill {
+  background: var(--accent);
+  color: var(--bg);
+  padding: 2px 8px;
+  font-size: var(--font-size-sm);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  border: none;
+  display: inline-block;
 }
 
-/* Bubbles rise and pop */
-@keyframes bubble-rise {
-  0% { transform: translateY(0) scale(1); opacity: 0.7; }
-  50% { transform: translateY(-8px) scale(1.3); opacity: 0.9; }
-  100% { transform: translateY(-16px) scale(0.3); opacity: 0; }
+.action-pill:hover {
+  opacity: 0.85;
 }
-.cauldron-bubble { animation: bubble-rise 2s ease-out infinite; }
-.cauldron-bubble-1 { animation-delay: 0s; animation-duration: 1.8s; }
-.cauldron-bubble-2 { animation-delay: 0.5s; animation-duration: 2.2s; }
-.cauldron-bubble-3 { animation-delay: 1s; animation-duration: 1.6s; }
-.cauldron-bubble-4 { animation-delay: 1.5s; animation-duration: 2s; }
 
-/* Steam wisps float up and fade */
-@keyframes steam-rise {
-  0% { opacity: 0; transform: translateY(0) scaleY(0.5); }
-  30% { opacity: 0.4; }
-  100% { opacity: 0; transform: translateY(-12px) scaleY(1.2); }
+.action-text {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
 }
-.cauldron-steam { animation: steam-rise 3s ease-out infinite; }
-.cauldron-steam-1 { animation-delay: 0s; }
-.cauldron-steam-2 { animation-delay: 1s; }
-.cauldron-steam-3 { animation-delay: 2s; }
 
-/* --- File autocomplete dropdown --- */
+.action-text:hover {
+  color: var(--dim);
+}
+
+/* ── Status bar ──────────────────────────────────────────── */
+
+.status-bar {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  font-size: var(--font-size-xs);
+  color: var(--dim);
+  padding: 4px 12px;
+}
+
+/* ── Diff view ───────────────────────────────────────────── */
+
+.diff-add  { color: var(--accent); }
+.diff-del  { color: var(--error); }
+
+/* ── File autocomplete dropdown ──────────────────────────── */
+
 .file-ac-item {
   padding: 6px 10px;
   cursor: pointer;
   display: flex;
   align-items: baseline;
   gap: 8px;
-  border-bottom: 1px solid oklch(50% 0.02 150 / 0.1);
+  border-bottom: 1px solid var(--border);
 }
 .file-ac-item:last-child { border-bottom: none; }
 .file-ac-item:hover, .file-ac-selected {
-  background: oklch(50% 0.02 150 / 0.15);
+  background: var(--surface);
 }
 .file-ac-name {
   font-weight: 500;
-  color: oklch(80% 0.12 155);
+  color: var(--accent);
 }
 .file-ac-dir {
-  font-size: 0.75rem;
-  color: oklch(60% 0.02 150);
+  font-size: var(--font-size-xs);
+  color: var(--dim);
 }
+
+/* ── Scrollbar for main content area ─────────────────────── */
+
+.scroll-main {
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+.scroll-main::-webkit-scrollbar { width: 6px; }
+.scroll-main::-webkit-scrollbar-track { background: transparent; }
+.scroll-main::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+
+/* ── Flash messages ──────────────────────────────────────── */
+
+.flash-info {
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: var(--font-size-sm);
+}
+
+.flash-error {
+  background: var(--surface);
+  border: 1px solid var(--error);
+  color: var(--error);
+  padding: 8px 12px;
+  font-size: var(--font-size-sm);
+}
+
+/* ── Opacity helpers for queued state ────────────────────── */
+
+.opacity-queued {
+  opacity: 0.5;
+}
+
+/* ── Ingredient new glow ─────────────────────────────────── */
+
+@keyframes ingredient-glow {
+  0% { background-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+  100% { background-color: transparent; }
+}
+.ingredient-new { animation: ingredient-glow 1.5s ease-out forwards; }
