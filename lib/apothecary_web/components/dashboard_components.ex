@@ -61,7 +61,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           this.offset = parseInt(this.el.dataset.offset || "0", 10)
           this.type = this.el.dataset.type || "spinner"
           // Use a shared global counter so all spinners stay in sync (with offsets)
-          if (!window.__brailleFrame) {
+          if (!window.__brailleListeners) {
             window.__brailleFrame = 0
             window.__brailleListeners = new Set()
             window.__brailleIv = setInterval(() => {
