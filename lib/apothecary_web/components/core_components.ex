@@ -19,7 +19,11 @@ defmodule ApothecaryWeb.CoreComponents do
   attr :flash, :map, default: %{}, doc: "the map of flash messages to display"
   attr :title, :string, default: nil
   attr :kind, :atom, values: [:info, :error], doc: "used for styling and flash lookup"
-  attr :autodismiss, :integer, default: nil, doc: "auto-dismiss after N ms (nil = no auto-dismiss)"
+
+  attr :autodismiss, :integer,
+    default: nil,
+    doc: "auto-dismiss after N ms (nil = no auto-dismiss)"
+
   attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"
 
   slot :inner_block, doc: "the optional inner block that renders the flash message"
@@ -203,7 +207,11 @@ defmodule ApothecaryWeb.CoreComponents do
 
     ~H"""
     <div class="mb-2">
-      <label for={@id} class="flex items-center gap-2 cursor-pointer" style="color: var(--dim); font-size: var(--font-size-sm);">
+      <label
+        for={@id}
+        class="flex items-center gap-2 cursor-pointer"
+        style="color: var(--dim); font-size: var(--font-size-sm);"
+      >
         <input
           type="hidden"
           name={@name}
@@ -232,7 +240,13 @@ defmodule ApothecaryWeb.CoreComponents do
     ~H"""
     <div class="mb-2">
       <label for={@id}>
-        <span :if={@label} class="block mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">{@label}</span>
+        <span
+          :if={@label}
+          class="block mb-1"
+          style="color: var(--dim); font-size: var(--font-size-xs);"
+        >
+          {@label}
+        </span>
         <select
           id={@id}
           name={@name}
@@ -253,7 +267,13 @@ defmodule ApothecaryWeb.CoreComponents do
     ~H"""
     <div class="mb-2">
       <label for={@id}>
-        <span :if={@label} class="block mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">{@label}</span>
+        <span
+          :if={@label}
+          class="block mb-1"
+          style="color: var(--dim); font-size: var(--font-size-xs);"
+        >
+          {@label}
+        </span>
         <textarea
           id={@id}
           name={@name}
@@ -270,7 +290,13 @@ defmodule ApothecaryWeb.CoreComponents do
     ~H"""
     <div class="mb-2">
       <label for={@id}>
-        <span :if={@label} class="block mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">{@label}</span>
+        <span
+          :if={@label}
+          class="block mb-1"
+          style="color: var(--dim); font-size: var(--font-size-xs);"
+        >
+          {@label}
+        </span>
         <input
           type={@type}
           name={@name}
@@ -288,7 +314,10 @@ defmodule ApothecaryWeb.CoreComponents do
   # Helper used by inputs to generate form errors
   defp error(assigns) do
     ~H"""
-    <p class="mt-1 flex gap-1 items-center" style="color: var(--error); font-size: var(--font-size-xs);">
+    <p
+      class="mt-1 flex gap-1 items-center"
+      style="color: var(--error); font-size: var(--font-size-xs);"
+    >
       <.icon name="hero-exclamation-circle" class="size-3" />
       {render_slot(@inner_block)}
     </p>
@@ -398,8 +427,14 @@ defmodule ApothecaryWeb.CoreComponents do
   def list(assigns) do
     ~H"""
     <dl>
-      <div :for={item <- @item} class="flex gap-4 py-1" style="border-bottom: 1px solid var(--border);">
-        <dt style="color: var(--dim); font-size: var(--font-size-sm); min-width: 120px;">{item.title}</dt>
+      <div
+        :for={item <- @item}
+        class="flex gap-4 py-1"
+        style="border-bottom: 1px solid var(--border);"
+      >
+        <dt style="color: var(--dim); font-size: var(--font-size-sm); min-width: 120px;">
+          {item.title}
+        </dt>
         <dd style="color: var(--text); font-size: var(--font-size-sm);">{render_slot(item)}</dd>
       </div>
     </dl>
