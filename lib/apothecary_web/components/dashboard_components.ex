@@ -1517,6 +1517,8 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span style="color: var(--border);">&middot;</span>
             <span>/ search</span>
             <span style="color: var(--border);">&middot;</span>
+            <span>P pull main</span>
+            <span style="color: var(--border);">&middot;</span>
             <span>w/e/o tabs</span>
             <span style="color: var(--border);">&middot;</span>
             <span>tab project</span>
@@ -1851,6 +1853,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <.hk key="a" desc="add task" />
             <.hk key="d" desc="view diff" />
             <.hk key="p" desc="open preview" />
+            <.hk key="P" desc="pull origin main" />
             <.hk key="?" desc="this help" />
           </div>
 

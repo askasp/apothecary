@@ -566,6 +566,35 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("pull-main", _params, socket) do
+    case socket.assigns.current_project do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Select a project first")}
+
+      project ->
+        lv = self()
+
+        Elixir.Task.start(fn ->
+          result =
+            case Git.pull_main(project.path) do
+              {:ok, output} ->
+                {:ok, "Pulled origin main: #{String.trim(output)}"}
+
+              {:error, reason} ->
+                {:error, "Pull failed: #{inspect(reason)}"}
+            end
+
+          send(lv, {:async_action_result, result})
+        end)
+
+        {:noreply,
+         socket
+         |> assign(:loading_action, :pulling_main)
+         |> put_flash(:info, "Pulling origin main...")}
+    end
+  end
+
+  @impl true
   def handle_event("start-swarm", _params, socket) do
     case socket.assigns.current_project do
       nil ->
@@ -2013,6 +2042,33 @@ defmodule ApothecaryWeb.DashboardLive do
 
       true ->
         socket
+    end
+  end
+
+  defp handle_hotkey("P", socket) do
+    case socket.assigns.current_project do
+      nil ->
+        put_flash(socket, :error, "Select a project first")
+
+      project ->
+        lv = self()
+
+        Elixir.Task.start(fn ->
+          result =
+            case Git.pull_main(project.path) do
+              {:ok, output} ->
+                {:ok, "Pulled origin main: #{String.trim(output)}"}
+
+              {:error, reason} ->
+                {:error, "Pull failed: #{inspect(reason)}"}
+            end
+
+          send(lv, {:async_action_result, result})
+        end)
+
+        socket
+        |> assign(:loading_action, :pulling_main)
+        |> put_flash(:info, "Pulling origin main...")
     end
   end
 
