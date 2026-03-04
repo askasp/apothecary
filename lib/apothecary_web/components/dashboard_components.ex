@@ -524,17 +524,17 @@ defmodule ApothecaryWeb.DashboardComponents do
         <%= cond do %>
           <% @dev_server && @dev_server.status == :running -> %>
             <div style="font-size: var(--font-size-sm);">
+              <span class="action-text" phx-click="show-preview">
+                p preview :{@port}
+              </span>
+              <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
               <a
                 href={"http://localhost:#{@port}"}
                 target="_blank"
-                style="color: var(--accent); text-decoration: none;"
+                style="color: var(--dim); text-decoration: none;"
               >
-                p open :{@port} &#x2197;
+                open &#x2197;
               </a>
-              <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
-              <span class="action-text" phx-click="view-diff" phx-value-id={@target_id}>
-                d view diff
-              </span>
               <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
               <button phx-click={@stop_event} phx-value-id={@target_id} class="action-text">
                 stop
@@ -1081,6 +1081,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :agent_output, :list, default: []
   attr :dev_server, :map, default: nil
   attr :has_preview_config, :boolean, default: false
+  attr :show_preview, :boolean, default: false
   attr :pending_action, :any, default: nil
   attr :loading_action, :atom, default: nil
 
@@ -1107,8 +1108,50 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> assign(:git_changes, git_changes)
       |> assign(:last_commit, last_commit)
       |> assign(:loading?, assigns.loading_action != nil)
+      |> assign(
+        :preview_port,
+        case assigns.dev_server do
+          %{ports: [%{port: p} | _], status: :running} -> p
+          _ -> nil
+        end
+      )
 
     ~H"""
+    <%= if @show_preview && @preview_port do %>
+      <div class="flex flex-col h-full">
+        <div
+          class="flex items-center justify-between px-4 py-2 flex-shrink-0"
+          style="border-bottom: 1px solid var(--border);"
+        >
+          <div class="flex items-center gap-3" style="font-size: var(--font-size-sm);">
+            <span style="color: var(--accent); font-weight: 600;">PREVIEW</span>
+            <span style="color: var(--muted);">:{@preview_port}</span>
+            <a
+              href={"http://localhost:#{@preview_port}"}
+              target="_blank"
+              style="color: var(--dim); text-decoration: none;"
+            >
+              open &#x2197;
+            </a>
+          </div>
+          <button
+            phx-click="close-preview"
+            class="cursor-pointer"
+            style="color: var(--muted); font-size: var(--font-size-xs);"
+          >
+            esc
+          </button>
+        </div>
+        <div class="flex-1 min-h-0">
+          <iframe
+            id={"preview-iframe-#{@task.id}"}
+            src={"http://localhost:#{@preview_port}"}
+            class="w-full h-full border-0"
+            phx-update="ignore"
+          />
+        </div>
+      </div>
+    <% else %>
     <div class="px-4 py-4 scroll-main overflow-y-auto flex-1">
       <%!-- 1. Title + Status --%>
       <div class="mb-5">
@@ -1353,6 +1396,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </div>
     </div>
+    <% end %>
     """
   end
 
