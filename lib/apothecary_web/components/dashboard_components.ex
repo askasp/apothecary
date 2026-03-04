@@ -889,7 +889,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%= if @bottled != [] do %>
         <div
           class="cursor-pointer py-1"
-          phx-click="toggle-done-collapsed"
+          phx-click="toggle-done-collapse"
           style="font-size: var(--font-size-sm);"
         >
           <span style="color: var(--bottled);">
