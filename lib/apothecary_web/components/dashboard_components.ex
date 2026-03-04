@@ -14,9 +14,19 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   def spinner(assigns) do
     ~H"""
-    <svg class={["animate-spin", @class]} style="color: var(--dim);" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <svg
+      class={["animate-spin", @class]}
+      style="color: var(--dim);"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
       <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+      <path
+        class="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      />
     </svg>
     """
   end
@@ -40,7 +50,9 @@ defmodule ApothecaryWeb.DashboardComponents do
       data-offset={@offset}
       data-type={@type}
       phx-update="ignore"
-    >{if @type == :bubbles, do: "·∘°·", else: "⠋"}</span>
+    >
+      {if @type == :bubbles, do: "·∘°·", else: "⠋"}
+    </span>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".BrailleSpinner">
       export default {
         SPINNER: ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"],
@@ -135,7 +147,10 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   def top_bar(assigns) do
     ~H"""
-    <div class="flex items-center justify-between px-4 py-3" style={"font-size: var(--font-size-sm); #{if @show_project_switcher, do: "background: var(--surface);", else: ""}"}>
+    <div
+      class="flex items-center justify-between px-4 py-3"
+      style={"font-size: var(--font-size-sm); #{if @show_project_switcher, do: "background: var(--surface);", else: ""}"}
+    >
       <div class="flex items-center gap-0 min-w-0">
         <%= if is_nil(@current_project) do %>
           <span style="color: var(--accent);">apothecary</span>
@@ -155,7 +170,6 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%= cond do %>
         <% @show_project_switcher -> %>
           <span style="color: var(--muted); font-size: var(--font-size-xs);">esc cancel</span>
-
         <% @current_project -> %>
           <div class="flex items-center gap-3">
             <button
@@ -168,7 +182,6 @@ defmodule ApothecaryWeb.DashboardComponents do
               {label}
             </button>
           </div>
-
         <% true -> %>
       <% end %>
     </div>
@@ -186,7 +199,10 @@ defmodule ApothecaryWeb.DashboardComponents do
     ~H"""
     <div class="px-6 py-10 flex flex-col items-center">
       <%!-- Centered header --%>
-      <div class="mb-8" style="color: var(--dim); font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase;">
+      <div
+        class="mb-8"
+        style="color: var(--dim); font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase;"
+      >
         NO PROJECT OPEN
       </div>
 
@@ -220,14 +236,23 @@ defmodule ApothecaryWeb.DashboardComponents do
               <span :if={s.is_git} style="color: var(--accent);">&#x25CF;</span>
               <span :if={!s.is_git} style="color: var(--muted);">&#x25CB;</span>
               <span style="color: var(--text);">{s.name}</span>
-              <span class="ml-auto truncate max-w-[180px]" style="color: var(--muted); font-size: var(--font-size-xs);">{s.path}</span>
+              <span
+                class="ml-auto truncate max-w-[180px]"
+                style="color: var(--muted); font-size: var(--font-size-xs);"
+              >
+                {s.path}
+              </span>
             </button>
           </div>
         </form>
         <div class="mt-2 text-center" style="color: var(--dim); font-size: var(--font-size-sm);">
           path to project root, or select below
         </div>
-        <p :if={@add_project_error} class="mt-1 text-center" style="color: var(--error); font-size: var(--font-size-xs);">
+        <p
+          :if={@add_project_error}
+          class="mt-1 text-center"
+          style="color: var(--error); font-size: var(--font-size-xs);"
+        >
           {@add_project_error}
         </p>
       </div>
@@ -253,7 +278,9 @@ defmodule ApothecaryWeb.DashboardComponents do
                 <span :if={selected?} style="color: var(--accent);">◂</span>
               </div>
               <div class="mt-0.5" style="color: var(--muted); font-size: var(--font-size-sm);">
-                {shorten_path(project.path)} &middot; {worktree_count_label(project.id)} &middot; {format_relative_time(project.updated_at)}
+                {shorten_path(project.path)} &middot; {worktree_count_label(project.id)} &middot; {format_relative_time(
+                  project.updated_at
+                )}
               </div>
             </.link>
           <% end %>
@@ -295,7 +322,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             value={@query}
             autocomplete="off"
             phx-debounce="80"
-            placeholder="filter..."
+            placeholder="search projects..."
             class="moonlight-input w-full"
             style="padding: 8px 12px; font-size: var(--font-size-sm); caret-color: var(--accent);"
           />
@@ -310,14 +337,21 @@ defmodule ApothecaryWeb.DashboardComponents do
           class="block px-4 py-3 cursor-pointer project-landing-item"
           style={"text-decoration: none; #{if selected?, do: "border-left: 2px solid var(--accent); background: var(--surface);", else: "border-left: 2px solid transparent;"}"}
           data-selected={if(selected?, do: "true")}
+          phx-mouseover="switcher-hover"
+          phx-value-index={idx}
         >
           <div class="flex items-center justify-between">
             <span style={"font-size: 14px; font-weight: 600; color: #{if selected?, do: "var(--text)", else: "var(--dim)"};"}>
-              {project.name}
+              <.fuzzy_name name={project.name} query={@query} />
             </span>
-            <span :if={is_current} style="color: var(--accent); font-size: var(--font-size-sm);">current</span>
+            <span :if={is_current} style="color: var(--accent); font-size: var(--font-size-sm);">
+              current
+            </span>
           </div>
-          <div class="flex items-center gap-1 mt-0.5" style="color: var(--muted); font-size: var(--font-size-sm);">
+          <div
+            class="flex items-center gap-1 mt-0.5"
+            style="color: var(--muted); font-size: var(--font-size-sm);"
+          >
             <span>{shorten_path(project.path)}</span>
             <span>&middot;</span>
             <.project_status_dots status={project_status} />
@@ -325,7 +359,11 @@ defmodule ApothecaryWeb.DashboardComponents do
         </.link>
       <% end %>
 
-      <div :if={@projects == []} class="px-4 py-3" style="color: var(--muted); font-size: var(--font-size-sm);">
+      <div
+        :if={@projects == []}
+        class="px-4 py-3"
+        style="color: var(--muted); font-size: var(--font-size-sm);"
+      >
         no matches
       </div>
 
@@ -333,14 +371,50 @@ defmodule ApothecaryWeb.DashboardComponents do
 
       <.link
         navigate={~p"/"}
-        class="block px-4 py-3 cursor-pointer"
-        style="text-decoration: none;"
+        class="block px-4 py-3 cursor-pointer project-landing-item"
+        style="text-decoration: none; border-left: 2px solid transparent;"
       >
         <span style="color: var(--accent);">+</span>
-        <span style="color: var(--dim); font-size: var(--font-size-sm);">&nbsp;open another project</span>
+        <span style="color: var(--dim); font-size: var(--font-size-sm);">
+          &nbsp;open another project
+        </span>
       </.link>
     </div>
     """
+  end
+
+  defp fuzzy_name(assigns) do
+    highlights = fuzzy_highlight(assigns.name, assigns.query)
+    assigns = assign(assigns, :highlights, highlights)
+
+    ~H"""
+    <%= for {char, matched?} <- @highlights do %>
+      <span :if={matched?} class="fuzzy-match">{char}</span><span :if={!matched?}>{char}</span>
+    <% end %>
+    """
+  end
+
+  defp fuzzy_highlight(name, nil), do: Enum.map(String.graphemes(name), &{&1, false})
+  defp fuzzy_highlight(name, ""), do: Enum.map(String.graphemes(name), &{&1, false})
+
+  defp fuzzy_highlight(name, query) do
+    name_chars = String.graphemes(name)
+    query_chars = String.graphemes(String.downcase(query))
+    do_fuzzy_highlight(name_chars, query_chars, [])
+  end
+
+  defp do_fuzzy_highlight([], _query, acc), do: Enum.reverse(acc)
+
+  defp do_fuzzy_highlight(remaining, [], acc) do
+    Enum.reverse(acc) ++ Enum.map(remaining, &{&1, false})
+  end
+
+  defp do_fuzzy_highlight([h | t1], [q | t2], acc) do
+    if String.downcase(h) == q do
+      do_fuzzy_highlight(t1, t2, [{h, true} | acc])
+    else
+      do_fuzzy_highlight(t1, [q | t2], [{h, false} | acc])
+    end
   end
 
   defp project_status_dots(assigns) do
@@ -401,20 +475,32 @@ defmodule ApothecaryWeb.DashboardComponents do
             :{@port} &#x2197;
           </a>
           &nbsp;
-          <button phx-click={@stop_event} phx-value-id={@target_id} class="cursor-pointer" style="color: var(--muted);">
+          <button
+            phx-click={@stop_event}
+            phx-value-id={@target_id}
+            class="cursor-pointer"
+            style="color: var(--muted);"
+          >
             stop
           </button>
-
         <% @dev_server && @dev_server.status == :starting -> %>
           <span style="color: var(--concocting);">starting...</span>
-
         <% @has_config -> %>
-          <button phx-click={@start_event} phx-value-id={@target_id} class="cursor-pointer settings-value" style="color: var(--muted);">
+          <button
+            phx-click={@start_event}
+            phx-value-id={@target_id}
+            class="cursor-pointer settings-value"
+            style="color: var(--muted);"
+          >
             preview
           </button>
-
         <% true -> %>
-          <button phx-click="toggle-preview-help" class="cursor-pointer" style="color: var(--muted);" title="How to set up preview">
+          <button
+            phx-click="toggle-preview-help"
+            class="cursor-pointer"
+            style="color: var(--muted);"
+            title="How to set up preview"
+          >
             preview <span style="color: var(--accent);">?</span>
           </button>
       <% end %>
@@ -433,24 +519,25 @@ defmodule ApothecaryWeb.DashboardComponents do
                 p open :{@port} &#x2197;
               </a>
               <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
-              <span class="action-text" phx-click="view-diff" phx-value-id={@target_id}>d view diff</span>
+              <span class="action-text" phx-click="view-diff" phx-value-id={@target_id}>
+                d view diff
+              </span>
               <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
-              <button phx-click={@stop_event} phx-value-id={@target_id} class="action-text">stop</button>
+              <button phx-click={@stop_event} phx-value-id={@target_id} class="action-text">
+                stop
+              </button>
             </div>
-
           <% @dev_server && @dev_server.status == :starting -> %>
             <div class="flex items-center gap-2" style="font-size: var(--font-size-sm);">
               <.spinner class="w-3 h-3" />
               <span style="color: var(--concocting);">starting dev server...</span>
             </div>
-
           <% @has_config -> %>
             <div style="font-size: var(--font-size-sm);">
               <span class="action-text" phx-click={@start_event} phx-value-id={@target_id}>
                 p start preview
               </span>
             </div>
-
           <% true -> %>
             <div style="font-size: var(--font-size-sm);">
               <div style="color: var(--muted); margin-bottom: 6px;">
@@ -521,10 +608,16 @@ defmodule ApothecaryWeb.DashboardComponents do
         <span style="color: var(--dim);">brewers:</span>
         <%= if @editing_setting == :brewers do %>
           <span class="inline-flex items-center gap-1 ml-1">
-            <button phx-click="decrement-brewers" class="cursor-pointer" style="color: var(--accent);">&minus;</button>
+            <button phx-click="decrement-brewers" class="cursor-pointer" style="color: var(--accent);">
+              &minus;
+            </button>
             <span style="color: var(--text); font-weight: 600;">{@target_count}</span>
-            <button phx-click="increment-brewers" class="cursor-pointer" style="color: var(--accent);">+</button>
-            <button phx-click="confirm-setting" class="cursor-pointer" style="color: var(--muted);">&#x2713;</button>
+            <button phx-click="increment-brewers" class="cursor-pointer" style="color: var(--accent);">
+              +
+            </button>
+            <button phx-click="confirm-setting" class="cursor-pointer" style="color: var(--muted);">
+              &#x2713;
+            </button>
           </span>
         <% else %>
           <button
@@ -568,10 +661,17 @@ defmodule ApothecaryWeb.DashboardComponents do
         <div class="mt-2" style="border-top: 1px solid var(--border); padding-top: 8px;">
           <div class="flex items-center justify-between mb-1">
             <span style="color: var(--text); font-weight: 500;">preview setup</span>
-            <button phx-click="toggle-preview-help" class="cursor-pointer" style="color: var(--muted);">&#x2715;</button>
+            <button
+              phx-click="toggle-preview-help"
+              class="cursor-pointer"
+              style="color: var(--muted);"
+            >
+              &#x2715;
+            </button>
           </div>
           <div style="color: var(--muted); margin-bottom: 6px;">
-            add <span style="color: var(--text);">.apothecary/preview.yml</span> to your project root to spin up a dev server for main and each worktree branch:
+            add <span style="color: var(--text);">.apothecary/preview.yml</span>
+            to your project root to spin up a dev server for main and each worktree branch:
           </div>
           <div class="oracle-code-block" style="font-size: var(--font-size-xs);">
             <pre><code style="color: var(--dim);">{"# .apothecary/preview.yml\ncommand: \"npm run dev\"\nport_count: 1\n# optional:\n# setup: \"npm install\"\n# base_port: 3000"}</code></pre>
@@ -618,7 +718,12 @@ defmodule ApothecaryWeb.DashboardComponents do
           style="color: var(--muted);"
           title="Send (Enter)"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            class="w-4 h-4"
+          >
             <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" />
           </svg>
         </button>
@@ -818,21 +923,27 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp tree_group(assigns) do
     ~H"""
     <div style={"opacity: #{@opacity};"}>
-      <div :if={@label} class="pt-1.5 pb-0.5" style={"color: #{@color}; font-size: var(--font-size-sm);"}>
+      <div
+        :if={@label}
+        class="pt-1.5 pb-0.5"
+        style={"color: #{@color}; font-size: var(--font-size-sm);"}
+      >
         {@label} ({@count})
         <.braille_spinner :if={@animated_header_dot} id="tree-brewing-spinner" offset={0} />
       </div>
       <div style="font-size: var(--font-size-sm);">
         <%= for {entry, idx} <- Enum.with_index(@entries) do %>
           <% last? = idx == length(@entries) - 1
-             wt = entry.worktree
-             selected? = selected_entry?(@card_ids, @selected_card, wt.id)
-             tasks = entry.tasks
-             done_count = Enum.count(tasks, &(&1.status in ["done", "closed"]))
-             total_count = length(tasks)
-             port = entry_port(entry.dev_server) %>
+          wt = entry.worktree
+          selected? = selected_entry?(@card_ids, @selected_card, wt.id)
+          tasks = entry.tasks
+          done_count = Enum.count(tasks, &(&1.status in ["done", "closed"]))
+          total_count = length(tasks)
+          port = entry_port(entry.dev_server) %>
           <%!-- Leading connector from group label --%>
-          <div :if={@label && idx == 0} class="tree-char pl-1" style="font-size: var(--font-size-sm);">│</div>
+          <div :if={@label && idx == 0} class="tree-char pl-1" style="font-size: var(--font-size-sm);">
+            │
+          </div>
           <div
             style={"#{if selected?, do: "border-left: 2px solid var(--accent); background: var(--surface);", else: "border-left: 2px solid transparent;"}"}
             class="cursor-pointer"
@@ -845,15 +956,25 @@ defmodule ApothecaryWeb.DashboardComponents do
             <div class="flex items-baseline gap-1.5 py-0.5 px-1">
               <span class="tree-char">{if last?, do: "└─", else: "├─"}</span>
               <%= if @animated_header_dot do %>
-                <span style={"color: #{@color};"}><.braille_spinner id={"wt-spin-#{wt.id}"} offset={idx * 3} /></span>
+                <span style={"color: #{@color};"}>
+                  <.braille_spinner id={"wt-spin-#{wt.id}"} offset={idx * 3} />
+                </span>
               <% else %>
                 <span class={@dot_class} style={"color: #{@color};"}>{@dot}</span>
               <% end %>
               <span style={"color: #{@title_color}; font-weight: 500;"}>{wt.title || wt.id}</span>
-              <span :if={selected?} style="color: var(--accent); margin-left: auto; padding-right: 4px;">◂</span>
+              <span
+                :if={selected?}
+                style="color: var(--accent); margin-left: auto; padding-right: 4px;"
+              >
+                ◂
+              </span>
             </div>
             <%!-- Metadata line --%>
-            <div class="flex items-center gap-1 pl-8 pb-0.5" style="color: var(--muted); font-size: var(--font-size-xs);">
+            <div
+              class="flex items-center gap-1 pl-8 pb-0.5"
+              style="color: var(--muted); font-size: var(--font-size-xs);"
+            >
               <span>{wt.id}</span>
               <span :if={total_count > 0}>
                 &middot; {done_count}/{total_count} {progress_bar(done_count, total_count)}
@@ -871,12 +992,14 @@ defmodule ApothecaryWeb.DashboardComponents do
             <div class="pl-8" style="font-size: var(--font-size-xs);">
               <%= for {task, tidx} <- Enum.with_index(tasks) do %>
                 <% tlast? = tidx == length(tasks) - 1
-                   {ing_dot, ing_dot_color, ing_dot_class} = task_dot(task.status)
-                   ing_text_color = task_text_color(task.status) %>
+                {ing_dot, ing_dot_color, ing_dot_class} = task_dot(task.status)
+                ing_text_color = task_text_color(task.status) %>
                 <div class="flex items-baseline gap-1 py-px px-1">
                   <span class="tree-char">{if tlast?, do: "└─", else: "├─"}</span>
                   <%= if task.status == "in_progress" do %>
-                    <span style={"color: #{ing_dot_color};"}><.braille_spinner id={"ing-spin-#{task.id}"} offset={tidx * 3} /></span>
+                    <span style={"color: #{ing_dot_color};"}>
+                      <.braille_spinner id={"ing-spin-#{task.id}"} offset={tidx * 3} />
+                    </span>
                   <% else %>
                     <span class={ing_dot_class} style={"color: #{ing_dot_color};"}>{ing_dot}</span>
                   <% end %>
@@ -976,47 +1099,54 @@ defmodule ApothecaryWeb.DashboardComponents do
       <div class="mb-5">
         <div class="flex items-start justify-between">
           <div class="flex-1 min-w-0">
-        <%= if @editing_field == :title do %>
-          <.form for={%{}} phx-submit="save-edit" class="mb-2">
-            <input type="hidden" name="field" value="title" />
-            <input
-              type="text"
-              name="value"
-              value={@task.title}
-              autofocus
-              phx-focus="input-focus"
-              phx-blur="input-blur"
-              class="moonlight-input w-full"
-              style="font-size: 18px; font-weight: 600;"
-            />
-            <div class="flex items-center gap-2 mt-1">
-              <button type="submit" class="action-pill">save</button>
-              <button type="button" phx-click="cancel-edit" class="action-text">cancel</button>
+            <%= if @editing_field == :title do %>
+              <.form for={%{}} phx-submit="save-edit" class="mb-2">
+                <input type="hidden" name="field" value="title" />
+                <input
+                  type="text"
+                  name="value"
+                  value={@task.title}
+                  autofocus
+                  phx-focus="input-focus"
+                  phx-blur="input-blur"
+                  class="moonlight-input w-full"
+                  style="font-size: 18px; font-weight: 600;"
+                />
+                <div class="flex items-center gap-2 mt-1">
+                  <button type="submit" class="action-pill">save</button>
+                  <button type="button" phx-click="cancel-edit" class="action-text">cancel</button>
+                </div>
+              </.form>
+            <% else %>
+              <div
+                phx-click="start-edit"
+                phx-value-field="title"
+                class="cursor-pointer"
+                style="font-size: 18px; font-weight: 600; color: var(--text);"
+              >
+                {@task.title}
+              </div>
+            <% end %>
+            <div
+              class="flex items-center gap-2 mt-1"
+              style="font-size: var(--font-size-xs); color: var(--muted);"
+            >
+              <span>{@task.id}</span>
+              <span :if={@brewer_label} style="color: var(--dim);">&middot; {@brewer_label}</span>
+              <span
+                :if={@working_agent && !@working_agent.sandboxed}
+                style="color: var(--error); font-weight: 500;"
+              >
+                &middot; unsandboxed
+              </span>
+              <span :if={@time_ago}>&middot; {@time_ago}</span>
             </div>
-          </.form>
-        <% else %>
-          <div
-            phx-click="start-edit"
-            phx-value-field="title"
-            class="cursor-pointer"
-            style="font-size: 18px; font-weight: 600; color: var(--text);"
-          >
-            {@task.title}
           </div>
-        <% end %>
-        <div class="flex items-center gap-2 mt-1" style="font-size: var(--font-size-xs); color: var(--muted);">
-          <span>{@task.id}</span>
-          <span :if={@brewer_label} style="color: var(--dim);">&middot; {@brewer_label}</span>
-          <span
-            :if={@working_agent && !@working_agent.sandboxed}
-            style="color: var(--error); font-weight: 500;"
+          <button
+            phx-click="deselect-task"
+            class="cursor-pointer flex-shrink-0"
+            style="color: var(--muted); font-size: var(--font-size-xs);"
           >
-            &middot; unsandboxed
-          </span>
-          <span :if={@time_ago}>&middot; {@time_ago}</span>
-        </div>
-          </div>
-          <button phx-click="deselect-task" class="cursor-pointer flex-shrink-0" style="color: var(--muted); font-size: var(--font-size-xs);">
             esc
           </button>
         </div>
@@ -1046,8 +1176,20 @@ defmodule ApothecaryWeb.DashboardComponents do
               <span class="action-pill" phx-click="local-merge">g git-merge</span>
             <% end %>
             <span :if={@pr_url} class="action-pill" phx-click="merge-pr">m merge</span>
-            <span :if={@task.status not in ["done", "closed", "merged"]} class="action-text" phx-click="requeue-task">r requeue</span>
-            <span :if={@task.status not in ["done", "closed", "merged"]} class="action-text" phx-click="close-task">x close</span>
+            <span
+              :if={@task.status not in ["done", "closed", "merged"]}
+              class="action-text"
+              phx-click="requeue-task"
+            >
+              r requeue
+            </span>
+            <span
+              :if={@task.status not in ["done", "closed", "merged"]}
+              class="action-text"
+              phx-click="close-task"
+            >
+              x close
+            </span>
           <% end %>
         <% end %>
       </div>
@@ -1058,7 +1200,11 @@ defmodule ApothecaryWeb.DashboardComponents do
         <%= if @children == [] do %>
           <div style="color: var(--muted); font-size: var(--font-size-sm);">none</div>
         <% else %>
-          <div :for={child <- @children} class="flex items-center gap-2 py-1" style="font-size: var(--font-size-sm);">
+          <div
+            :for={child <- @children}
+            class="flex items-center gap-2 py-1"
+            style="font-size: var(--font-size-sm);"
+          >
             <span style={"color: #{if child.status in ["done", "closed"], do: "var(--accent)", else: "var(--concocting)"};"}>
               {if child.status in ["done", "closed"], do: "✓", else: "◌"}
             </span>
@@ -1071,7 +1217,9 @@ defmodule ApothecaryWeb.DashboardComponents do
           </div>
         <% end %>
         <div class="mt-1">
-          <span class="action-text" style="color: var(--accent); font-size: var(--font-size-sm);">+ add task</span>
+          <span class="action-text" style="color: var(--accent); font-size: var(--font-size-sm);">
+            + add task
+          </span>
         </div>
       </div>
 
@@ -1079,14 +1227,20 @@ defmodule ApothecaryWeb.DashboardComponents do
       <div :if={@last_commit || @git_changes} class="mb-5">
         <div class="section-header mb-2">GIT</div>
         <div :if={@last_commit} style="font-size: var(--font-size-sm);" class="mb-2">
-          <span style="color: var(--text); font-weight: 600;">{String.slice(@last_commit.hash || "", 0..6)}</span>
+          <span style="color: var(--text); font-weight: 600;">
+            {String.slice(@last_commit.hash || "", 0..6)}
+          </span>
           <span style="color: var(--dim);">&nbsp;{@last_commit.message}</span>
         </div>
         <div :if={@git_changes} style="font-size: var(--font-size-xs);">
           <div :for={file <- @git_changes.files || []} class="flex items-center gap-2 py-0.5">
             <span style="color: var(--muted);">{file.path}</span>
-            <span :if={file.additions > 0} style="color: var(--accent); font-weight: 600;">+{file.additions}</span>
-            <span :if={file.deletions > 0} style="color: var(--error); font-weight: 600;">-{file.deletions}</span>
+            <span :if={file.additions > 0} style="color: var(--accent); font-weight: 600;">
+              +{file.additions}
+            </span>
+            <span :if={file.deletions > 0} style="color: var(--error); font-weight: 600;">
+              -{file.deletions}
+            </span>
           </div>
           <% file_count = length(@git_changes.files || []) %>
           <% total_add = Enum.sum(Enum.map(@git_changes.files || [], & &1.additions)) %>
@@ -1225,7 +1379,13 @@ defmodule ApothecaryWeb.DashboardComponents do
   def moonlight_status_bar(assigns) do
     running_count = length(assigns.worktrees_by_status["running"] || [])
     pr_count = length(assigns.worktrees_by_status["pr"] || [])
-    queued_count = length((assigns.worktrees_by_status["ready"] || []) ++ (assigns.worktrees_by_status["blocked"] || []))
+
+    queued_count =
+      length(
+        (assigns.worktrees_by_status["ready"] || []) ++
+          (assigns.worktrees_by_status["blocked"] || [])
+      )
+
     done_count = length(assigns.worktrees_by_status["done"] || [])
 
     # Count active thinkers (agents working on questions)
@@ -1268,7 +1428,6 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span>esc cancel</span>
           </div>
           <div style="color: var(--muted);">{@project_count} projects</div>
-
         <% is_nil(@current_project) -> %>
           <%!-- Landing status bar --%>
           <div class="flex items-center gap-2">
@@ -1279,7 +1438,6 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span>tab autocomplete path</span>
           </div>
           <div style="color: var(--muted);">v0.1.0</div>
-
         <% @active_tab == :oracle -> %>
           <%!-- Oracle status bar --%>
           <div class="flex items-center gap-2">
@@ -1293,13 +1451,14 @@ defmodule ApothecaryWeb.DashboardComponents do
           </div>
           <div class="flex items-center gap-2">
             <%= if @thinking_count > 0 do %>
-              <span class="dot-pulse" style="color: var(--concocting);">&#x25C9; {@thinking_count} active</span>
+              <span class="dot-pulse" style="color: var(--concocting);">
+                &#x25C9; {@thinking_count} active
+              </span>
             <% end %>
             <%= if @pending_question_count > 0 do %>
               <span style="color: var(--muted);">&#x25CB;{@pending_question_count}</span>
             <% end %>
           </div>
-
         <% @active_tab == :workbench && @selected_task_id && @selected_task -> %>
           <%!-- Workbench with selected task --%>
           <div class="flex items-center gap-2">
@@ -1319,7 +1478,6 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span style="color: var(--muted);">&#x25CB;{@queued_count}</span>
             <span style="color: var(--bottled);">&#x25CF;{@done_count}</span>
           </div>
-
         <% true -> %>
           <%!-- Workbench / default status bar --%>
           <div class="flex items-center gap-2">
@@ -1332,7 +1490,12 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span>s stop</span>
           </div>
           <div class="flex items-center gap-2">
-            <.braille_spinner :if={@running_count > 0} id="statusbar-bubbles" offset={0} type={:bubbles} />
+            <.braille_spinner
+              :if={@running_count > 0}
+              id="statusbar-bubbles"
+              offset={0}
+              type={:bubbles}
+            />
             <span style="color: var(--concocting);">&#x25CF;{@running_count}</span>
             <span style="color: var(--assaying);">&#x25CE;{@pr_count}</span>
             <span style="color: var(--muted);">&#x25CB;{@queued_count}</span>
@@ -1350,7 +1513,10 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   def add_project_modal(assigns) do
     ~H"""
-    <div class="fixed inset-0 z-50 flex items-center justify-center" style="background: rgba(0,0,0,0.6);">
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center"
+      style="background: rgba(0,0,0,0.6);"
+    >
       <div
         class="w-full max-w-md mx-4 p-4"
         style="background: var(--surface); border: 1px solid var(--border);"
@@ -1369,7 +1535,9 @@ defmodule ApothecaryWeb.DashboardComponents do
             phx-debounce="150"
             class="moonlight-input w-full mb-2"
           />
-          <p :if={@error} style="color: var(--error); font-size: var(--font-size-xs);" class="mb-2">{@error}</p>
+          <p :if={@error} style="color: var(--error); font-size: var(--font-size-xs);" class="mb-2">
+            {@error}
+          </p>
           <div
             :if={@suggestions != []}
             class="mb-2 max-h-40 overflow-y-auto"
@@ -1386,7 +1554,12 @@ defmodule ApothecaryWeb.DashboardComponents do
               <span :if={s.is_git} style="color: var(--accent);">●</span>
               <span :if={!s.is_git} style="color: var(--muted);">○</span>
               <span style="color: var(--text);">{s.name}</span>
-              <span class="ml-auto truncate max-w-[180px]" style="color: var(--muted); font-size: var(--font-size-xs);">{s.path}</span>
+              <span
+                class="ml-auto truncate max-w-[180px]"
+                style="color: var(--muted); font-size: var(--font-size-xs);"
+              >
+                {s.path}
+              </span>
             </button>
           </div>
           <div class="flex justify-end gap-2">
@@ -1409,7 +1582,10 @@ defmodule ApothecaryWeb.DashboardComponents do
     assigns = assign(assigns, :templates, templates)
 
     ~H"""
-    <div class="fixed inset-0 z-50 flex items-center justify-center" style="background: rgba(0,0,0,0.6);">
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center"
+      style="background: rgba(0,0,0,0.6);"
+    >
       <div
         class="w-full max-w-md mx-4 p-4"
         style="background: var(--surface); border: 1px solid var(--border);"
@@ -1420,7 +1596,9 @@ defmodule ApothecaryWeb.DashboardComponents do
         <div class="section-header mb-3">NEW PROJECT</div>
         <form phx-submit="create-new-project" id="new-project-form">
           <div class="mb-3">
-            <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">parent directory</div>
+            <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">
+              parent directory
+            </div>
             <input
               type="text"
               name="parent_dir"
@@ -1429,7 +1607,9 @@ defmodule ApothecaryWeb.DashboardComponents do
             />
           </div>
           <div class="mb-3">
-            <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">project name</div>
+            <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">
+              project name
+            </div>
             <input
               type="text"
               name="name"
@@ -1439,7 +1619,9 @@ defmodule ApothecaryWeb.DashboardComponents do
             />
           </div>
           <div class="mb-3">
-            <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">template</div>
+            <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">
+              template
+            </div>
             <div :for={tmpl <- @templates} class="flex items-center gap-2 py-1">
               <input
                 type="radio"
@@ -1449,11 +1631,19 @@ defmodule ApothecaryWeb.DashboardComponents do
                 style="accent-color: var(--accent);"
               />
               <span style="color: var(--text); font-size: var(--font-size-sm);">{tmpl.name}</span>
-              <span style="color: var(--muted); font-size: var(--font-size-xs);">{tmpl.description}</span>
+              <span style="color: var(--muted); font-size: var(--font-size-xs);">
+                {tmpl.description}
+              </span>
             </div>
           </div>
-          <p :if={@error} style="color: var(--error); font-size: var(--font-size-xs);" class="mb-2">{@error}</p>
-          <div :if={@progress} class="flex items-center gap-2 mb-2 p-2" style="background: var(--bg); font-size: var(--font-size-xs); color: var(--dim);">
+          <p :if={@error} style="color: var(--error); font-size: var(--font-size-xs);" class="mb-2">
+            {@error}
+          </p>
+          <div
+            :if={@progress}
+            class="flex items-center gap-2 mb-2 p-2"
+            style="background: var(--bg); font-size: var(--font-size-xs); color: var(--dim);"
+          >
             <.spinner class="w-3 h-3" />
             <span>{@progress}</span>
           </div>
@@ -1488,18 +1678,31 @@ defmodule ApothecaryWeb.DashboardComponents do
 
     ~H"""
     <div class="fixed inset-0 z-50 flex flex-col" style="background: var(--bg);">
-      <div class="flex items-center justify-between px-4 py-2 shrink-0" style="border-bottom: 1px solid var(--border);">
+      <div
+        class="flex items-center justify-between px-4 py-2 shrink-0"
+        style="border-bottom: 1px solid var(--border);"
+      >
         <div class="flex items-center gap-3">
           <span class="section-header" style="color: var(--accent);">DIFF</span>
           <span style="color: var(--dim); font-size: var(--font-size-sm);">{@diff.worktree_id}</span>
-          <span :if={@diff.loading} style="color: var(--concocting); font-size: var(--font-size-xs);" class="animate-pulse">loading...</span>
+          <span
+            :if={@diff.loading}
+            style="color: var(--concocting); font-size: var(--font-size-xs);"
+            class="animate-pulse"
+          >
+            loading...
+          </span>
         </div>
-        <span style="color: var(--muted); font-size: var(--font-size-xs);">esc close  j/k navigate</span>
+        <span style="color: var(--muted); font-size: var(--font-size-xs);">
+          esc close  j/k navigate
+        </span>
       </div>
 
       <div :if={@diff.error && !@diff.loading} class="flex-1 flex items-center justify-center">
         <div class="text-center">
-          <div id="diff-error-text" style="color: var(--error); font-size: var(--font-size-sm);">{@diff.error}</div>
+          <div id="diff-error-text" style="color: var(--error); font-size: var(--font-size-sm);">
+            {@diff.error}
+          </div>
           <.copy_button target="#diff-error-text" class="mt-2" />
         </div>
       </div>
@@ -1508,8 +1711,15 @@ defmodule ApothecaryWeb.DashboardComponents do
         <span style="color: var(--concocting);" class="animate-pulse">fetching diff...</span>
       </div>
 
-      <div :if={!@diff.loading && !@diff.error && @diff.files != []} class="flex flex-1 overflow-hidden">
-        <div id="diff-file-list" class="w-64 shrink-0 overflow-y-auto" style="border-right: 1px solid var(--border); background: var(--surface);">
+      <div
+        :if={!@diff.loading && !@diff.error && @diff.files != []}
+        class="flex flex-1 overflow-hidden"
+      >
+        <div
+          id="diff-file-list"
+          class="w-64 shrink-0 overflow-y-auto"
+          style="border-right: 1px solid var(--border); background: var(--surface);"
+        >
           <div class="section-header px-3 py-1" style="border-bottom: 1px solid var(--border);">
             files ({length(@diff.files)})
           </div>
@@ -1525,7 +1735,10 @@ defmodule ApothecaryWeb.DashboardComponents do
 
         <div class="flex-1 overflow-y-auto" id="diff-content-pane">
           <div :if={@current_file} style="font-size: var(--font-size-xs);">
-            <div class="sticky top-0 px-4 py-1" style="background: var(--surface); border-bottom: 1px solid var(--border); color: var(--dim);">
+            <div
+              class="sticky top-0 px-4 py-1"
+              style="background: var(--surface); border-bottom: 1px solid var(--border); color: var(--dim);"
+            >
               {@current_file.path}
             </div>
             <div
@@ -1539,7 +1752,10 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </div>
 
-      <div :if={!@diff.loading && !@diff.error && @diff.files == []} class="flex-1 flex items-center justify-center">
+      <div
+        :if={!@diff.loading && !@diff.error && @diff.files == []}
+        class="flex-1 flex items-center justify-center"
+      >
         <span style="color: var(--muted);">no changes found</span>
       </div>
     </div>
@@ -1664,14 +1880,22 @@ defmodule ApothecaryWeb.DashboardComponents do
         style="width: 36%; min-width: 280px; max-width: 420px; border-right: 1px solid var(--border);"
       >
         <%!-- Header --%>
-        <div class="px-3 py-2 flex items-center justify-between" style="border-bottom: 1px solid var(--border);">
-          <div class="flex items-center gap-2" style="font-size: var(--font-size-xs); color: var(--dim);">
+        <div
+          class="px-3 py-2 flex items-center justify-between"
+          style="border-bottom: 1px solid var(--border);"
+        >
+          <div
+            class="flex items-center gap-2"
+            style="font-size: var(--font-size-xs); color: var(--dim);"
+          >
             <span>divinations</span>
             <span style="color: var(--muted);">&middot;</span>
             <span>{length(@sorted)} total</span>
             <%= if @thinking_count > 0 do %>
               <span style="color: var(--muted);">&middot;</span>
-              <span class="dot-pulse" style="color: var(--concocting);">&#x25C9; {@thinking_count} thinking</span>
+              <span class="dot-pulse" style="color: var(--concocting);">
+                &#x25C9; {@thinking_count} thinking
+              </span>
             <% end %>
           </div>
         </div>
@@ -1680,7 +1904,8 @@ defmodule ApothecaryWeb.DashboardComponents do
         <div class="flex-1 overflow-y-auto scroll-main">
           <%= for q <- @sorted do %>
             <% is_selected = @selected && @selected.id == q.id %>
-            <% is_thinking = (q.notes == nil or q.notes == "") and MapSet.member?(@active_wt_ids, q.id) %>
+            <% is_thinking =
+              (q.notes == nil or q.notes == "") and MapSet.member?(@active_wt_ids, q.id) %>
             <% has_answer = q.notes != nil and q.notes != "" %>
             <div
               phx-click="select-question"
@@ -1704,10 +1929,13 @@ defmodule ApothecaryWeb.DashboardComponents do
                   <% end %>
                 </span>
                 <span style="color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-sm);">
-                  {String.slice(q.title, 0, 40)}<%= if String.length(q.title) > 40, do: "..." %>
+                  {String.slice(q.title, 0, 40)}{if String.length(q.title) > 40, do: "..."}
                 </span>
               </div>
-              <div class="flex items-center gap-2 mt-1" style="font-size: var(--font-size-xxs); color: var(--muted);">
+              <div
+                class="flex items-center gap-2 mt-1"
+                style="font-size: var(--font-size-xxs); color: var(--muted);"
+              >
                 <span>{format_relative_time(q.created_at)}</span>
                 <span>&middot;</span>
                 <span>main</span>
@@ -1740,7 +1968,12 @@ defmodule ApothecaryWeb.DashboardComponents do
               style="color: var(--muted);"
               title="Send (Enter)"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                class="w-3 h-3"
+              >
                 <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" />
               </svg>
             </button>
@@ -1754,7 +1987,9 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%!-- Right panel: selected question detail --%>
       <div class="flex-1 h-full overflow-y-auto scroll-main">
         <%= if @selected do %>
-          <% is_thinking = (@selected.notes == nil or @selected.notes == "") and MapSet.member?(@active_wt_ids, @selected.id) %>
+          <% is_thinking =
+            (@selected.notes == nil or @selected.notes == "") and
+              MapSet.member?(@active_wt_ids, @selected.id) %>
           <div class="px-4 py-3">
             <%!-- Question title --%>
             <div class="flex items-start gap-2 mb-1">
@@ -1794,8 +2029,14 @@ defmodule ApothecaryWeb.DashboardComponents do
               </div>
             <% else %>
               <%= if is_thinking do %>
-                <div class="py-2 px-3" style="background: var(--surface); border-left: 2px solid var(--concocting);">
-                  <div class="flex items-center gap-2" style="color: var(--concocting); font-size: var(--font-size-xs);">
+                <div
+                  class="py-2 px-3"
+                  style="background: var(--surface); border-left: 2px solid var(--concocting);"
+                >
+                  <div
+                    class="flex items-center gap-2"
+                    style="color: var(--concocting); font-size: var(--font-size-xs);"
+                  >
                     <span class="dot-pulse">&#x25C9;</span>
                     <span>thinking&hellip;</span>
                   </div>
@@ -1825,7 +2066,10 @@ defmodule ApothecaryWeb.DashboardComponents do
             <% end %>
           </div>
         <% else %>
-          <div class="h-full flex items-center justify-center" style="color: var(--muted); font-size: var(--font-size-sm);">
+          <div
+            class="h-full flex items-center justify-center"
+            style="color: var(--muted); font-size: var(--font-size-sm);"
+          >
             <div class="text-center">
               <div class="mb-1">no divinations yet</div>
               <div style="font-size: var(--font-size-xs);">ask a question in the left panel</div>
@@ -2003,7 +2247,9 @@ defmodule ApothecaryWeb.DashboardComponents do
         <span style="color: var(--dim);">paused:</span>
         <span style="color: var(--text);">&nbsp;{length(@paused)}</span>
         <span :if={@next_run} style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
-        <span :if={@next_run} style="color: var(--dim);">next run {format_relative_time(@next_run)}</span>
+        <span :if={@next_run} style="color: var(--dim);">
+          next run {format_relative_time(@next_run)}
+        </span>
       </div>
 
       <.recipe_form :if={@show_recipe_form} form={@recipe_form} editing_id={@editing_recipe_id} />
@@ -2037,7 +2283,10 @@ defmodule ApothecaryWeb.DashboardComponents do
       <% end %>
 
       <div :if={!@show_recipe_form} class="mt-3">
-        <button phx-click="show-recipe-form" style="color: var(--muted); font-size: var(--font-size-sm); cursor: pointer;">
+        <button
+          phx-click="show-recipe-form"
+          style="color: var(--muted); font-size: var(--font-size-sm); cursor: pointer;"
+        >
           + new recipe
         </button>
       </div>
@@ -2069,7 +2318,9 @@ defmodule ApothecaryWeb.DashboardComponents do
           />
         </div>
         <div class="mb-2">
-          <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">description</div>
+          <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">
+            description
+          </div>
           <textarea
             name="recipe[description]"
             rows="3"
@@ -2079,7 +2330,9 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
         <div class="grid grid-cols-2 gap-3 mb-2">
           <div>
-            <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">schedule (cron)</div>
+            <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">
+              schedule (cron)
+            </div>
             <input
               type="text"
               name="recipe[schedule]"
@@ -2090,12 +2343,16 @@ defmodule ApothecaryWeb.DashboardComponents do
             />
           </div>
           <div>
-            <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">priority</div>
+            <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">
+              priority
+            </div>
             <select name="recipe[priority]" class="moonlight-input w-full">
               <option value="0" selected={@form[:priority].value == "0"}>P0 - Critical</option>
               <option value="1" selected={@form[:priority].value == "1"}>P1 - High</option>
               <option value="2" selected={@form[:priority].value == "2"}>P2 - Medium</option>
-              <option value="3" selected={@form[:priority].value in [nil, "", "3"]}>P3 - Default</option>
+              <option value="3" selected={@form[:priority].value in [nil, "", "3"]}>
+                P3 - Default
+              </option>
               <option value="4" selected={@form[:priority].value == "4"}>P4 - Backlog</option>
             </select>
           </div>
@@ -2132,15 +2389,33 @@ defmodule ApothecaryWeb.DashboardComponents do
               <span style={"color: #{@color};"}>{@symbol}</span>
               <span style="color: var(--text);">{recipe.title}</span>
             </div>
-            <div class="flex items-center gap-1 pl-7 pb-1" style="color: var(--muted); font-size: var(--font-size-xs);">
+            <div
+              class="flex items-center gap-1 pl-7 pb-1"
+              style="color: var(--muted); font-size: var(--font-size-xs);"
+            >
               <span style="color: var(--dim);">{recipe.schedule}</span>
-              <span :if={recipe.last_run_at}>&middot; last: {format_relative_time(recipe.last_run_at)}</span>
-              <span :if={recipe.next_run_at}>&middot; next: {format_relative_time(recipe.next_run_at)}</span>
+              <span :if={recipe.last_run_at}>
+                &middot; last: {format_relative_time(recipe.last_run_at)}
+              </span>
+              <span :if={recipe.next_run_at}>
+                &middot; next: {format_relative_time(recipe.next_run_at)}
+              </span>
               <span class="ml-auto flex items-center gap-1">
-                <button phx-click="toggle-recipe" phx-value-id={recipe.id} class="action-text" style="font-size: var(--font-size-xs);">
+                <button
+                  phx-click="toggle-recipe"
+                  phx-value-id={recipe.id}
+                  class="action-text"
+                  style="font-size: var(--font-size-xs);"
+                >
                   {if(recipe.enabled, do: "pause", else: "resume")}
                 </button>
-                <button phx-click="delete-recipe" phx-value-id={recipe.id} class="action-text" style="font-size: var(--font-size-xs);" data-confirm="Delete this recipe?">
+                <button
+                  phx-click="delete-recipe"
+                  phx-value-id={recipe.id}
+                  class="action-text"
+                  style="font-size: var(--font-size-xs);"
+                  data-confirm="Delete this recipe?"
+                >
                   delete
                 </button>
               </span>

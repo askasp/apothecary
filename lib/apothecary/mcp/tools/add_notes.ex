@@ -30,9 +30,7 @@ defmodule Apothecary.MCP.Tools.AddNotes do
           {:ok, task} when task.worktree_id != worktree_id ->
             response =
               Response.tool()
-              |> Response.text(
-                "Task #{params[:task_id]} belongs to a different worktree."
-              )
+              |> Response.text("Task #{params[:task_id]} belongs to a different worktree.")
 
             {:reply, response, frame}
 

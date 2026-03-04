@@ -5,9 +5,7 @@ defmodule Apothecary.MCP.Tools.CompleteTask do
   alias Hermes.Server.Response
 
   schema do
-    field(:task_id, {:required, :string},
-      description: "The task ID to complete (e.g. t-abc123)"
-    )
+    field(:task_id, {:required, :string}, description: "The task ID to complete (e.g. t-abc123)")
 
     field(:summary, :string, description: "Brief summary of what was done")
   end

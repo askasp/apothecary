@@ -134,9 +134,14 @@ defmodule Apothecary.Bootstrapper do
   # Phoenix needs mix. Curl is only needed if phx_new archive isn't installed.
   defp check_prerequisites(:phoenix) do
     cond do
-      is_nil(System.find_executable("mix")) -> {:error, :mix_not_found}
-      not phx_new_available?() and is_nil(System.find_executable("curl")) -> {:error, :curl_not_found}
-      true -> :ok
+      is_nil(System.find_executable("mix")) ->
+        {:error, :mix_not_found}
+
+      not phx_new_available?() and is_nil(System.find_executable("curl")) ->
+        {:error, :curl_not_found}
+
+      true ->
+        :ok
     end
   end
 
@@ -172,9 +177,7 @@ defmodule Apothecary.Bootstrapper do
 
   defp run_template(parent_dir, name, _path, :phoenix_no_ecto, _opts) do
     if phx_new_available?() do
-      broadcast(
-        {:bootstrap_progress, name, "Running mix phx.new #{name} --no-ecto..."}
-      )
+      broadcast({:bootstrap_progress, name, "Running mix phx.new #{name} --no-ecto..."})
 
       CLI.run("mix", ["phx.new", name, "--no-ecto", "--install"],
         cd: parent_dir,
