@@ -14,7 +14,9 @@ defmodule Apothecary.MergeConflictTest do
     end
 
     test "detects Automatic merge failed" do
-      assert Git.merge_conflict?("Automatic merge failed; fix conflicts and then commit the result.")
+      assert Git.merge_conflict?(
+               "Automatic merge failed; fix conflicts and then commit the result."
+             )
     end
 
     test "detects fix conflicts" do
