@@ -570,29 +570,29 @@ defmodule Apothecary.Brewer do
 
     Apothecary.Worktrees.add_note(
       worktree_id,
-      "Merge conflict detected with main branch in: #{files_list}.\n" <>
-        "A 'Fix merge conflicts' task has been created.\n" <>
-        "Approve it from the dashboard to dispatch a brewer to resolve the conflicts."
+      "⚠ Merge conflict with main in: #{files_list}.\n" <>
+        "Auto-dispatching a brewer to resolve conflicts."
     )
 
-    # Create a fix-merge-conflicts task on this worktree
+    # Create a fix-merge-conflicts task — auto-dispatched (not blocked)
     Apothecary.Worktrees.create_task(%{
       worktree_id: worktree_id,
       title: "Fix merge conflicts with main",
       priority: 0,
       description:
-        "Merge conflicts detected when merging main into this branch.\n" <>
+        "⚠ AUTO-FIX: Merge conflicts detected when merging main into this branch.\n" <>
           "Conflicting files: #{files_list}\n\n" <>
           "Steps to resolve:\n" <>
           "1. Run `git merge origin/main --no-edit` to reproduce the conflicts\n" <>
           "2. Resolve conflicts in the affected files\n" <>
-          "3. `git add` the resolved files and `git commit` to complete the merge",
-      status: "blocked"
+          "3. `git add` the resolved files and `git commit` to complete the merge\n\n" <>
+          "After resolving, add a note: 'Merge conflicts automatically resolved in: #{files_list}'",
+      status: "open"
     })
 
-    # Set status to merge_conflict so it shows up distinctly on the dashboard
+    # Set worktree back to open so it gets dispatched automatically
     Apothecary.Worktrees.update_worktree(worktree_id, %{
-      status: "merge_conflict",
+      status: "open",
       assigned_brewer_id: nil
     })
   end

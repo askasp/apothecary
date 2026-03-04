@@ -1319,6 +1319,23 @@ defmodule ApothecaryWeb.DashboardComponents do
           <% end %>
         </div>
 
+        <%!-- Merge conflict auto-fix warning --%>
+        <% merge_fix_tasks =
+          Enum.filter(@children, fn c ->
+            String.contains?(c.title || "", "merge conflict")
+          end)
+        %>
+        <div
+          :if={merge_fix_tasks != []}
+          class="mb-4 px-3 py-2 rounded"
+          style="background: color-mix(in srgb, var(--concocting) 12%, transparent); border: 1px solid color-mix(in srgb, var(--concocting) 30%, transparent); font-size: var(--font-size-sm);"
+        >
+          <span style="color: var(--concocting); font-weight: 600;">&#x26A0; merge conflicts auto-fixed</span>
+          <span style="color: var(--dim);">
+            &mdash; review the conflict resolution before merging
+          </span>
+        </div>
+
         <%!-- 3. TASKS --%>
         <div class="mb-5">
           <div class="section-header mb-2">TASKS</div>
