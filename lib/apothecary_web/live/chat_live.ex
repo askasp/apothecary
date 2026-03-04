@@ -224,25 +224,25 @@ defmodule ApothecaryWeb.ChatLive do
 
   def handle_event("input-change", %{"value" => value}, socket) do
     cond do
-      # Path autocomplete: "/add /path", "/new /path"
-      match = Regex.run(~r{^/(add|new)\s+([~/]\S*)$}, value) ->
+      # Path autocomplete: "add /path", "/add /path", "new /path", "/new /path"
+      match = Regex.run(~r{^/?(add|new)\s+([~/]\S*)$}, value) ->
         [_, prefix, p] = match
         suggestions = list_path_suggestions(expand_tilde(p))
         {:noreply, assign(socket, path_suggestions: suggestions, path_suggestion_selected: 0, path_command_prefix: prefix)}
 
-      # Path autocomplete: "/p add /path"
-      match = Regex.run(~r{^/p(?:roject)?\s+add\s+([~/]\S*)$}, value) ->
+      # Path autocomplete: "p add /path", "/p add /path"
+      match = Regex.run(~r{^/?p(?:roject)?\s+add\s+([~/]\S*)$}, value) ->
         [_, p] = match
         suggestions = list_path_suggestions(expand_tilde(p))
         {:noreply, assign(socket, path_suggestions: suggestions, path_suggestion_selected: 0, path_command_prefix: "add")}
 
-      # Path autocomplete: "/p /path" (switch by path)
-      match = Regex.run(~r{^/(p(?:roject)?)\s+([~/]\S*)$}, value) ->
+      # Path autocomplete: "p /path", "/p /path" (switch by path)
+      match = Regex.run(~r{^/?(p(?:roject)?)\s+([~/]\S*)$}, value) ->
         [_, prefix, p] = match
         suggestions = list_path_suggestions(expand_tilde(p))
         {:noreply, assign(socket, path_suggestions: suggestions, path_suggestion_selected: 0, path_command_prefix: prefix)}
 
-      # Project name autocomplete: "p " or "/p " without a path char
+      # Project name autocomplete: "p name" or "/p name" without a path char
       match = Regex.run(~r{^/?(p(?:roject)?)\s+([^~/].*)$}, value) ->
         [_, prefix, query] = match
         suggestions = list_project_suggestions(socket.assigns.projects, String.trim(query))

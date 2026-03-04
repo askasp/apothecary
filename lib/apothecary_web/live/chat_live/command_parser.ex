@@ -38,7 +38,11 @@ defmodule ApothecaryWeb.ChatLive.CommandParser do
     "recipe" => :switch_recurring,
     "start" => :start,
     "stop" => :stop,
-    "mcp" => :mcp_list
+    "mcp" => :mcp_list,
+    "add" => :add_project,
+    "new" => :new_project,
+    "sh" => :sh,
+    "brewers" => :set_brewers
   }
 
   @spec parse(String.t(), Context.t()) :: parsed()
@@ -164,9 +168,13 @@ defmodule ApothecaryWeb.ChatLive.CommandParser do
       [key, arg] ->
         case Map.get(@bare_commands, String.downcase(key)) do
           nil -> nil
-          :list_projects -> {:command, :select_project, [String.trim(arg)]}
+          :list_projects -> parse_project_arg(arg)
           :last_worktree -> {:command, :switch_context, ["wt:#{String.trim(arg)}"]}
           :start -> {:command, :start, [String.trim(arg)]}
+          :add_project -> {:command, :add_project, [String.trim(arg)]}
+          :new_project -> {:command, :new_project, [String.trim(arg)]}
+          :sh -> {:command, :sh, [arg]}
+          :set_brewers -> {:command, :set_brewers, [String.trim(arg)]}
           :pr -> {:command, :pr, [String.trim(arg)]}
           :preview -> {:command, :preview, [String.trim(arg)]}
           :mcp_list -> {:command, :mcp_list, [String.trim(arg)]}
@@ -177,6 +185,14 @@ defmodule ApothecaryWeb.ChatLive.CommandParser do
 
       _ ->
         nil
+    end
+  end
+
+  # p <arg> — handle "p add /path", "p <name>"
+  defp parse_project_arg(arg) do
+    case String.split(String.trim(arg), ~r/\s+/, parts: 2) do
+      ["add", path] -> {:command, :add_project, [String.trim(path)]}
+      _ -> {:command, :select_project, [String.trim(arg)]}
     end
   end
 
