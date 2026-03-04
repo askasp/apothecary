@@ -81,6 +81,8 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:gh_available, Git.gh_available?())
       # Project selection (inline landing)
       |> assign(:show_project_switcher, false)
+      |> assign(:switcher_selected, 0)
+      |> assign(:switcher_query, "")
       |> assign(:add_project_error, nil)
       |> assign(:project_path_suggestions, [])
       |> assign(:editing_setting, nil)
@@ -483,10 +485,45 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @impl true
   def handle_event("hotkey", %{"metaKey" => true}, socket), do: {:noreply, socket}
+
+  def handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
+      when key in ["n", "p"] do
+    if socket.assigns.show_project_switcher do
+      mapped = if key == "n", do: "j", else: "k"
+      {:noreply, handle_switcher_hotkey(mapped, socket)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # Ctrl+J/K/H/L always work for navigation, even when an input has focus
+  def handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
+      when key in ["j", "k", "h", "l"] do
+    cond do
+      socket.assigns.loading_action != nil ->
+        {:noreply, socket}
+
+      socket.assigns.show_project_switcher and key in ["j", "k"] ->
+        {:noreply, handle_switcher_hotkey(key, socket)}
+
+      socket.assigns.diff_view != nil ->
+        {:noreply, handle_diff_hotkey(key, socket)}
+
+      socket.assigns.active_tab == :oracle and key in ["j", "k"] ->
+        {:noreply, handle_oracle_hotkey(key, socket)}
+
+      true ->
+        {:noreply, handle_hotkey(key, socket)}
+    end
+  end
+
   def handle_event("hotkey", %{"ctrlKey" => true}, socket), do: {:noreply, socket}
 
   def handle_event("hotkey", %{"key" => key}, socket) do
     cond do
+      socket.assigns.show_project_switcher and key in ["j", "k", "Tab", "Enter", "Escape"] ->
+        {:noreply, handle_switcher_hotkey(key, socket)}
+
       socket.assigns.input_focused and key not in ["Escape"] ->
         {:noreply, socket}
 
@@ -1139,12 +1176,52 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @impl true
   def handle_event("toggle-project-switcher", _params, socket) do
-    {:noreply, assign(socket, :show_project_switcher, !socket.assigns.show_project_switcher)}
+    opening = !socket.assigns.show_project_switcher
+
+    socket =
+      socket
+      |> assign(:show_project_switcher, opening)
+      |> then(fn s ->
+        if opening do
+          s
+          |> assign(:switcher_selected, 0)
+          |> assign(:switcher_query, "")
+          |> push_event("focus-element", %{selector: "#project-switcher-search"})
+        else
+          s
+        end
+      end)
+
+    {:noreply, socket}
   end
 
   @impl true
   def handle_event("close-project-switcher", _params, socket) do
     {:noreply, assign(socket, :show_project_switcher, false)}
+  end
+
+  @impl true
+  def handle_event("switcher-search", %{"query" => query}, socket) do
+    {:noreply,
+     socket
+     |> assign(:switcher_query, query)
+     |> assign(:switcher_selected, 0)}
+  end
+
+  @impl true
+  def handle_event("switcher-select", _params, socket) do
+    filtered = filter_projects(socket.assigns.projects, socket.assigns.switcher_query)
+
+    case Enum.at(filtered, socket.assigns.switcher_selected) do
+      nil ->
+        {:noreply, socket}
+
+      project ->
+        {:noreply,
+         socket
+         |> assign(:show_project_switcher, false)
+         |> push_navigate(to: ~p"/projects/#{project.id}")}
+    end
   end
 
   @impl true
@@ -1479,6 +1556,71 @@ defmodule ApothecaryWeb.DashboardLive do
   defp oracle_selected_index(sorted, id) do
     Enum.find_index(sorted, fn q -> q.id == id end) || 0
   end
+
+  # --- Project switcher hotkeys ---
+
+  defp handle_switcher_hotkey(key, socket) when key in ["j", "Tab"] do
+    filtered = filter_projects(socket.assigns.projects, socket.assigns.switcher_query)
+    max_idx = max(length(filtered) - 1, 0)
+
+    socket
+    |> assign(:switcher_selected, min(socket.assigns.switcher_selected + 1, max_idx))
+    |> push_event("scroll-to-selected", %{})
+  end
+
+  defp handle_switcher_hotkey("k", socket) do
+    socket
+    |> assign(:switcher_selected, max(socket.assigns.switcher_selected - 1, 0))
+    |> push_event("scroll-to-selected", %{})
+  end
+
+  defp handle_switcher_hotkey("Enter", socket) do
+    filtered = filter_projects(socket.assigns.projects, socket.assigns.switcher_query)
+
+    case Enum.at(filtered, socket.assigns.switcher_selected) do
+      nil ->
+        socket
+
+      project ->
+        socket
+        |> assign(:show_project_switcher, false)
+        |> push_navigate(to: ~p"/projects/#{project.id}")
+    end
+  end
+
+  defp handle_switcher_hotkey("Escape", socket) do
+    assign(socket, :show_project_switcher, false)
+  end
+
+  defp handle_switcher_hotkey(_key, socket), do: socket
+
+  defp filter_projects(projects, nil), do: projects
+  defp filter_projects(projects, ""), do: projects
+
+  defp filter_projects(projects, query) do
+    query_down = String.downcase(query)
+
+    projects
+    |> Enum.filter(fn p -> fuzzy_match?(String.downcase(p.name), query_down) end)
+    |> Enum.sort_by(fn p ->
+      name = String.downcase(p.name)
+      # Prefer starts-with, then substring, then fuzzy
+      cond do
+        String.starts_with?(name, query_down) -> 0
+        String.contains?(name, query_down) -> 1
+        true -> 2
+      end
+    end)
+  end
+
+  defp fuzzy_match?(name, query) do
+    fuzzy_match_chars?(String.graphemes(name), String.graphemes(query))
+  end
+
+  defp fuzzy_match_chars?(_name, []), do: true
+  defp fuzzy_match_chars?([], _query), do: false
+  defp fuzzy_match_chars?([h | t1], [h | t2]), do: fuzzy_match_chars?(t1, t2)
+  defp fuzzy_match_chars?([_ | t1], query), do: fuzzy_match_chars?(t1, query)
 
   # --- Hotkey handlers ---
 
@@ -2752,9 +2894,11 @@ defmodule ApothecaryWeb.DashboardLive do
               <div class="h-full overflow-y-auto scroll-main">
                 <div class="max-w-[540px] mx-auto">
                   <.project_switcher
-                    projects={@projects}
+                    projects={filter_projects(@projects, @switcher_query)}
                     current_project={@current_project}
                     dispatcher_projects={@dispatcher_projects}
+                    selected_index={@switcher_selected}
+                    query={@switcher_query}
                   />
                 </div>
               </div>
@@ -2803,6 +2947,7 @@ defmodule ApothecaryWeb.DashboardLive do
                     target_count={@target_count}
                     auto_pr={@auto_pr}
                     swarm_status={@swarm_status}
+                    agents={@agents}
                     dev_server={@dev_servers[@current_project && @current_project.id]}
                     has_preview_config={@has_project_preview_config}
                     project_id={@current_project && @current_project.id}

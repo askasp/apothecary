@@ -12,7 +12,8 @@ defmodule Apothecary.BrewerState do
           status: status(),
           pid: pid() | nil,
           output: [String.t()],
-          started_at: DateTime.t() | nil
+          started_at: DateTime.t() | nil,
+          sandboxed: boolean()
         }
 
   defstruct [
@@ -24,6 +25,7 @@ defmodule Apothecary.BrewerState do
     :pid,
     :started_at,
     status: :idle,
-    output: []
+    output: [],
+    sandboxed: false
   ]
 end

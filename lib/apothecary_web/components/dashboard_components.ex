@@ -280,20 +280,39 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :projects, :list, default: []
   attr :current_project, :any, default: nil
   attr :dispatcher_projects, :map, default: %{}
+  attr :selected_index, :integer, default: 0
+  attr :query, :string, default: ""
 
   def project_switcher(assigns) do
     ~H"""
-    <div class="px-3 py-3">
-      <%= for project <- @projects do %>
+    <div class="px-3 py-3" data-project-switcher>
+      <div class="px-4 pb-2">
+        <form phx-change="switcher-search" phx-submit="switcher-select">
+          <input
+            type="text"
+            id="project-switcher-search"
+            name="query"
+            value={@query}
+            autocomplete="off"
+            phx-debounce="80"
+            placeholder="filter..."
+            class="moonlight-input w-full"
+            style="padding: 8px 12px; font-size: var(--font-size-sm); caret-color: var(--accent);"
+          />
+        </form>
+      </div>
+      <%= for {project, idx} <- Enum.with_index(@projects) do %>
         <% is_current = @current_project && @current_project.id == project.id %>
+        <% selected? = idx == @selected_index %>
         <% project_status = @dispatcher_projects[project.id] %>
         <.link
           navigate={~p"/projects/#{project.id}"}
           class="block px-4 py-3 cursor-pointer project-landing-item"
-          style={"text-decoration: none; #{if is_current, do: "background: var(--surface);", else: ""}"}
+          style={"text-decoration: none; #{if selected?, do: "border-left: 2px solid var(--accent); background: var(--surface);", else: "border-left: 2px solid transparent;"}"}
+          data-selected={if(selected?, do: "true")}
         >
           <div class="flex items-center justify-between">
-            <span style={"font-size: 14px; font-weight: 600; color: #{if is_current, do: "var(--text)", else: "var(--dim)"};"}>
+            <span style={"font-size: 14px; font-weight: 600; color: #{if selected?, do: "var(--text)", else: "var(--dim)"};"}>
               {project.name}
             </span>
             <span :if={is_current} style="color: var(--accent); font-size: var(--font-size-sm);">current</span>
@@ -305,6 +324,10 @@ defmodule ApothecaryWeb.DashboardComponents do
           </div>
         </.link>
       <% end %>
+
+      <div :if={@projects == []} class="px-4 py-3" style="color: var(--muted); font-size: var(--font-size-sm);">
+        no matches
+      </div>
 
       <div class="mt-3 mx-4" style="border-top: 1px solid var(--border);"></div>
 
@@ -451,6 +474,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :target_count, :integer, default: 1
   attr :auto_pr, :boolean, default: false
   attr :swarm_status, :atom, default: :paused
+  attr :agents, :list, default: []
   attr :dev_server, :any, default: nil
   attr :has_preview_config, :boolean, default: false
   attr :project_id, :string, default: nil
@@ -459,7 +483,12 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   def settings_line(assigns) do
     brewing? = assigns.swarm_status == :running
-    assigns = assign(assigns, :brewing?, brewing?)
+    any_unsandboxed = Enum.any?(assigns.agents, fn a -> a.status == :working && !a.sandboxed end)
+
+    assigns =
+      assigns
+      |> assign(:brewing?, brewing?)
+      |> assign(:any_unsandboxed, any_unsandboxed)
 
     ~H"""
     <div class="px-3 py-2" style="font-size: var(--font-size-xs);">
@@ -477,6 +506,13 @@ defmodule ApothecaryWeb.DashboardComponents do
             ■ stopped
           <% end %>
         </button>
+        <span
+          :if={@any_unsandboxed}
+          style="color: var(--error); font-weight: 500; margin-left: 4px;"
+          title="Brewers are running without OS-level sandbox. Install bubblewrap (Linux) or check sandbox-exec (macOS)."
+        >
+          unsandboxed
+        </span>
 
         <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
 
@@ -971,6 +1007,12 @@ defmodule ApothecaryWeb.DashboardComponents do
         <div class="flex items-center gap-2 mt-1" style="font-size: var(--font-size-xs); color: var(--muted);">
           <span>{@task.id}</span>
           <span :if={@brewer_label} style="color: var(--dim);">&middot; {@brewer_label}</span>
+          <span
+            :if={@working_agent && !@working_agent.sandboxed}
+            style="color: var(--error); font-weight: 500;"
+          >
+            &middot; unsandboxed
+          </span>
           <span :if={@time_ago}>&middot; {@time_ago}</span>
         </div>
           </div>

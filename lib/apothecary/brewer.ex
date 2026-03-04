@@ -92,7 +92,8 @@ defmodule Apothecary.Brewer do
       end
 
     case spawn_claude(agent, worktree, tasks) do
-      {:ok, port} ->
+      {:ok, port, sandboxed} ->
+        agent = %{agent | sandboxed: sandboxed}
         watchdog = schedule_watchdog()
         broadcast_state(agent)
 
@@ -712,7 +713,7 @@ defmodule Apothecary.Brewer do
           "'#{claude_exe}' -p \"$APOTHECARY_PROMPT\" " <>
             "--dangerously-skip-permissions --verbose --output-format stream-json"
 
-        cmd = maybe_sandbox_wrap(claude_cmd, agent.worktree_path, agent.id)
+        {cmd, sandboxed} = maybe_sandbox_wrap(claude_cmd, agent.worktree_path, agent.project_dir, agent.id)
 
         {executable, args} =
           if script_exe do
@@ -743,7 +744,7 @@ defmodule Apothecary.Brewer do
 
         Process.send_after(self(), {:accept_permissions, port}, 1_000)
 
-        {:ok, port}
+        {:ok, port, sandboxed}
       rescue
         e ->
           {:error, Exception.message(e)}
@@ -1059,58 +1060,75 @@ defmodule Apothecary.Brewer do
 
   # Sandbox — OS-level filesystem restriction to worktree
 
-  defp maybe_sandbox_wrap(cmd, worktree_path, agent_id) do
+  defp maybe_sandbox_wrap(cmd, worktree_path, project_dir, agent_id) do
     case :os.type() do
-      {:unix, :darwin} -> sandbox_wrap_darwin(cmd, worktree_path, agent_id)
-      {:unix, _} -> sandbox_wrap_linux(cmd, worktree_path, agent_id)
-      _ -> cmd
+      {:unix, :darwin} -> sandbox_wrap_darwin(cmd, worktree_path, project_dir, agent_id)
+      {:unix, _} -> sandbox_wrap_linux(cmd, worktree_path, project_dir, agent_id)
+      _ -> {cmd, false}
     end
   end
 
-  defp sandbox_wrap_darwin(cmd, worktree_path, agent_id) do
+  defp sandbox_wrap_darwin(cmd, worktree_path, project_dir, agent_id) do
     sandbox_exec = System.find_executable("sandbox-exec")
 
     if sandbox_exec do
-      profile = generate_seatbelt_profile(worktree_path)
+      profile = generate_seatbelt_profile(worktree_path, project_dir)
       profile_path = sandbox_profile_path(agent_id)
       File.write!(profile_path, profile)
       Logger.info("Brewer #{agent_id} sandboxed via sandbox-exec (writes restricted to #{worktree_path})")
-      "'#{sandbox_exec}' -f '#{profile_path}' /bin/sh -c #{escape_for_sh(cmd)}"
+      {"'#{sandbox_exec}' -f '#{profile_path}' /bin/sh -c #{escape_for_sh(cmd)}", true}
     else
       Logger.warning("Brewer #{agent_id} sandbox-exec not found, running unsandboxed")
-      cmd
+      {cmd, false}
     end
   end
 
-  defp sandbox_wrap_linux(cmd, worktree_path, agent_id) do
+  defp sandbox_wrap_linux(cmd, worktree_path, project_dir, agent_id) do
     bwrap = System.find_executable("bwrap")
 
     if bwrap do
       home = System.get_env("HOME") || "/root"
       claude_dir = Path.join(home, ".claude")
+      git_dir = if project_dir, do: Path.join(project_dir, ".git"), else: nil
 
       Logger.info("Brewer #{agent_id} sandboxed via bwrap (writes restricted to #{worktree_path})")
 
-      "'#{bwrap}' " <>
-        "--ro-bind / / " <>
-        "--dev /dev " <>
-        "--proc /proc " <>
-        "--bind '#{worktree_path}' '#{worktree_path}' " <>
-        "--bind '#{claude_dir}' '#{claude_dir}' " <>
-        "--bind /tmp /tmp " <>
-        "--unshare-all " <>
-        "--share-net " <>
-        "--die-with-parent " <>
-        "-- /bin/sh -c #{escape_for_sh(cmd)}"
+      git_bind = if git_dir, do: "--bind '#{git_dir}' '#{git_dir}' ", else: ""
+
+      wrapped =
+        "'#{bwrap}' " <>
+          "--unshare-all " <>
+          "--share-net " <>
+          "--die-with-parent " <>
+          "--ro-bind / / " <>
+          "--proc /proc " <>
+          "--dev /dev " <>
+          "--bind '#{worktree_path}' '#{worktree_path}' " <>
+          git_bind <>
+          "--bind '#{claude_dir}' '#{claude_dir}' " <>
+          "--bind /tmp /tmp " <>
+          "-- /bin/sh -c #{escape_for_sh(cmd)}"
+
+      {wrapped, true}
     else
       Logger.warning("Brewer #{agent_id} bwrap not found, running unsandboxed (install bubblewrap for sandbox support)")
-      cmd
+      {cmd, false}
     end
   end
 
-  defp generate_seatbelt_profile(worktree_path) do
+  defp generate_seatbelt_profile(worktree_path, project_dir) do
     home = System.get_env("HOME") || "/Users/#{System.get_env("USER")}"
     claude_dir = Path.join(home, ".claude")
+
+    # Git worktrees store internal state in <main-repo>/.git/worktrees/
+    # so we must allow writes there for commits to work
+    git_dir_rule =
+      if project_dir do
+        git_dir = Path.join(project_dir, ".git")
+        ~s|        (require-not (subpath "#{git_dir}"))\n|
+      else
+        ""
+      end
 
     """
     (version 1)
@@ -1120,7 +1138,7 @@ defmodule Apothecary.Brewer do
     (deny file-write*
       (require-all
         (require-not (subpath "#{worktree_path}"))
-        (require-not (subpath "/private/tmp"))
+    #{git_dir_rule}        (require-not (subpath "/private/tmp"))
         (require-not (subpath "/tmp"))
         (require-not (subpath "/private/var/folders"))
         (require-not (subpath "#{claude_dir}"))

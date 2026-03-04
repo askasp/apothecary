@@ -174,7 +174,14 @@ defmodule Apothecary.Projects do
   end
 
   defp git_repo?(path) do
-    case Apothecary.CLI.run("git", ["rev-parse", "--is-inside-work-tree"], cd: path) do
+    # Check for .git directory/file first (fast, no subprocess)
+    File.exists?(Path.join(path, ".git")) or
+      git_repo_via_cli?(path)
+  end
+
+  defp git_repo_via_cli?(path) do
+    # Use -C flag instead of cd: option for more reliable path handling
+    case Apothecary.CLI.run("git", ["-C", path, "rev-parse", "--is-inside-work-tree"]) do
       {:ok, output} -> String.trim(output) == "true"
       _ -> false
     end

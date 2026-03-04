@@ -267,6 +267,7 @@ html, body {
 
 .project-landing-item:hover {
   background: var(--surface);
+  border-left: 2px solid var(--accent) !important;
 }
 
 /* ── Opacity helpers for queued state ────────────────────── */

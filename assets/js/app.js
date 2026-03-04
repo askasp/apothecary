@@ -37,13 +37,27 @@ let Hooks = {
       // Also allow native OS shortcuts (Cmd/Ctrl+C, V, X, A, etc.) to work
       // everywhere by blocking propagation when modifier keys are held.
       window.addEventListener("keydown", (e) => {
+        const switcherOpen = document.querySelector("[data-project-switcher]")
+
+        // In project switcher: let Tab, Ctrl+N, Ctrl+P reach LiveView
+        if (switcherOpen) {
+          if (e.key === "Tab") {
+            e.preventDefault()
+            return
+          }
+          if (e.ctrlKey && (e.key === "n" || e.key === "p")) {
+            e.preventDefault()
+            return
+          }
+        }
+
         if (e.metaKey || e.ctrlKey) {
           e.stopPropagation()
           return
         }
         const tag = e.target.tagName
         const isInput = tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable
-        if (isInput && e.key !== "Escape" && e.key !== "Enter") {
+        if (isInput && e.key !== "Escape" && e.key !== "Enter" && e.key !== "Tab") {
           e.stopPropagation()
         }
       }, true)
