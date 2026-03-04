@@ -62,6 +62,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:agent_output, [])
       |> assign(:diff_view, nil)
       |> assign(:show_preview, false)
+      |> assign(:preview_port, nil)
       |> assign(:pending_action, nil)
       |> assign(:loading_action, nil)
       # Tab navigation
@@ -691,13 +692,20 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
-  def handle_event("show-preview", _params, socket) do
-    {:noreply, assign(socket, :show_preview, true)}
+  def handle_event("show-preview", params, socket) do
+    port =
+      case params do
+        %{"port" => p} when is_binary(p) -> String.to_integer(p)
+        %{"port" => p} when is_integer(p) -> p
+        _ -> nil
+      end
+
+    {:noreply, socket |> assign(:show_preview, true) |> assign(:preview_port, port)}
   end
 
   @impl true
   def handle_event("close-preview", _params, socket) do
-    {:noreply, assign(socket, :show_preview, false)}
+    {:noreply, socket |> assign(:show_preview, false) |> assign(:preview_port, nil)}
   end
 
   @impl true
@@ -2615,6 +2623,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:working_agent, nil)
     |> assign(:agent_output, [])
     |> assign(:show_preview, false)
+    |> assign(:preview_port, nil)
     |> assign(:focused_pane, :tree)
     |> assign(:page_title, "Dashboard")
   end
@@ -2650,6 +2659,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:working_agent, nil)
     |> assign(:agent_output, [])
     |> assign(:show_preview, false)
+    |> assign(:preview_port, nil)
     |> assign(:has_preview_config, has_preview)
     |> assign(:page_title, "Task #{id}")
     |> sync_selected_card(id)
@@ -3206,7 +3216,10 @@ defmodule ApothecaryWeb.DashboardLive do
                     show_preview_help={@show_preview_help}
                   />
 
-                  <.worktree_input input_focused={@input_focused} input_highlighted={@selected_card == -1} />
+                  <.worktree_input
+                    input_focused={@input_focused}
+                    input_highlighted={@selected_card == -1}
+                  />
 
                   <.worktree_tree
                     worktrees_by_status={@worktrees_by_status}
@@ -3238,6 +3251,7 @@ defmodule ApothecaryWeb.DashboardLive do
                       dev_server={@dev_servers[@selected_task_id]}
                       has_preview_config={@has_preview_config}
                       show_preview={@show_preview}
+                      preview_port={@preview_port}
                       pending_action={@pending_action}
                       loading_action={@loading_action}
                     />
