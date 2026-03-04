@@ -1162,15 +1162,18 @@ defmodule ApothecaryWeb.DashboardComponents do
         <% else %>
           <%= if @pending_action do %>
             <span style="color: var(--concocting);">
-              {if match?({:direct_merge, _, _}, @pending_action),
-                do: "merge directly?",
-                else: "merge this PR?"}
+              {cond do
+                match?({:local_merge, _, _}, @pending_action) -> "merge locally (no PR)?"
+                match?({:direct_merge, _, _}, @pending_action) -> "merge directly?"
+                true -> "merge this PR?"
+              end}
             </span>
             <button phx-click="confirm-merge" class="action-pill">confirm</button>
             <button phx-click="cancel-merge" class="action-text">cancel</button>
           <% else %>
             <%= if @task.status in ["brew_done", "done", "closed"] and is_nil(@pr_url) do %>
               <span class="action-pill" phx-click="promote-to-assaying">c create-pr</span>
+              <span class="action-pill" phx-click="local-merge">g git-merge</span>
             <% end %>
             <span :if={@pr_url} class="action-pill" phx-click="merge-pr">m merge</span>
             <span
@@ -2524,6 +2527,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp loading_label(:merging), do: "merging PR..."
   defp loading_label(:direct_merging), do: "creating PR & merging..."
   defp loading_label(:creating_pr), do: "creating PR..."
+  defp loading_label(:local_merging), do: "merging locally..."
   defp loading_label(_), do: "working..."
 
   defp worktree_count_label(project_id) do

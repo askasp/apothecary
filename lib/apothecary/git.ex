@@ -147,6 +147,29 @@ defmodule Apothecary.Git do
     end
   end
 
+  @doc """
+  Merge a worktree branch into main locally using plain git (no GitHub PR).
+  Returns :ok or {:error, reason}.
+  """
+  def local_merge(project_dir, worktree_path) do
+    with {:ok, branch} <- current_branch(worktree_path),
+         {:ok, _} <- CLI.run("git", ["merge", branch, "--no-edit"], cd: project_dir) do
+      :ok
+    else
+      {:error, {_code, output}} = error ->
+        if merge_conflict?(output) do
+          # Abort the failed merge to leave main clean
+          CLI.run("git", ["merge", "--abort"], cd: project_dir)
+          {:error, {:merge_conflict, output}}
+        else
+          error
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   @doc "View PR diff. Returns {:ok, diff} or {:error, reason}."
   def pr_diff(project_dir, pr_url) do
     CLI.run("gh", ["pr", "diff", pr_url], cd: project_dir)
