@@ -308,6 +308,167 @@ let Hooks = {
       })
     }
   },
+  ChatKeys: {
+    mounted() {
+      this.el.focus()
+      window.addEventListener("keydown", (e) => {
+        if (e.metaKey || e.ctrlKey) {
+          e.stopPropagation()
+          return
+        }
+        const tag = e.target.tagName
+        const isInput = tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable
+        if (isInput && e.key === "Escape") {
+          e.target.blur()
+          this.el.focus()
+        } else if (isInput && e.key !== "Enter" && e.key !== "Tab") {
+          e.stopPropagation()
+        }
+      }, true)
+    },
+    updated() {
+      if (!document.activeElement || document.activeElement === document.body) {
+        this.el.focus()
+      }
+    }
+  },
+  ChatScroll: {
+    mounted() {
+      this.autoScroll = true
+      this.scrollToBottom()
+
+      // Restore persisted messages
+      try {
+        const stored = localStorage.getItem("apothecary-chat-messages")
+        if (stored) {
+          const messages = JSON.parse(stored)
+          if (Array.isArray(messages) && messages.length > 0) {
+            this.pushEvent("restore-messages", { messages })
+          }
+        }
+      } catch (_) {}
+
+      // Listen for persist events
+      this.handleEvent("persist-messages", ({ messages }) => {
+        try {
+          localStorage.setItem("apothecary-chat-messages", JSON.stringify(messages))
+        } catch (_) {}
+      })
+
+      this.el.addEventListener("scroll", () => {
+        const threshold = 50
+        const atBottom = this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight < threshold
+        this.autoScroll = atBottom
+      })
+
+      this.observer = new MutationObserver(() => {
+        if (this.autoScroll) this.scrollToBottom()
+      })
+      this.observer.observe(this.el, { childList: true, subtree: true })
+    },
+    updated() {
+      if (this.autoScroll) this.scrollToBottom()
+    },
+    destroyed() {
+      if (this.observer) this.observer.disconnect()
+    },
+    scrollToBottom() {
+      this.el.scrollTop = this.el.scrollHeight
+    }
+  },
+  ChatInput: {
+    mounted() {
+      this.history = []
+      this.historyIndex = -1
+      this.pathActive = false
+
+      // Auto-focus on mount
+      this.el.focus()
+
+      this.el.addEventListener("keydown", (e) => {
+        // When path suggestions are showing, route nav keys to server
+        const dropdown = document.querySelector(".chat-path-dropdown")
+        this.pathActive = dropdown && dropdown.children.length > 0
+
+        if (this.pathActive) {
+          if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Tab") {
+            e.preventDefault()
+            this.pushEvent("path-key", { key: e.key })
+            return
+          }
+          if (e.key === "Escape") {
+            e.preventDefault()
+            this.pushEvent("path-key", { key: "Escape" })
+            return
+          }
+        }
+
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault()
+          const text = this.el.value.trim()
+          if (text) {
+            this.history.unshift(text)
+            if (this.history.length > 50) this.history.pop()
+            this.historyIndex = -1
+            const form = this.el.closest("form")
+            if (form) {
+              form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+            }
+            this.el.value = ""
+            this.el.style.height = "auto"
+          }
+        }
+        if (e.key === "ArrowUp" && this.el.value === "" && this.history.length > 0) {
+          e.preventDefault()
+          this.historyIndex = Math.min(this.historyIndex + 1, this.history.length - 1)
+          this.el.value = this.history[this.historyIndex]
+        }
+        if (e.key === "ArrowDown" && this.historyIndex >= 0) {
+          e.preventDefault()
+          this.historyIndex--
+          this.el.value = this.historyIndex >= 0 ? this.history[this.historyIndex] : ""
+        }
+        if (e.key === "Escape") {
+          this.el.blur()
+        }
+      })
+
+      // Auto-resize + fire input-change for path autocomplete
+      this.el.addEventListener("input", () => {
+        this.el.style.height = "auto"
+        this.el.style.height = Math.min(this.el.scrollHeight, 200) + "px"
+        this.pushEvent("input-change", { value: this.el.value })
+      })
+
+      // Server push: set input value (for path drill-down)
+      this.handleEvent("set-input", ({ value }) => {
+        this.el.value = value
+        this.el.focus()
+        // Move cursor to end
+        this.el.selectionStart = value.length
+        this.el.selectionEnd = value.length
+        // Trigger input event for autocomplete
+        this.pushEvent("input-change", { value })
+      })
+
+      // Server push: clear input
+      this.handleEvent("clear-input", () => {
+        this.el.value = ""
+        this.el.style.height = "auto"
+      })
+    }
+  },
+  ChatSwitcherFocus: {
+    mounted() {
+      this.el.focus()
+      this.el.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === "Escape") {
+          e.preventDefault()
+          this.pushEvent("switcher-key", { key: e.key })
+        }
+      })
+    }
+  },
   ScrollBottom: {
     mounted() {
       this.scrollToBottom()

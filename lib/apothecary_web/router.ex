@@ -22,6 +22,9 @@ defmodule ApothecaryWeb.Router do
     live "/projects/:project_id", DashboardLive
     live "/projects/:project_id/tasks/:id", DashboardLive
     live "/brewers/:id", AgentLive
+
+    live "/c", ChatLive
+    live "/c/:project_id", ChatLive
   end
 
   # MCP endpoint for agent-to-orchestrator communication
