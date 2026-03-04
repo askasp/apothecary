@@ -723,7 +723,7 @@ defmodule ApothecaryWeb.ChatLive do
 
     items
     |> Enum.filter(&(&1.type == "worktree" && &1.status not in ["merged", "cancelled"]))
-    |> Enum.sort_by(& &1.updated_at, {:desc, DateTime})
+    |> Enum.sort_by(& to_string(&1.updated_at), :desc)
     |> Enum.filter(fn wt ->
       query == "" ||
         String.contains?(String.downcase(wt.title), String.downcase(query)) ||
