@@ -706,10 +706,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   def worktree_input(assigns) do
     ~H"""
     <div class="px-3 py-2">
-      <div class={[
-        "relative rounded-lg transition-all duration-150",
-        @input_highlighted && !@input_focused && "ring-1 ring-emerald-500/60"
-      ]}>
+      <div class="relative rounded-lg transition-all duration-150">
         <textarea
           id="primary-input"
           rows="1"
@@ -718,7 +715,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           phx-blur="input-blur"
           autocomplete="off"
           class="moonlight-input w-full resize-none"
-          style="min-height: 40px; max-height: 120px;"
+          style={"min-height: 40px; max-height: 120px;#{if @input_highlighted && !@input_focused, do: " border-color: var(--dim);", else: ""}"}
           placeholder={if @input_highlighted && !@input_focused, do: "Press Enter or c to type...", else: ""}
         ></textarea>
         <div
@@ -874,12 +871,12 @@ defmodule ApothecaryWeb.DashboardComponents do
         :if={@queued != []}
         label="queued"
         count={length(@queued)}
-        color="var(--muted)"
+        color="var(--dim)"
         entries={@queued}
         dot="○"
         dot_class=""
-        title_color="var(--dim)"
-        opacity="0.5"
+        title_color="var(--text)"
+        opacity="0.7"
         card_ids={@card_ids}
         selected_card={@selected_card}
         adding_task_to={@adding_task_to}
@@ -1196,14 +1193,14 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span :if={@pr_url} class="action-pill" phx-click="merge-pr">m merge</span>
             <span
               :if={@task.status not in ["done", "closed", "merged"]}
-              class="action-text"
+              class="action-outlined"
               phx-click="requeue-task"
             >
               r requeue
             </span>
             <span
               :if={@task.status not in ["done", "closed", "merged"]}
-              class="action-text"
+              class="action-outlined"
               phx-click="close-task"
             >
               x close

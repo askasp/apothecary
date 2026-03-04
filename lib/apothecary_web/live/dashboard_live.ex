@@ -1197,6 +1197,32 @@ defmodule ApothecaryWeb.DashboardLive do
     {:noreply, socket}
   end
 
+  # Handle pasted images — save to temp file and insert path into textarea
+  @impl true
+  def handle_event("paste-image", %{"data" => data, "mime" => mime, "name" => name}, socket) do
+    ext =
+      case mime do
+        "image/png" -> ".png"
+        "image/jpeg" -> ".jpg"
+        "image/gif" -> ".gif"
+        "image/webp" -> ".webp"
+        _ -> Path.extname(name)
+      end
+
+    filename = "paste-#{System.unique_integer([:positive])}#{ext}"
+    tmp_dir = System.tmp_dir!()
+    path = Path.join(tmp_dir, filename)
+
+    case Base.decode64(data) do
+      {:ok, binary} ->
+        File.write!(path, binary)
+        {:noreply, push_event(socket, "image-pasted", %{path: path})}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, "Failed to decode pasted image")}
+    end
+  end
+
   # Context-sensitive primary input submit
   @impl true
   def handle_event("submit-input", %{"text" => text}, socket) do

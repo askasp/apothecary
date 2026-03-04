@@ -188,6 +188,23 @@ html, body {
   color: var(--dim);
 }
 
+.action-outlined {
+  color: var(--dim);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  display: inline-block;
+}
+
+.action-outlined:hover {
+  color: var(--text);
+  border-color: var(--dim);
+}
+
 /* ── Status bar ──────────────────────────────────────────── */
 
 .status-bar {

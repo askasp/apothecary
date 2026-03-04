@@ -117,6 +117,12 @@ let Hooks = {
       this.dropdown = document.getElementById("file-autocomplete-dropdown")
 
       this.el.addEventListener("keydown", (e) => {
+        // Immediately blur on Escape so j/k navigation works right away
+        if (e.key === "Escape" && !this.mentionActive) {
+          this.el.blur()
+          return // Let event propagate to LiveView hotkey handler
+        }
+
         if (this.mentionActive && this.results.length > 0) {
           if (e.key === "ArrowDown") {
             e.preventDefault()
@@ -181,6 +187,38 @@ let Hooks = {
         } else {
           this.closeMention()
         }
+      })
+
+      // Handle image paste
+      this.el.addEventListener("paste", (e) => {
+        const items = e.clipboardData && e.clipboardData.items
+        if (!items) return
+
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf("image") !== -1) {
+            e.preventDefault()
+            const file = items[i].getAsFile()
+            const reader = new FileReader()
+            reader.onload = (evt) => {
+              const base64 = evt.target.result.split(",")[1]
+              const mimeType = file.type || "image/png"
+              this.pushEvent("paste-image", { data: base64, mime: mimeType, name: file.name || "clipboard.png" })
+            }
+            reader.readAsDataURL(file)
+            return
+          }
+        }
+      })
+
+      this.handleEvent("image-pasted", ({ path }) => {
+        const cursor = this.el.selectionStart
+        const before = this.el.value.substring(0, cursor)
+        const after = this.el.value.substring(cursor)
+        const ref = path + " "
+        this.el.value = before + ref + after
+        this.el.selectionStart = cursor + ref.length
+        this.el.selectionEnd = cursor + ref.length
+        this.el.focus()
       })
 
       // Close on click outside
