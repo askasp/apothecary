@@ -57,7 +57,11 @@ let Hooks = {
         }
         const tag = e.target.tagName
         const isInput = tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable
-        if (isInput && e.key !== "Escape" && e.key !== "Enter" && e.key !== "Tab") {
+        if (isInput && e.key === "Escape") {
+          // Blur immediately so subsequent j/k keys aren't blocked by the input check
+          e.target.blur()
+          this.el.focus()
+        } else if (isInput && e.key !== "Enter" && e.key !== "Tab") {
           e.stopPropagation()
         }
       }, true)
