@@ -214,7 +214,10 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:task_count, length(task_state.tasks))
     |> assign(:orphan_count, compute_orphan_count(task_state.tasks, active_task_ids))
     |> assign(:worktrees_by_status, worktrees_by_status)
-    |> assign(:card_ids, build_card_ids(worktrees_by_status))
+    |> assign(
+      :card_ids,
+      build_card_ids(worktrees_by_status, socket.assigns[:collapsed_done] != false)
+    )
     |> assign(:known_task_ids, extract_task_ids(task_state.tasks))
     |> assign(:project_files, load_project_files(project))
     |> assign(:questions, questions)
@@ -658,7 +661,30 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @impl true
   def handle_event("toggle-done-collapse", _params, socket) do
-    {:noreply, assign(socket, :collapsed_done, !socket.assigns.collapsed_done)}
+    new_collapsed = !socket.assigns.collapsed_done
+
+    socket =
+      socket
+      |> assign(:collapsed_done, new_collapsed)
+      |> then(fn s ->
+        new_card_ids = build_card_ids(s.assigns.worktrees_by_status, new_collapsed)
+        # Preserve selected card position
+        old_id = Enum.at(s.assigns.card_ids, s.assigns.selected_card)
+
+        idx =
+          if old_id do
+            Enum.find_index(new_card_ids, &(&1 == old_id)) ||
+              min(s.assigns.selected_card, max(length(new_card_ids) - 1, 0))
+          else
+            min(s.assigns.selected_card, max(length(new_card_ids) - 1, 0))
+          end
+
+        s
+        |> assign(:card_ids, new_card_ids)
+        |> assign(:selected_card, idx)
+      end)
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -726,7 +752,12 @@ defmodule ApothecaryWeb.DashboardLive do
         Enum.find_index(socket.assigns.card_ids, fn card_id ->
           # Find entry title matching the query
           entry = find_entry_by_id(socket.assigns.worktrees_by_status, card_id)
-          entry && String.contains?(String.downcase(entry.worktree.title || entry.worktree.id), query_lower)
+
+          entry &&
+            String.contains?(
+              String.downcase(entry.worktree.title || entry.worktree.id),
+              query_lower
+            )
         end)
       end
 
@@ -1163,7 +1194,9 @@ defmodule ApothecaryWeb.DashboardLive do
     case Worktrees.close(id) do
       {:ok, _} ->
         new_selected =
-          if socket.assigns.selected_question_id == id, do: nil, else: socket.assigns.selected_question_id
+          if socket.assigns.selected_question_id == id,
+            do: nil,
+            else: socket.assigns.selected_question_id
 
         {:noreply, assign(socket, :selected_question_id, new_selected)}
 
@@ -1526,7 +1559,10 @@ defmodule ApothecaryWeb.DashboardLive do
   defp handle_oracle_hotkey("Enter", socket) do
     sorted = oracle_sorted_questions(socket)
     current_idx = oracle_selected_index(sorted, socket.assigns.selected_question_id)
-    if q = Enum.at(sorted, current_idx), do: assign(socket, :selected_question_id, q.id), else: socket
+
+    if q = Enum.at(sorted, current_idx),
+      do: assign(socket, :selected_question_id, q.id),
+      else: socket
   end
 
   defp handle_oracle_hotkey("n", socket) do
@@ -1922,7 +1958,23 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("p", socket) do
-    assign(socket, :show_preview_help, !socket.assigns.show_preview_help)
+    if socket.assigns.current_project do
+      assign(socket, :show_preview_help, !socket.assigns.show_preview_help)
+    else
+      socket
+    end
+  end
+
+  defp handle_hotkey("Tab", socket) do
+    if socket.assigns.current_project do
+      socket
+      |> assign(:show_project_switcher, true)
+      |> assign(:switcher_selected, 0)
+      |> assign(:switcher_query, "")
+      |> push_event("focus-element", %{selector: "#project-switcher-search"})
+    else
+      socket
+    end
   end
 
   defp handle_hotkey("ArrowUp", socket) do
@@ -1991,9 +2043,12 @@ defmodule ApothecaryWeb.DashboardLive do
   defp handle_hotkey("3", socket), do: jump_to_lane(socket, ~w(pr))
 
   defp handle_hotkey("4", socket) do
+    new_card_ids = build_card_ids(socket.assigns.worktrees_by_status, false)
+
     socket
-    |> jump_to_lane(~w(done))
     |> assign(:collapsed_done, false)
+    |> assign(:card_ids, new_card_ids)
+    |> jump_to_lane(~w(done))
   end
 
   # Tab switching: w=workbench, e=recipes, o=oracle
@@ -2742,7 +2797,7 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  defp build_card_ids(worktrees_by_status) do
+  defp build_card_ids(worktrees_by_status, collapsed_done) do
     sort_by_priority = fn entries ->
       entries
       |> Enum.sort_by(fn e -> e.worktree.priority || 99 end)
@@ -2760,8 +2815,12 @@ defmodule ApothecaryWeb.DashboardLive do
       (worktrees_by_status["pr"] || []) |> sort_by_priority.()
 
     done =
-      (worktrees_by_status["done"] || [])
-      |> Enum.map(fn e -> e.worktree.id end)
+      if collapsed_done do
+        []
+      else
+        (worktrees_by_status["done"] || [])
+        |> Enum.map(fn e -> e.worktree.id end)
+      end
 
     brewing ++ assaying ++ stockroom ++ done
   end
@@ -2769,7 +2828,7 @@ defmodule ApothecaryWeb.DashboardLive do
   defp rebuild_card_ids(socket, worktrees_by_status) do
     old_card_ids = socket.assigns.card_ids
     old_selected_id = Enum.at(old_card_ids, socket.assigns.selected_card)
-    new_card_ids = build_card_ids(worktrees_by_status)
+    new_card_ids = build_card_ids(worktrees_by_status, socket.assigns.collapsed_done)
 
     idx =
       if old_selected_id do
@@ -2902,7 +2961,6 @@ defmodule ApothecaryWeb.DashboardLive do
                   />
                 </div>
               </div>
-
             <% is_nil(@current_project) -> %>
               <div class="h-full overflow-y-auto scroll-main">
                 <div class="max-w-[540px] mx-auto">
@@ -2914,14 +2972,12 @@ defmodule ApothecaryWeb.DashboardLive do
                   />
                 </div>
               </div>
-
             <% @active_tab == :oracle -> %>
               <.oracle_view
                 questions={@questions}
                 agents={@agents}
                 selected_question_id={@selected_question_id}
               />
-
             <% @active_tab == :recipes -> %>
               <div class="h-full overflow-y-auto scroll-main">
                 <div class="max-w-[540px] mx-auto">
@@ -2933,7 +2989,6 @@ defmodule ApothecaryWeb.DashboardLive do
                   />
                 </div>
               </div>
-
             <% @active_tab == :workbench -> %>
               <%!-- Split panel: tree left, detail right --%>
               <div class="flex h-full">
@@ -2991,42 +3046,65 @@ defmodule ApothecaryWeb.DashboardLive do
                     />
                   <% else %>
                     <% running = @worktrees_by_status["running"] || []
-                       pr = @worktrees_by_status["pr"] || []
-                       ready_blocked = (@worktrees_by_status["ready"] || []) ++ (@worktrees_by_status["blocked"] || [])
-                       all_entries = running ++ pr ++ ready_blocked ++ (@worktrees_by_status["done"] || [])
-                       all_tasks = Enum.flat_map(all_entries, fn e -> e.tasks end)
-                       done_tasks = Enum.count(all_tasks, fn t -> t.status in ["done", "closed"] end)
-                       total_tasks = length(all_tasks) %>
-                    <div class="h-full flex items-center justify-center" style="color: var(--muted); font-size: var(--font-size-sm);">
+                    pr = @worktrees_by_status["pr"] || []
+
+                    ready_blocked =
+                      (@worktrees_by_status["ready"] || []) ++ (@worktrees_by_status["blocked"] || [])
+
+                    all_entries =
+                      running ++ pr ++ ready_blocked ++ (@worktrees_by_status["done"] || [])
+
+                    all_tasks = Enum.flat_map(all_entries, fn e -> e.tasks end)
+                    done_tasks = Enum.count(all_tasks, fn t -> t.status in ["done", "closed"] end)
+                    total_tasks = length(all_tasks) %>
+                    <div
+                      class="h-full flex items-center justify-center"
+                      style="color: var(--muted); font-size: var(--font-size-sm);"
+                    >
                       <div class="text-center">
                         <%!-- Diamond icons --%>
-                        <div class="flex items-center justify-center gap-2 mb-4" style="font-size: 20px; color: var(--dim);">
+                        <div
+                          class="flex items-center justify-center gap-2 mb-4"
+                          style="font-size: 20px; color: var(--dim);"
+                        >
                           <span>&#x25C7;</span>
                           <span style="color: var(--muted);">&#x2500;</span>
                           <span>&#x25C7;</span>
                         </div>
 
-                        <div class="mb-4" style="color: var(--dim);">select a worktree to inspect</div>
+                        <div class="mb-4" style="color: var(--dim);">
+                          select a worktree to inspect
+                        </div>
 
                         <div class="mb-1" style="font-size: var(--font-size-xs);">
-                          <span style="font-weight: 600;">j/k</span> navigate
-                          <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
-                          <span style="font-weight: 600;">enter</span> inspect
+                          <span style="font-weight: 600;">j/k</span>
+                          navigate <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+                          <span style="font-weight: 600;">enter</span>
+                          inspect
                         </div>
                         <div class="mb-1" style="font-size: var(--font-size-xs);">
-                          <span style="font-weight: 600;">a</span> add task
-                          <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
-                          <span style="font-weight: 600;">x</span> delete
+                          <span style="font-weight: 600;">a</span>
+                          add task <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+                          <span style="font-weight: 600;">x</span>
+                          delete
                         </div>
                         <div class="mb-4" style="font-size: var(--font-size-xs);">
                           <span style="font-weight: 600;">s</span> stop brewing
                         </div>
 
-                        <div style="border-top: 1px solid var(--border); margin: 0 auto; max-width: 280px;" class="pt-4">
-                          <div class="flex items-center justify-center gap-6 mb-2" style="font-size: var(--font-size-xs);">
+                        <div
+                          style="border-top: 1px solid var(--border); margin: 0 auto; max-width: 280px;"
+                          class="pt-4"
+                        >
+                          <div
+                            class="flex items-center justify-center gap-6 mb-2"
+                            style="font-size: var(--font-size-xs);"
+                          >
                             <div>
                               <span style="color: var(--concocting);">&#x25CF;</span>
-                              <span style="color: var(--dim); font-weight: 600;">{length(running)}</span>
+                              <span style="color: var(--dim); font-weight: 600;">
+                                {length(running)}
+                              </span>
                               <div style="color: var(--muted);">brewing</div>
                             </div>
                             <div>
@@ -3036,11 +3114,17 @@ defmodule ApothecaryWeb.DashboardLive do
                             </div>
                             <div>
                               <span style="color: var(--muted);">&#x25CB;</span>
-                              <span style="color: var(--dim); font-weight: 600;">{length(ready_blocked)}</span>
+                              <span style="color: var(--dim); font-weight: 600;">
+                                {length(ready_blocked)}
+                              </span>
                               <div style="color: var(--muted);">stocked</div>
                             </div>
                           </div>
-                          <div :if={total_tasks > 0} class="mt-2" style="color: var(--dim); font-size: var(--font-size-xs);">
+                          <div
+                            :if={total_tasks > 0}
+                            class="mt-2"
+                            style="color: var(--dim); font-size: var(--font-size-xs);"
+                          >
                             {done_tasks}/{total_tasks} tasks complete
                           </div>
                         </div>
@@ -3049,7 +3133,6 @@ defmodule ApothecaryWeb.DashboardLive do
                   <% end %>
                 </div>
               </div>
-
             <% true -> %>
           <% end %>
         </div>
