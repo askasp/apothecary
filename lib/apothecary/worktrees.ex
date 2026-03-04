@@ -275,7 +275,8 @@ defmodule Apothecary.Worktrees do
             status = elem(record, 3)
             current_brewer = elem(record, 9)
 
-            if status in ["open", "revision_needed", "pr_open"] and is_nil(current_brewer) do
+            if status in ["open", "revision_needed", "pr_open", "brew_done"] and
+                 is_nil(current_brewer) do
               now = DateTime.utc_now() |> DateTime.to_iso8601()
 
               updated =
@@ -984,8 +985,9 @@ defmodule Apothecary.Worktrees do
     Map.get(wt_status_map, pid) in ["done", "merged"]
   end
 
-  # PR is open but new tasks were added — redispatch to work on them
-  defp worktree_ready?(%{status: "pr_open", assigned_brewer_id: nil, id: id}, _map) do
+  # PR is open or brew is done but new tasks were added — redispatch to work on them
+  defp worktree_ready?(%{status: status, assigned_brewer_id: nil, id: id}, _map)
+       when status in ["pr_open", "brew_done"] do
     list_tasks(worktree_id: id, status: "open") |> Enum.any?()
   end
 
