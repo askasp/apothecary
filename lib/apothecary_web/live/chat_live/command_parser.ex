@@ -8,11 +8,18 @@ defmodule ApothecaryWeb.ChatLive.CommandParser do
           | {:action, atom(), list()}
           | {:error, String.t()}
 
-  # Only 3 bare shortcuts — everything else requires /
+  # Single-char and short bare shortcuts (no / needed)
   @bare_commands %{
-    "s" => {:command, :full_status, []},
-    "?" => {:command, :help, []},
-    ".." => {:command, :back, []}
+    "s" => :full_status,
+    "?" => :help,
+    ".." => :back,
+    "i" => :info,
+    "d" => :diff,
+    "t" => :tasks,
+    "l" => :log,
+    "c" => :close,
+    "m" => :merge,
+    "p" => :list_projects
   }
 
   @spec parse(String.t(), Context.t()) :: parsed()
@@ -21,11 +28,11 @@ defmodule ApothecaryWeb.ChatLive.CommandParser do
   # /command syntax — always treated as command
   def parse("/" <> rest, context), do: parse_command(String.trim(rest), context)
 
-  # Bare text — try 3 shortcuts first, then fall through to context action
+  # Bare text — try shortcuts first, then fall through to context action
   def parse(text, context) do
     trimmed = String.trim(text)
 
-    case parse_as_bare_command(trimmed) do
+    case parse_as_bare_command(trimmed, context) do
       nil -> parse_context_action(trimmed, context)
       cmd -> cmd
     end
@@ -99,9 +106,35 @@ defmodule ApothecaryWeb.ChatLive.CommandParser do
     end
   end
 
-  # Single-token exact match only for bare commands
-  defp parse_as_bare_command(text) do
-    Map.get(@bare_commands, String.trim(text))
+  # Single-char shortcuts, optionally with an id/arg
+  defp parse_as_bare_command(text, context) do
+    case String.split(text, ~r/\s+/, parts: 2) do
+      [key] ->
+        case Map.get(@bare_commands, key) do
+          nil -> nil
+          :list_projects -> {:command, :list_projects, []}
+          cmd when cmd in [:info, :diff, :tasks, :log, :close, :merge] -> parse_wt_command(cmd, nil, context)
+          cmd -> {:command, cmd, []}
+        end
+
+      [key, arg] ->
+        case Map.get(@bare_commands, key) do
+          nil ->
+            nil
+
+          :list_projects ->
+            {:command, :select_project, [String.trim(arg)]}
+
+          cmd when cmd in [:info, :diff, :tasks, :log, :close, :merge] ->
+            {:command, cmd, [String.trim(arg)]}
+
+          _ ->
+            nil
+        end
+
+      _ ->
+        nil
+    end
   end
 
   # ── Context actions (bare text that isn't a command) ────

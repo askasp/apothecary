@@ -248,11 +248,12 @@ defmodule ApothecaryWeb.ChatLive do
         suggestions = list_project_suggestions(socket.assigns.projects, String.trim(query))
         {:noreply, assign(socket, path_suggestions: suggestions, path_suggestion_selected: 0, path_command_prefix: prefix)}
 
-      # Worktree autocomplete: "/wt "
-      Regex.match?(~r{^/wt\s+}, value) ->
-        query = Regex.replace(~r{^/wt\s+}, value, "") |> String.trim()
-        suggestions = list_worktree_suggestions(socket.assigns.worktrees_state, query)
-        {:noreply, assign(socket, path_suggestions: suggestions, path_suggestion_selected: 0, path_command_prefix: "wt")}
+      # Worktree ID autocomplete: /wt, /info, /diff, /tasks, /log, /close, /merge, /pr, /preview, /mcp
+      # Also bare single-letter shortcuts: i, d, t, l, c, m
+      match = Regex.run(~r{^(/(?:wt|info|diff|tasks|log|close|merge|pr|preview|mcp)|[idtlcm])\s+(.*)$}, value) ->
+        [_, prefix, query] = match
+        suggestions = list_worktree_suggestions(socket.assigns.worktrees_state, String.trim(query))
+        {:noreply, assign(socket, path_suggestions: suggestions, path_suggestion_selected: 0, path_command_prefix: String.trim_leading(prefix, "/"))}
 
       # Clear suggestions
       socket.assigns.path_suggestions != [] ->
