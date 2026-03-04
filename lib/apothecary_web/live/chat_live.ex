@@ -157,11 +157,19 @@ defmodule ApothecaryWeb.ChatLive do
       {:noreply, socket}
     else
       context = socket.assigns.context
-      user_msg = ChatMessage.user(socket.assigns.msg_counter, text, Context.label(context))
-      socket = update_counter(socket)
-      socket = append_message(socket, user_msg)
-
       parsed = CommandParser.parse(text, context)
+
+      # Skip user echo for create actions — the response already shows the title
+      socket =
+        case parsed do
+          {:action, action, _} when action in [:create_worktree, :add_task, :create_recipe] ->
+            socket
+
+          _ ->
+            user_msg = ChatMessage.user(socket.assigns.msg_counter, text, Context.label(context))
+            socket |> update_counter() |> append_message(user_msg)
+        end
+
       {messages, updates} = CommandHandler.execute(parsed, socket)
 
       socket =
