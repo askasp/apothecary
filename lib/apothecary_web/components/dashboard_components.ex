@@ -149,7 +149,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     ~H"""
     <div
       class="flex items-center justify-between px-4 py-3"
-      style={"font-size: var(--font-size-sm); #{if @show_project_switcher, do: "background: var(--surface);", else: ""}"}
+      style="font-size: var(--font-size-sm);"
     >
       <div class="flex items-center gap-0 min-w-0">
         <%= if is_nil(@current_project) do %>
@@ -168,8 +168,6 @@ defmodule ApothecaryWeb.DashboardComponents do
         <% end %>
       </div>
       <%= cond do %>
-        <% @show_project_switcher -> %>
-          <span style="color: var(--muted); font-size: var(--font-size-xs);">esc cancel</span>
         <% @current_project -> %>
           <div class="flex items-center gap-3">
             <button
@@ -302,7 +300,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     end
   end
 
-  # ── Project Switcher (inline dropdown) ──────────────────
+  # ── Project Switcher (dropdown overlay) ──────────────────
 
   attr :projects, :list, default: []
   attr :current_project, :any, default: nil
@@ -312,73 +310,88 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   def project_switcher(assigns) do
     ~H"""
-    <div class="px-3 py-3" data-project-switcher>
-      <div class="px-4 pb-2">
-        <form phx-change="switcher-search" phx-submit="switcher-select">
-          <input
-            type="text"
-            id="project-switcher-search"
-            name="query"
-            value={@query}
-            autocomplete="off"
-            phx-debounce="80"
-            placeholder="search projects..."
-            class="moonlight-input w-full"
-            style="padding: 8px 12px; font-size: var(--font-size-sm); caret-color: var(--accent);"
-          />
-        </form>
-      </div>
-      <%= for {project, idx} <- Enum.with_index(@projects) do %>
-        <% is_current = @current_project && @current_project.id == project.id %>
-        <% selected? = idx == @selected_index %>
-        <% project_status = @dispatcher_projects[project.id] %>
-        <.link
-          navigate={~p"/projects/#{project.id}"}
-          class="block px-4 py-3 cursor-pointer project-landing-item"
-          style={"text-decoration: none; #{if selected?, do: "border-left: 2px solid var(--accent); background: var(--surface);", else: "border-left: 2px solid transparent;"}"}
-          data-selected={if(selected?, do: "true")}
-          phx-mouseover="switcher-hover"
-          phx-value-index={idx}
-        >
-          <div class="flex items-center justify-between">
-            <span style={"font-size: 14px; font-weight: 600; color: #{if selected?, do: "var(--text)", else: "var(--dim)"};"}>
-              <.fuzzy_name name={project.name} query={@query} />
-            </span>
-            <span :if={is_current} style="color: var(--accent); font-size: var(--font-size-sm);">
-              current
-            </span>
-          </div>
+    <div
+      class="switcher-backdrop"
+      phx-click="close-project-switcher"
+    >
+      <div
+        class="switcher-dropdown"
+        phx-click-away="close-project-switcher"
+        data-project-switcher
+      >
+        <div class="px-3 pt-3 pb-2">
+          <form phx-change="switcher-search" phx-submit="switcher-select">
+            <input
+              type="text"
+              id="project-switcher-search"
+              name="query"
+              value={@query}
+              autocomplete="off"
+              phx-debounce="80"
+              placeholder="search projects..."
+              class="switcher-input"
+            />
+          </form>
+        </div>
+
+        <div class="switcher-list">
+          <%= for {project, idx} <- Enum.with_index(@projects) do %>
+            <% is_current = @current_project && @current_project.id == project.id %>
+            <% selected? = idx == @selected_index %>
+            <% project_status = @dispatcher_projects[project.id] %>
+            <.link
+              navigate={~p"/projects/#{project.id}"}
+              class={["switcher-item", selected? && "switcher-item--selected"]}
+              data-selected={if(selected?, do: "true")}
+              data-switcher-index={idx}
+              phx-mouseover="switcher-hover"
+              phx-value-index={idx}
+            >
+              <div class="flex items-center justify-between">
+                <span class={["switcher-item-name", selected? && "switcher-item-name--selected"]}>
+                  <.fuzzy_name name={project.name} query={@query} />
+                </span>
+                <span :if={is_current} class="switcher-current-badge">
+                  current
+                </span>
+              </div>
+              <div class="switcher-item-meta">
+                <span>{shorten_path(project.path)}</span>
+                <span>&middot;</span>
+                <.project_status_dots status={project_status} />
+              </div>
+            </.link>
+          <% end %>
+
           <div
-            class="flex items-center gap-1 mt-0.5"
+            :if={@projects == []}
+            class="px-4 py-3"
             style="color: var(--muted); font-size: var(--font-size-sm);"
           >
-            <span>{shorten_path(project.path)}</span>
-            <span>&middot;</span>
-            <.project_status_dots status={project_status} />
+            no matches
           </div>
+        </div>
+
+        <div class="switcher-divider"></div>
+
+        <.link
+          navigate={~p"/"}
+          class="switcher-item switcher-add"
+        >
+          <span style="color: var(--accent);">+</span>
+          <span style="color: var(--dim); font-size: var(--font-size-sm);">
+            &nbsp;open another project
+          </span>
         </.link>
-      <% end %>
 
-      <div
-        :if={@projects == []}
-        class="px-4 py-3"
-        style="color: var(--muted); font-size: var(--font-size-sm);"
-      >
-        no matches
+        <div class="switcher-footer">
+          <span>&#x2191;&#x2193; navigate</span>
+          <span>&middot;</span>
+          <span>enter select</span>
+          <span>&middot;</span>
+          <span>esc close</span>
+        </div>
       </div>
-
-      <div class="mt-3 mx-4" style="border-top: 1px solid var(--border);"></div>
-
-      <.link
-        navigate={~p"/"}
-        class="block px-4 py-3 cursor-pointer project-landing-item"
-        style="text-decoration: none; border-left: 2px solid transparent;"
-      >
-        <span style="color: var(--accent);">+</span>
-        <span style="color: var(--dim); font-size: var(--font-size-sm);">
-          &nbsp;open another project
-        </span>
-      </.link>
     </div>
     """
   end
@@ -1423,16 +1436,6 @@ defmodule ApothecaryWeb.DashboardComponents do
     ~H"""
     <div class="status-bar flex items-center justify-between">
       <%= cond do %>
-        <% @show_project_switcher -> %>
-          <%!-- Switcher status bar --%>
-          <div class="flex items-center gap-2">
-            <span>&#x2191;/&#x2193; select</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>enter switch</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>esc cancel</span>
-          </div>
-          <div style="color: var(--muted);">{@project_count} projects</div>
         <% is_nil(@current_project) -> %>
           <%!-- Landing status bar --%>
           <div class="flex items-center gap-2">
@@ -1440,7 +1443,9 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span style="color: var(--border);">&middot;</span>
             <span>&#x2191;/&#x2193; select</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>tab autocomplete path</span>
+            <span>tab autocomplete</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>? help</span>
           </div>
           <div style="color: var(--muted);">v0.1.0</div>
         <% @active_tab == :oracle -> %>
@@ -1450,9 +1455,13 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span style="color: var(--border);">&middot;</span>
             <span>enter select</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>n new question</span>
+            <span>n new</span>
             <span style="color: var(--border);">&middot;</span>
             <span>d delete</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>w/e/o tabs</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>? help</span>
           </div>
           <div class="flex items-center gap-2">
             <%= if @thinking_count > 0 do %>
@@ -1476,6 +1485,14 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span>d diff</span>
             <span style="color: var(--border);">&middot;</span>
             <span>p preview</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>r requeue</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>m merge</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>x close</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>? help</span>
           </div>
           <div class="flex items-center gap-2">
             <span style="color: var(--concocting);">&#x25CF;{@running_count}</span>
@@ -1492,7 +1509,19 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span style="color: var(--border);">&middot;</span>
             <span>a add</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>s stop</span>
+            <span>s brew</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>d diff</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>+/- brewers</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>/ search</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>w/e/o tabs</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>tab project</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>? help</span>
           </div>
           <div class="flex items-center gap-2">
             <.braille_spinner
@@ -1825,12 +1854,19 @@ defmodule ApothecaryWeb.DashboardComponents do
             <.hk key="?" desc="this help" />
           </div>
 
+          <div>
+            <div style="color: var(--accent);" class="mb-1">global</div>
+            <.hk key="R" desc="requeue orphans" />
+            <.hk key="D" desc="delete worktree" />
+          </div>
+
           <div :if={@has_selected_task}>
             <div style="color: var(--accent);" class="mb-1">detail view</div>
             <.hk key="c" desc="create PR" />
             <.hk key="m" desc="merge" />
             <.hk key="r" desc="requeue" />
             <.hk key="x" desc="close worktree" />
+            <.hk key="&#x2191;/&#x2193;" desc="change priority" />
           </div>
         </div>
       </div>
@@ -2478,7 +2514,15 @@ defmodule ApothecaryWeb.DashboardComponents do
   def status_bar(assigns) do
     ~H"""
     <div class="status-bar flex items-center justify-between">
-      <span>{page_label(@page)}</span>
+      <div class="flex items-center gap-2">
+        <span>{page_label(@page)}</span>
+        <%= if @page == :agent do %>
+          <span style="color: var(--border);">&middot;</span>
+          <span>bksp back</span>
+          <span style="color: var(--border);">&middot;</span>
+          <span>? help</span>
+        <% end %>
+      </div>
       <span>? help</span>
     </div>
     """

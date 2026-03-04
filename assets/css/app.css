@@ -274,6 +274,131 @@ html, body {
   border-left: 2px solid var(--accent) !important;
 }
 
+/* ── Project Switcher Dropdown ─────────────────────────── */
+
+.switcher-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  justify-content: center;
+  padding-top: 60px;
+  animation: switcher-fade-in 0.1s ease-out;
+}
+
+.switcher-dropdown {
+  width: 420px;
+  max-height: 420px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  animation: switcher-slide-in 0.12s ease-out;
+  height: fit-content;
+}
+
+.switcher-input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  padding: 10px 12px;
+  outline: none;
+  caret-color: var(--accent);
+}
+
+.switcher-input:focus {
+  border-color: var(--accent);
+}
+
+.switcher-input::placeholder {
+  color: var(--muted);
+}
+
+.switcher-list {
+  overflow-y: auto;
+  max-height: 280px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+
+.switcher-item {
+  display: block;
+  padding: 8px 16px;
+  cursor: pointer;
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  transition: background 0.06s ease;
+}
+
+.switcher-item--selected {
+  background: var(--surface);
+  border-left-color: var(--accent);
+}
+
+.switcher-item:hover:not(.switcher-item--selected) {
+  background: var(--surface);
+}
+
+.switcher-item-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dim);
+}
+
+.switcher-item-name--selected {
+  color: var(--text);
+}
+
+.switcher-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+}
+
+.switcher-current-badge {
+  color: var(--accent);
+  font-size: var(--font-size-sm);
+}
+
+.switcher-divider {
+  margin: 4px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.switcher-add {
+  padding: 8px 16px;
+}
+
+.switcher-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  border-top: 1px solid var(--border);
+}
+
+@keyframes switcher-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes switcher-slide-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 /* ── Fuzzy match highlight ─────────────────────────────── */
 
 .fuzzy-match {
