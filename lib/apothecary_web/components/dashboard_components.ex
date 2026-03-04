@@ -709,13 +709,13 @@ defmodule ApothecaryWeb.DashboardComponents do
       <div class="relative rounded-lg transition-all duration-150">
         <textarea
           id="primary-input"
-          rows="1"
+          rows="4"
           phx-hook="TextareaSubmit"
           phx-focus="input-focus"
           phx-blur="input-blur"
           autocomplete="off"
           class="moonlight-input w-full resize-none"
-          style={"min-height: 40px; max-height: 120px;#{if @input_highlighted && !@input_focused, do: " border-color: var(--dim);", else: ""}"}
+          style={"min-height: 96px; max-height: 200px;#{if @input_highlighted && !@input_focused, do: " border-color: var(--dim);", else: ""}"}
           placeholder={if @input_highlighted && !@input_focused, do: "Press Enter or c to type...", else: ""}
         ></textarea>
         <div
@@ -729,7 +729,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           id="primary-input-send"
           phx-hook=".TextareaSend"
           type="button"
-          class="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer p-1"
+          class="absolute right-2 bottom-2 cursor-pointer p-1"
           style="color: var(--muted);"
           title="Send (Enter)"
         >
