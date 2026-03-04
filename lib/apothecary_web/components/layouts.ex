@@ -47,8 +47,8 @@ defmodule ApothecaryWeb.Layouts do
   def flash_group(assigns) do
     ~H"""
     <div id={@id} aria-live="polite" class="fixed top-2 right-2 z-50 flex flex-col gap-2">
-      <.flash kind={:info} flash={@flash} />
-      <.flash kind={:error} flash={@flash} />
+      <.flash kind={:info} flash={@flash} autodismiss={2000} />
+      <.flash kind={:error} flash={@flash} autodismiss={5000} />
 
       <.flash
         id="client-error"

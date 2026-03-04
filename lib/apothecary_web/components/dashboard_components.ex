@@ -945,7 +945,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             │
           </div>
           <div
-            style={"#{if selected?, do: "border-left: 2px solid var(--accent); background: var(--surface);", else: "border-left: 2px solid transparent;"}"}
+            style={"#{if selected?, do: "border-left: 2px solid var(--accent); background: var(--surface); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);", else: "border-left: 2px solid transparent;"}"}
             class="cursor-pointer"
             phx-click="select-task"
             phx-value-id={wt.id}
@@ -1790,10 +1790,13 @@ defmodule ApothecaryWeb.DashboardComponents do
           <div>
             <div style="color: var(--accent);" class="mb-1">navigation</div>
             <.hk key="j/k" desc="next/prev worktree" />
+            <.hk key="h/l" desc="switch panes" />
             <.hk key="g/G" desc="first/last worktree" />
+            <.hk key="1-4" desc="jump to lane" />
             <.hk key="enter" desc="inspect worktree" />
             <.hk key="esc" desc="close / back" />
-            <.hk key="/" desc="focus input" />
+            <.hk key="/" desc="search" />
+            <.hk key="tab" desc="switch project" />
           </div>
 
           <div>
@@ -1807,6 +1810,8 @@ defmodule ApothecaryWeb.DashboardComponents do
             <div style="color: var(--accent);" class="mb-1">actions</div>
             <.hk key="s" desc="start/stop brewing" />
             <.hk key="+/-" desc="brewer count" />
+            <.hk key="c" desc="focus input" />
+            <.hk key="a" desc="add task" />
             <.hk key="d" desc="view diff" />
             <.hk key="p" desc="open preview" />
             <.hk key="?" desc="this help" />

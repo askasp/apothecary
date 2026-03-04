@@ -214,7 +214,10 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:task_count, length(task_state.tasks))
     |> assign(:orphan_count, compute_orphan_count(task_state.tasks, active_task_ids))
     |> assign(:worktrees_by_status, worktrees_by_status)
-    |> assign(:card_ids, build_card_ids(worktrees_by_status))
+    |> assign(
+      :card_ids,
+      build_card_ids(worktrees_by_status, socket.assigns[:collapsed_done] != false)
+    )
     |> assign(:known_task_ids, extract_task_ids(task_state.tasks))
     |> assign(:project_files, load_project_files(project))
     |> assign(:questions, questions)
@@ -658,7 +661,30 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @impl true
   def handle_event("toggle-done-collapse", _params, socket) do
-    {:noreply, assign(socket, :collapsed_done, !socket.assigns.collapsed_done)}
+    new_collapsed = !socket.assigns.collapsed_done
+
+    socket =
+      socket
+      |> assign(:collapsed_done, new_collapsed)
+      |> then(fn s ->
+        new_card_ids = build_card_ids(s.assigns.worktrees_by_status, new_collapsed)
+        # Preserve selected card position
+        old_id = Enum.at(s.assigns.card_ids, s.assigns.selected_card)
+
+        idx =
+          if old_id do
+            Enum.find_index(new_card_ids, &(&1 == old_id)) ||
+              min(s.assigns.selected_card, max(length(new_card_ids) - 1, 0))
+          else
+            min(s.assigns.selected_card, max(length(new_card_ids) - 1, 0))
+          end
+
+        s
+        |> assign(:card_ids, new_card_ids)
+        |> assign(:selected_card, idx)
+      end)
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -1937,7 +1963,23 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("p", socket) do
-    assign(socket, :show_preview_help, !socket.assigns.show_preview_help)
+    if socket.assigns.current_project do
+      assign(socket, :show_preview_help, !socket.assigns.show_preview_help)
+    else
+      socket
+    end
+  end
+
+  defp handle_hotkey("Tab", socket) do
+    if socket.assigns.current_project do
+      socket
+      |> assign(:show_project_switcher, true)
+      |> assign(:switcher_selected, 0)
+      |> assign(:switcher_query, "")
+      |> push_event("focus-element", %{selector: "#project-switcher-search"})
+    else
+      socket
+    end
   end
 
   defp handle_hotkey("ArrowUp", socket) do
@@ -2006,9 +2048,12 @@ defmodule ApothecaryWeb.DashboardLive do
   defp handle_hotkey("3", socket), do: jump_to_lane(socket, ~w(pr))
 
   defp handle_hotkey("4", socket) do
+    new_card_ids = build_card_ids(socket.assigns.worktrees_by_status, false)
+
     socket
-    |> jump_to_lane(~w(done))
     |> assign(:collapsed_done, false)
+    |> assign(:card_ids, new_card_ids)
+    |> jump_to_lane(~w(done))
   end
 
   # Tab switching: w=workbench, e=recipes, o=oracle
@@ -2757,7 +2802,7 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  defp build_card_ids(worktrees_by_status) do
+  defp build_card_ids(worktrees_by_status, collapsed_done) do
     sort_by_priority = fn entries ->
       entries
       |> Enum.sort_by(fn e -> e.worktree.priority || 99 end)
@@ -2775,8 +2820,12 @@ defmodule ApothecaryWeb.DashboardLive do
       (worktrees_by_status["pr"] || []) |> sort_by_priority.()
 
     done =
-      (worktrees_by_status["done"] || [])
-      |> Enum.map(fn e -> e.worktree.id end)
+      if collapsed_done do
+        []
+      else
+        (worktrees_by_status["done"] || [])
+        |> Enum.map(fn e -> e.worktree.id end)
+      end
 
     brewing ++ assaying ++ stockroom ++ done
   end
@@ -2784,7 +2833,7 @@ defmodule ApothecaryWeb.DashboardLive do
   defp rebuild_card_ids(socket, worktrees_by_status) do
     old_card_ids = socket.assigns.card_ids
     old_selected_id = Enum.at(old_card_ids, socket.assigns.selected_card)
-    new_card_ids = build_card_ids(worktrees_by_status)
+    new_card_ids = build_card_ids(worktrees_by_status, socket.assigns.collapsed_done)
 
     idx =
       if old_selected_id do
