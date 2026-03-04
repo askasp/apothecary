@@ -688,11 +688,15 @@ defmodule ApothecaryWeb.DashboardComponents do
   # ── Worktree Input ─────────────────────────────────────
 
   attr :input_focused, :boolean, default: false
+  attr :input_highlighted, :boolean, default: false
 
   def worktree_input(assigns) do
     ~H"""
     <div class="px-3 py-2">
-      <div class="relative">
+      <div class={[
+        "relative rounded-lg transition-all duration-150",
+        @input_highlighted && !@input_focused && "ring-1 ring-emerald-500/60"
+      ]}>
         <textarea
           id="primary-input"
           rows="1"
@@ -702,6 +706,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           autocomplete="off"
           class="moonlight-input w-full resize-none"
           style="min-height: 40px; max-height: 120px;"
+          placeholder={if @input_highlighted && !@input_focused, do: "Press Enter or c to type...", else: ""}
         ></textarea>
         <div
           id="file-autocomplete-dropdown"

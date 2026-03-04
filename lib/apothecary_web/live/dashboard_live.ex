@@ -1718,7 +1718,11 @@ defmodule ApothecaryWeb.DashboardLive do
       socket.assigns.input_focused ->
         socket
         |> assign(:input_focused, false)
+        |> assign(:selected_card, 0)
         |> push_event("blur-input", %{})
+
+      socket.assigns.selected_card == -1 ->
+        assign(socket, :selected_card, 0)
 
       socket.assigns.show_help ->
         assign(socket, :show_help, false)
@@ -1765,7 +1769,7 @@ defmodule ApothecaryWeb.DashboardLive do
         push_event(socket, "scroll-detail", %{direction: "up"})
 
       socket.assigns.selected_card == 0 ->
-        push_event(socket, "focus-primary-input", %{})
+        assign(socket, :selected_card, -1)
 
       true ->
         idx = max(socket.assigns.selected_card - 1, 0)
@@ -1784,16 +1788,21 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("Enter", socket) do
-    if is_nil(socket.assigns.current_project) do
-      case Enum.at(socket.assigns.projects, socket.assigns.selected_card) do
-        nil -> socket
-        project -> push_navigate(socket, to: ~p"/projects/#{project.id}")
-      end
-    else
-      case Enum.at(socket.assigns.card_ids, socket.assigns.selected_card) do
-        nil -> socket
-        id -> push_patch(socket, to: project_path(socket) <> "?task=#{id}")
-      end
+    cond do
+      is_nil(socket.assigns.current_project) ->
+        case Enum.at(socket.assigns.projects, socket.assigns.selected_card) do
+          nil -> socket
+          project -> push_navigate(socket, to: ~p"/projects/#{project.id}")
+        end
+
+      socket.assigns.selected_card == -1 ->
+        push_event(socket, "focus-primary-input", %{})
+
+      true ->
+        case Enum.at(socket.assigns.card_ids, socket.assigns.selected_card) do
+          nil -> socket
+          id -> push_patch(socket, to: project_path(socket) <> "?task=#{id}")
+        end
     end
   end
 
@@ -3069,7 +3078,7 @@ defmodule ApothecaryWeb.DashboardLive do
                     show_preview_help={@show_preview_help}
                   />
 
-                  <.worktree_input input_focused={@input_focused} />
+                  <.worktree_input input_focused={@input_focused} input_highlighted={@selected_card == -1} />
 
                   <.worktree_tree
                     worktrees_by_status={@worktrees_by_status}
