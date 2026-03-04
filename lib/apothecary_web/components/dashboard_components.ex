@@ -1438,7 +1438,9 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span style="color: var(--border);">&middot;</span>
             <span>&#x2191;/&#x2193; select</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>tab autocomplete path</span>
+            <span>tab autocomplete</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>? help</span>
           </div>
           <div style="color: var(--muted);">v0.1.0</div>
         <% @active_tab == :oracle -> %>
@@ -1448,9 +1450,13 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span style="color: var(--border);">&middot;</span>
             <span>enter select</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>n new question</span>
+            <span>n new</span>
             <span style="color: var(--border);">&middot;</span>
             <span>d delete</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>w/e/o tabs</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>? help</span>
           </div>
           <div class="flex items-center gap-2">
             <%= if @thinking_count > 0 do %>
@@ -1474,6 +1480,14 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span>d diff</span>
             <span style="color: var(--border);">&middot;</span>
             <span>p preview</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>r requeue</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>m merge</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>x close</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>? help</span>
           </div>
           <div class="flex items-center gap-2">
             <span style="color: var(--concocting);">&#x25CF;{@running_count}</span>
@@ -1490,7 +1504,19 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span style="color: var(--border);">&middot;</span>
             <span>a add</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>s stop</span>
+            <span>s brew</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>d diff</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>+/- brewers</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>/ search</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>w/e/o tabs</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>tab project</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>? help</span>
           </div>
           <div class="flex items-center gap-2">
             <.braille_spinner
@@ -1823,12 +1849,19 @@ defmodule ApothecaryWeb.DashboardComponents do
             <.hk key="?" desc="this help" />
           </div>
 
+          <div>
+            <div style="color: var(--accent);" class="mb-1">global</div>
+            <.hk key="R" desc="requeue orphans" />
+            <.hk key="D" desc="delete worktree" />
+          </div>
+
           <div :if={@has_selected_task}>
             <div style="color: var(--accent);" class="mb-1">detail view</div>
             <.hk key="c" desc="create PR" />
             <.hk key="m" desc="merge" />
             <.hk key="r" desc="requeue" />
             <.hk key="x" desc="close worktree" />
+            <.hk key="&#x2191;/&#x2193;" desc="change priority" />
           </div>
         </div>
       </div>
@@ -2476,7 +2509,15 @@ defmodule ApothecaryWeb.DashboardComponents do
   def status_bar(assigns) do
     ~H"""
     <div class="status-bar flex items-center justify-between">
-      <span>{page_label(@page)}</span>
+      <div class="flex items-center gap-2">
+        <span>{page_label(@page)}</span>
+        <%= if @page == :agent do %>
+          <span style="color: var(--border);">&middot;</span>
+          <span>bksp back</span>
+          <span style="color: var(--border);">&middot;</span>
+          <span>? help</span>
+        <% end %>
+      </div>
       <span>? help</span>
     </div>
     """
