@@ -8,18 +8,37 @@ defmodule ApothecaryWeb.ChatLive.CommandParser do
           | {:action, atom(), list()}
           | {:error, String.t()}
 
-  # Single-char and short bare shortcuts (no / needed)
+  # Bare commands — single words that can't be confused with task/worktree text
   @bare_commands %{
     "s" => :full_status,
+    "status" => :full_status,
     "?" => :help,
+    "help" => :help,
     ".." => :back,
+    "back" => :back,
     "i" => :info,
+    "info" => :info,
     "d" => :diff,
+    "diff" => :diff,
     "t" => :tasks,
+    "tasks" => :tasks,
     "l" => :log,
+    "log" => :log,
     "c" => :close,
+    "close" => :close,
     "m" => :merge,
-    "p" => :list_projects
+    "merge" => :merge,
+    "p" => :list_projects,
+    "pr" => :pr,
+    "preview" => :preview,
+    "wb" => :switch_wb,
+    "oracle" => :switch_oracle,
+    "wt" => :last_worktree,
+    "recurring" => :switch_recurring,
+    "recipe" => :switch_recurring,
+    "start" => :start,
+    "stop" => :stop,
+    "mcp" => :mcp_list
   }
 
   @spec parse(String.t(), Context.t()) :: parsed()
@@ -56,23 +75,39 @@ defmodule ApothecaryWeb.ChatLive.CommandParser do
       ["wt", id] -> {:command, :switch_context, ["wt:#{String.trim(id)}"]}
       ["wt"] -> {:command, :last_worktree, []}
 
-      # Worktree ops — context or explicit id
+      # Worktree ops — context or explicit id (full word + single letter)
       ["info"] -> parse_wt_command(:info, nil, context)
+      ["i"] -> parse_wt_command(:info, nil, context)
       ["info", id] -> {:command, :info, [String.trim(id)]}
+      ["i", id] -> {:command, :info, [String.trim(id)]}
       ["diff"] -> parse_wt_command(:diff, nil, context)
+      ["d"] -> parse_wt_command(:diff, nil, context)
       ["diff", id] -> {:command, :diff, [String.trim(id)]}
+      ["d", id] -> {:command, :diff, [String.trim(id)]}
       ["preview"] -> parse_wt_command(:preview, nil, context)
       ["preview", id] -> {:command, :preview, [String.trim(id)]}
       ["tasks"] -> parse_wt_command(:tasks, nil, context)
+      ["t"] -> parse_wt_command(:tasks, nil, context)
       ["tasks", id] -> {:command, :tasks, [String.trim(id)]}
+      ["t", id] -> {:command, :tasks, [String.trim(id)]}
       ["log"] -> parse_wt_command(:log, nil, context)
+      ["l"] -> parse_wt_command(:log, nil, context)
       ["log", id] -> {:command, :log, [String.trim(id)]}
+      ["l", id] -> {:command, :log, [String.trim(id)]}
       ["close"] -> parse_wt_command(:close, nil, context)
+      ["c"] -> parse_wt_command(:close, nil, context)
       ["close", id] -> {:command, :close, [String.trim(id)]}
+      ["c", id] -> {:command, :close, [String.trim(id)]}
 
       # Task ops — require wt context
       ["rm", rest_args] -> parse_task_command(:rm_task, rest_args, context)
       ["edit", rest_args] -> parse_task_command(:edit_task, rest_args, context)
+
+      # Merge — context or explicit id
+      ["merge"] -> parse_wt_command(:merge, nil, context)
+      ["m"] -> parse_wt_command(:merge, nil, context)
+      ["merge", id] -> {:command, :merge, [String.trim(id)]}
+      ["m", id] -> {:command, :merge, [String.trim(id)]}
 
       # PR ops — context or explicit id
       ["pr"] -> parse_wt_command(:pr, nil, context)
@@ -106,30 +141,38 @@ defmodule ApothecaryWeb.ChatLive.CommandParser do
     end
   end
 
-  # Single-char shortcuts, optionally with an id/arg
+  # Bare commands: single word or word + arg
   defp parse_as_bare_command(text, context) do
     case String.split(text, ~r/\s+/, parts: 2) do
       [key] ->
-        case Map.get(@bare_commands, key) do
+        case Map.get(@bare_commands, String.downcase(key)) do
           nil -> nil
           :list_projects -> {:command, :list_projects, []}
+          :switch_wb -> {:command, :switch_context, ["wb"]}
+          :switch_oracle -> {:command, :switch_context, ["oracle"]}
+          :switch_recurring -> {:command, :switch_context, ["recurring"]}
+          :last_worktree -> {:command, :last_worktree, []}
+          :start -> {:command, :start, []}
+          :stop -> {:command, :stop, []}
+          :pr -> parse_wt_command(:pr, nil, context)
+          :preview -> parse_wt_command(:preview, nil, context)
+          :mcp_list -> parse_wt_command(:mcp_list, nil, context)
           cmd when cmd in [:info, :diff, :tasks, :log, :close, :merge] -> parse_wt_command(cmd, nil, context)
           cmd -> {:command, cmd, []}
         end
 
       [key, arg] ->
-        case Map.get(@bare_commands, key) do
-          nil ->
-            nil
-
-          :list_projects ->
-            {:command, :select_project, [String.trim(arg)]}
-
+        case Map.get(@bare_commands, String.downcase(key)) do
+          nil -> nil
+          :list_projects -> {:command, :select_project, [String.trim(arg)]}
+          :last_worktree -> {:command, :switch_context, ["wt:#{String.trim(arg)}"]}
+          :start -> {:command, :start, [String.trim(arg)]}
+          :pr -> {:command, :pr, [String.trim(arg)]}
+          :preview -> {:command, :preview, [String.trim(arg)]}
+          :mcp_list -> {:command, :mcp_list, [String.trim(arg)]}
           cmd when cmd in [:info, :diff, :tasks, :log, :close, :merge] ->
             {:command, cmd, [String.trim(arg)]}
-
-          _ ->
-            nil
+          _ -> nil
         end
 
       _ ->

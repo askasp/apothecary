@@ -257,13 +257,14 @@ defmodule ApothecaryWeb.ChatLive.Formatters do
   @doc "Format context-sensitive help."
   def format_help(context) do
     global = """
-    SHORTCUTS (no / needed)
-      s        status       i [id]  info
-      ?        help         d [id]  diff
-      ..       back         t [id]  tasks
-      p [name] projects     l [id]  log
-                            c [id]  close
-                            m [id]  merge
+    SHORTCUTS (/ optional)
+      s  status       i  info [id]
+      ?  help         d  diff [id]
+      .. back         t  tasks [id]
+      p  projects     l  log [id]
+      wt [id]         c  close [id]
+      start [n]       m  merge [id]
+      stop            pr [id]
 
     CONTEXT
       /wb              workbench

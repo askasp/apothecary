@@ -242,15 +242,14 @@ defmodule ApothecaryWeb.ChatLive do
         suggestions = list_path_suggestions(expand_tilde(p))
         {:noreply, assign(socket, path_suggestions: suggestions, path_suggestion_selected: 0, path_command_prefix: prefix)}
 
-      # Project name autocomplete: "/p " without a path char
-      match = Regex.run(~r{^/(p(?:roject)?)\s+([^~/].*)$}, value) ->
+      # Project name autocomplete: "p " or "/p " without a path char
+      match = Regex.run(~r{^/?(p(?:roject)?)\s+([^~/].*)$}, value) ->
         [_, prefix, query] = match
         suggestions = list_project_suggestions(socket.assigns.projects, String.trim(query))
         {:noreply, assign(socket, path_suggestions: suggestions, path_suggestion_selected: 0, path_command_prefix: prefix)}
 
-      # Worktree ID autocomplete: /wt, /info, /diff, /tasks, /log, /close, /merge, /pr, /preview, /mcp
-      # Also bare single-letter shortcuts: i, d, t, l, c, m
-      match = Regex.run(~r{^(/(?:wt|info|diff|tasks|log|close|merge|pr|preview|mcp)|[idtlcm])\s+(.*)$}, value) ->
+      # Worktree ID autocomplete for all wt-targeting commands (slash and bare)
+      match = Regex.run(~r{^(/(?:wt|info|diff|tasks|log|close|merge|pr|preview|mcp)|(?:wt|info|diff|tasks|log|close|merge|pr|preview|mcp|[idtlcm]))\s+(.*)$}, value) ->
         [_, prefix, query] = match
         suggestions = list_worktree_suggestions(socket.assigns.worktrees_state, String.trim(query))
         {:noreply, assign(socket, path_suggestions: suggestions, path_suggestion_selected: 0, path_command_prefix: String.trim_leading(prefix, "/"))}
@@ -267,10 +266,12 @@ defmodule ApothecaryWeb.ChatLive do
   def handle_event("select-path", %{"path" => path}, socket) do
     prefix = socket.assigns.path_command_prefix
 
+    wt_prefixes = ~w(wt info diff tasks log close merge pr preview mcp i d t l c m)
+
     cond do
-      # Worktree selection — switch context
-      prefix == "wt" ->
-        parsed = CommandParser.parse("wt #{path}", socket.assigns.context)
+      # Worktree selection — execute the command with the selected wt id
+      prefix in wt_prefixes ->
+        parsed = CommandParser.parse("/#{prefix} #{path}", socket.assigns.context)
         {messages, updates} = CommandHandler.execute(parsed, socket)
 
         socket =
@@ -370,8 +371,10 @@ defmodule ApothecaryWeb.ChatLive do
         if suggestion do
           prefix = socket.assigns.path_command_prefix || "add"
 
+          wt_prefixes = ~w(wt info diff tasks log close merge pr preview mcp i d t l c m)
+
           # For wt/project selections, Tab selects immediately
-          if prefix == "wt" || (prefix in ["p", "/p", "project", "/project"] && !String.starts_with?(suggestion.path, "/")) do
+          if prefix in wt_prefixes || (prefix in ["p", "/p", "project", "/project"] && !String.starts_with?(suggestion.path, "/")) do
             new_value = "#{prefix} #{suggestion.path}"
             {:noreply,
              socket
