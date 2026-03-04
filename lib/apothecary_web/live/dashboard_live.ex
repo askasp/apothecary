@@ -690,7 +690,7 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
-  def handle_event("toggle-done-collapse", _params, socket) do
+  def handle_event("toggle-done-collapsed", _params, socket) do
     new_collapsed = !socket.assigns.collapsed_done
 
     socket =
