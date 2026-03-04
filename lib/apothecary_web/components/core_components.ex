@@ -19,6 +19,7 @@ defmodule ApothecaryWeb.CoreComponents do
   attr :flash, :map, default: %{}, doc: "the map of flash messages to display"
   attr :title, :string, default: nil
   attr :kind, :atom, values: [:info, :error], doc: "used for styling and flash lookup"
+  attr :autodismiss, :integer, default: nil, doc: "auto-dismiss after N ms (nil = no auto-dismiss)"
   attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"
 
   slot :inner_block, doc: "the optional inner block that renders the flash message"
@@ -30,6 +31,9 @@ defmodule ApothecaryWeb.CoreComponents do
     <div
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
       id={@id}
+      phx-hook={@autodismiss && ".FlashAutoDismiss"}
+      data-dismiss-after={@autodismiss}
+      data-flash-kind={@kind}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
       role="alert"
       class={[
@@ -49,6 +53,24 @@ defmodule ApothecaryWeb.CoreComponents do
         <.icon name="hero-x-mark" class="size-4 color-muted group-hover:color-dim" />
       </button>
     </div>
+    <script :if={@autodismiss} :type={Phoenix.LiveView.ColocatedHook} name=".FlashAutoDismiss">
+      export default {
+        mounted() {
+          const ms = parseInt(this.el.dataset.dismissAfter) || 2000
+          this._timer = setTimeout(() => {
+            this.el.style.transition = "opacity 200ms ease-in, transform 200ms ease-in"
+            this.el.style.opacity = "0"
+            this.el.style.transform = "translateY(-0.5rem)"
+            setTimeout(() => {
+              this.pushEvent("lv:clear-flash", {key: this.el.dataset.flashKind || "info"})
+            }, 200)
+          }, ms)
+        },
+        destroyed() {
+          clearTimeout(this._timer)
+        }
+      }
+    </script>
     """
   end
 
