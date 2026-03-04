@@ -716,7 +716,9 @@ defmodule ApothecaryWeb.DashboardComponents do
           autocomplete="off"
           class="moonlight-input w-full resize-none"
           style={"min-height: 40px; max-height: 120px;#{if @input_highlighted && !@input_focused, do: " border-color: var(--dim);", else: ""}"}
-          placeholder={if @input_highlighted && !@input_focused, do: "Press Enter or c to type...", else: ""}
+          placeholder={
+            if @input_highlighted && !@input_focused, do: "Press Enter or c to type...", else: ""
+          }
         ></textarea>
         <div
           id="file-autocomplete-dropdown"
@@ -1071,6 +1073,194 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   defp entry_port(%{status: :running, ports: [%{port: p} | _]}), do: p
   defp entry_port(_), do: nil
+
+  # ── Worktree List (Flat View) ─────────────────────────
+
+  attr :worktrees_by_status, :map, required: true
+  attr :agents, :list, default: []
+  attr :dev_servers, :map, default: %{}
+  attr :selected_card, :integer, default: 0
+  attr :card_ids, :list, default: []
+  attr :collapsed_done, :boolean, default: true
+  attr :search_mode, :boolean, default: false
+  attr :search_query, :string, default: ""
+
+  def worktree_list(assigns) do
+    running = assigns.worktrees_by_status["running"] || []
+    pr = assigns.worktrees_by_status["pr"] || []
+    ready = assigns.worktrees_by_status["ready"] || []
+    blocked = assigns.worktrees_by_status["blocked"] || []
+    done = assigns.worktrees_by_status["done"] || []
+
+    all_entries = running ++ pr ++ ready ++ blocked
+    done_entries = done
+
+    # Apply search filter
+    query = String.downcase(assigns.search_query || "")
+
+    {all_entries, done_entries} =
+      if query != "" do
+        f = fn entries ->
+          Enum.filter(entries, fn e ->
+            title = (e.worktree.title || e.worktree.id) |> String.downcase()
+            String.contains?(title, query)
+          end)
+        end
+
+        {f.(all_entries), f.(done_entries)}
+      else
+        {all_entries, done_entries}
+      end
+
+    assigns =
+      assigns
+      |> assign(:all_entries, all_entries)
+      |> assign(:done_entries, done_entries)
+
+    ~H"""
+    <div class="px-3 py-1">
+      <%!-- Search input --%>
+      <div :if={@search_mode} class="mb-3 flex items-center gap-2">
+        <span style="color: var(--muted);">/</span>
+        <form phx-submit="search-select" phx-change="search-tree" class="flex-1">
+          <input
+            name="query"
+            id="tree-search-input"
+            autofocus
+            placeholder="search..."
+            class="search-input"
+            value={@search_query}
+            phx-focus="input-focus"
+            phx-blur="search-blur"
+          />
+        </form>
+      </div>
+
+      <%!-- Column headers --%>
+      <div
+        class="flex items-center gap-3 px-2 pb-1 mb-1"
+        style="color: var(--muted); font-size: var(--font-size-xs); border-bottom: 1px solid var(--border);"
+      >
+        <span style="width: 16px;"></span>
+        <span class="flex-1">title</span>
+        <span style="width: 80px; text-align: right;">tasks</span>
+        <span style="width: 70px; text-align: right;">status</span>
+      </div>
+
+      <%!-- Active entries --%>
+      <%= for entry <- @all_entries do %>
+        <.list_row
+          entry={entry}
+          card_ids={@card_ids}
+          selected_card={@selected_card}
+        />
+      <% end %>
+
+      <%!-- Done section --%>
+      <%= if @done_entries != [] do %>
+        <div
+          class="cursor-pointer py-1 mt-2"
+          phx-click="toggle-done-collapse"
+          style="font-size: var(--font-size-sm); color: var(--bottled);"
+        >
+          {if @collapsed_done, do: "▸", else: "▾"} bottled ({length(@done_entries)})
+        </div>
+        <%= if !@collapsed_done do %>
+          <%= for entry <- @done_entries do %>
+            <.list_row
+              entry={entry}
+              card_ids={@card_ids}
+              selected_card={@selected_card}
+            />
+          <% end %>
+        <% end %>
+      <% end %>
+
+      <%!-- Empty state --%>
+      <div
+        :if={@all_entries == [] && @done_entries == []}
+        class="py-6"
+        style="color: var(--muted); font-size: var(--font-size-sm);"
+      >
+        no worktrees yet
+      </div>
+    </div>
+    """
+  end
+
+  attr :entry, :map, required: true
+  attr :card_ids, :list, default: []
+  attr :selected_card, :integer, default: 0
+
+  defp list_row(assigns) do
+    wt = assigns.entry.worktree
+    tasks = assigns.entry.tasks
+    done_count = Enum.count(tasks, &(&1.status in ["done", "closed"]))
+    total_count = length(tasks)
+    selected? = selected_entry?(assigns.card_ids, assigns.selected_card, wt.id)
+
+    status_label = list_status_label(wt.status)
+    status_color = list_status_color(wt.status)
+    dot = group_dot(list_status_group(wt.status))
+    dot_color = group_color(list_status_group(wt.status))
+
+    assigns =
+      assigns
+      |> assign(:wt, wt)
+      |> assign(:done_count, done_count)
+      |> assign(:total_count, total_count)
+      |> assign(:selected?, selected?)
+      |> assign(:status_label, status_label)
+      |> assign(:status_color, status_color)
+      |> assign(:dot, dot)
+      |> assign(:dot_color, dot_color)
+
+    ~H"""
+    <div
+      style={"font-size: var(--font-size-sm); #{if @selected?, do: "border-left: 2px solid var(--accent); background: var(--surface); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);", else: "border-left: 2px solid transparent;"}"}
+      class="flex items-center gap-3 px-2 py-1 cursor-pointer"
+      phx-click="select-task"
+      phx-value-id={@wt.id}
+      data-card-id={@wt.id}
+      data-selected={if(@selected?, do: "true")}
+    >
+      <span style={"color: #{@dot_color}; width: 16px; text-align: center;"}>{@dot}</span>
+      <span class="flex-1 truncate" style="color: var(--text); font-weight: 500;">
+        {@wt.title || @wt.id}
+      </span>
+      <span style="width: 80px; text-align: right; color: var(--dim); font-size: var(--font-size-xs);">
+        <%= if @total_count > 0 do %>
+          {@done_count}/{@total_count} {progress_bar(@done_count, @total_count)}
+        <% end %>
+      </span>
+      <span style={"width: 70px; text-align: right; color: #{@status_color}; font-size: var(--font-size-xs);"}>
+        {@status_label}
+      </span>
+    </div>
+    """
+  end
+
+  defp list_status_label("in_progress"), do: "brewing"
+  defp list_status_label("pr_open"), do: "review"
+  defp list_status_label("ready"), do: "queued"
+  defp list_status_label("blocked"), do: "blocked"
+  defp list_status_label("done"), do: "bottled"
+  defp list_status_label("closed"), do: "bottled"
+  defp list_status_label(s), do: s || "queued"
+
+  defp list_status_color("in_progress"), do: "var(--concocting)"
+  defp list_status_color("pr_open"), do: "var(--assaying)"
+  defp list_status_color("blocked"), do: "var(--error)"
+  defp list_status_color("done"), do: "var(--bottled)"
+  defp list_status_color("closed"), do: "var(--bottled)"
+  defp list_status_color(_), do: "var(--muted)"
+
+  defp list_status_group("in_progress"), do: "brewing"
+  defp list_status_group("pr_open"), do: "reviewing"
+  defp list_status_group("done"), do: "bottled"
+  defp list_status_group("closed"), do: "bottled"
+  defp list_status_group("blocked"), do: "queued"
+  defp list_status_group(_), do: "queued"
 
   # ── Worktree Detail (Full Takeover) ────────────────────
 
@@ -1514,6 +1704,8 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span style="color: var(--border);">&middot;</span>
             <span>/ search</span>
             <span style="color: var(--border);">&middot;</span>
+            <span>v view</span>
+            <span style="color: var(--border);">&middot;</span>
             <span>P pull main</span>
             <span style="color: var(--border);">&middot;</span>
             <span>w/e/o tabs</span>
@@ -1832,6 +2024,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <.hk key="enter" desc="inspect worktree" />
             <.hk key="esc" desc="close / back" />
             <.hk key="/" desc="search" />
+            <.hk key="v" desc="toggle tree/list" />
             <.hk key="tab" desc="switch project" />
           </div>
 

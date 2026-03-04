@@ -97,6 +97,8 @@ defmodule ApothecaryWeb.DashboardLive do
       # Search mode
       |> assign(:search_mode, false)
       |> assign(:search_query, "")
+      # View mode: :tree or :list
+      |> assign(:view_mode, :tree)
       # Preview help
       |> assign(:show_preview_help, false)
       # Oracle state
@@ -2192,6 +2194,12 @@ defmodule ApothecaryWeb.DashboardLive do
     |> jump_to_lane(~w(done))
   end
 
+  # View mode toggle
+  defp handle_hotkey("v", socket) do
+    new_mode = if socket.assigns.view_mode == :tree, do: :list, else: :tree
+    assign(socket, :view_mode, new_mode)
+  end
+
   # Tab switching: w=workbench, e=recipes, o=oracle
   defp handle_hotkey("w", socket), do: assign(socket, :active_tab, :workbench)
   defp handle_hotkey("e", socket), do: assign(socket, :active_tab, :recipes)
@@ -3179,19 +3187,35 @@ defmodule ApothecaryWeb.DashboardLive do
                     show_preview_help={@show_preview_help}
                   />
 
-                  <.worktree_input input_focused={@input_focused} input_highlighted={@selected_card == -1} />
-
-                  <.worktree_tree
-                    worktrees_by_status={@worktrees_by_status}
-                    agents={@agents}
-                    dev_servers={@dev_servers}
-                    selected_card={@selected_card}
-                    card_ids={@card_ids}
-                    collapsed_done={@collapsed_done}
-                    adding_task_to={@adding_task_to}
-                    search_mode={@search_mode}
-                    search_query={@search_query}
+                  <.worktree_input
+                    input_focused={@input_focused}
+                    input_highlighted={@selected_card == -1}
                   />
+
+                  <%= if @view_mode == :list do %>
+                    <.worktree_list
+                      worktrees_by_status={@worktrees_by_status}
+                      agents={@agents}
+                      dev_servers={@dev_servers}
+                      selected_card={@selected_card}
+                      card_ids={@card_ids}
+                      collapsed_done={@collapsed_done}
+                      search_mode={@search_mode}
+                      search_query={@search_query}
+                    />
+                  <% else %>
+                    <.worktree_tree
+                      worktrees_by_status={@worktrees_by_status}
+                      agents={@agents}
+                      dev_servers={@dev_servers}
+                      selected_card={@selected_card}
+                      card_ids={@card_ids}
+                      collapsed_done={@collapsed_done}
+                      adding_task_to={@adding_task_to}
+                      search_mode={@search_mode}
+                      search_query={@search_query}
+                    />
+                  <% end %>
                 </div>
 
                 <%!-- Right panel: detail or placeholder --%>
