@@ -23,16 +23,8 @@ defmodule ApothecaryWeb.ChatLive.CommandHandler do
   # Commands
 
   defp do_execute(:full_status, _args, assigns) do
-    state =
-      if assigns.current_project do
-        Worktrees.get_state(project_id: assigns.current_project.id)
-      else
-        Worktrees.get_state()
-      end
-
-    body = Formatters.format_status_tree(state, assigns.agents, assigns.current_project, assigns[:dispatcher_projects] || %{})
     c = assigns.msg_counter
-    {[ChatMessage.status(c, body)], [msg_counter: c + 1]}
+    {[ChatMessage.live_status(c)], [msg_counter: c + 1]}
   end
 
   defp do_execute(:help, _args, assigns) do
@@ -57,8 +49,8 @@ defmodule ApothecaryWeb.ChatLive.CommandHandler do
 
         body =
           if title,
-            do: "context → #{label} #{title}",
-            else: "context → #{label}"
+            do: "context · #{label} #{title}",
+            else: "context · #{label}"
 
         msg = ChatMessage.system(c, body)
         {[msg], [context: new_ctx, context_stack: stack, msg_counter: c + 1]}
@@ -68,7 +60,7 @@ defmodule ApothecaryWeb.ChatLive.CommandHandler do
         label = Context.label(new_ctx)
         hint = Context.prompt_hint(new_ctx)
         c = assigns.msg_counter
-        msg = ChatMessage.system(c, "context → #{label} · #{hint}")
+        msg = ChatMessage.system(c, "context · #{label} · #{hint}")
         {[msg], [context: new_ctx, context_stack: stack, msg_counter: c + 1]}
 
       {:error, reason} ->
@@ -81,7 +73,7 @@ defmodule ApothecaryWeb.ChatLive.CommandHandler do
     {prev, stack} = Context.pop(assigns.context_stack)
     label = Context.label(prev)
     c = assigns.msg_counter
-    msg = ChatMessage.system(c, "context → #{label}")
+    msg = ChatMessage.system(c, "context · #{label}")
     {[msg], [context: prev, context_stack: stack, msg_counter: c + 1]}
   end
 
@@ -118,7 +110,7 @@ defmodule ApothecaryWeb.ChatLive.CommandHandler do
 
     if match do
       state = Worktrees.get_state(project_id: match.id)
-      msg = ChatMessage.system(c, "project → #{match.name}")
+      msg = ChatMessage.system(c, "project · #{match.name}")
       {[msg], [current_project: match, worktrees_state: state, msg_counter: c + 1]}
     else
       {[ChatMessage.error(c, "project not found: #{name_or_id}\nuse \"add /path\" to add a new project")], [msg_counter: c + 1]}
@@ -141,7 +133,7 @@ defmodule ApothecaryWeb.ChatLive.CommandHandler do
         case Projects.get_by_path(path) do
           {:ok, project} ->
             state = Worktrees.get_state(project_id: project.id)
-            msg = ChatMessage.system(c, "project → #{project.name} (already added)")
+            msg = ChatMessage.system(c, "project · #{project.name} (already added)")
             {[msg], [current_project: project, worktrees_state: state, msg_counter: c + 1]}
 
           {:error, _} ->
@@ -149,7 +141,7 @@ defmodule ApothecaryWeb.ChatLive.CommandHandler do
               {:ok, project} ->
                 state = Worktrees.get_state(project_id: project.id)
                 all_projects = Projects.list_active()
-                msg = ChatMessage.system(c, "project → #{project.name} (added)")
+                msg = ChatMessage.system(c, "project · #{project.name} (added)")
                 {[msg], [current_project: project, projects: all_projects, worktrees_state: state, msg_counter: c + 1]}
 
               {:error, reason} ->
@@ -177,7 +169,7 @@ defmodule ApothecaryWeb.ChatLive.CommandHandler do
              {:ok, project} <- Projects.add(path) do
           state = Worktrees.get_state(project_id: project.id)
           all_projects = Projects.list_active()
-          msg = ChatMessage.system(c, "project → #{project.name} (created)")
+          msg = ChatMessage.system(c, "project · #{project.name} (created)")
           {[msg], [current_project: project, projects: all_projects, worktrees_state: state, msg_counter: c + 1]}
         else
           {:error, reason} ->
@@ -258,7 +250,7 @@ defmodule ApothecaryWeb.ChatLive.CommandHandler do
       new_ctx = {:wt, last_wt.id}
       stack = Context.push(assigns.context_stack, assigns.context)
       short = short_id(last_wt.id)
-      msg = ChatMessage.system(c, "context → wt:#{short} #{last_wt.title}")
+      msg = ChatMessage.system(c, "context · wt:#{short} #{last_wt.title}")
       {[msg], [context: new_ctx, context_stack: stack, msg_counter: c + 1]}
     else
       {[ChatMessage.error(c, "no active worktrees")], [msg_counter: c + 1]}
@@ -316,7 +308,7 @@ defmodule ApothecaryWeb.ChatLive.CommandHandler do
     case Worktrees.get_worktree(id) do
       {:ok, wt} ->
         if wt.pr_url do
-          msg = ChatMessage.system(c, "↗ PR · #{wt.title} · #{wt.pr_url}")
+          msg = ChatMessage.system(c, "PR · #{wt.title} · #{wt.pr_url}")
           {[msg], [msg_counter: c + 1]}
         else
           {[ChatMessage.error(c, "no PR for this worktree yet")], [msg_counter: c + 1]}
@@ -352,11 +344,10 @@ defmodule ApothecaryWeb.ChatLive.CommandHandler do
     c = assigns.msg_counter
 
     case Worktrees.get_worktree(wt_id) do
-      {:ok, wt} ->
-        {:ok, tasks} = Worktrees.children(wt_id)
-        agents = Enum.filter(assigns.agents, &(&1.status == :working && &1.current_worktree && &1.current_worktree.id == wt_id))
-        body = Formatters.format_worktree_info(wt, tasks, agents)
-        {[ChatMessage.system(c, body)], [msg_counter: c + 1]}
+      {:ok, _wt} ->
+        # Enable log streaming for this worktree automatically
+        streaming = MapSet.put(assigns.log_streaming, wt_id)
+        {[ChatMessage.live_info(c, wt_id)], [msg_counter: c + 1, log_streaming: streaming]}
 
       _ ->
         {[ChatMessage.error(c, "worktree not found: #{short_id(wt_id)}")], [msg_counter: c + 1]}

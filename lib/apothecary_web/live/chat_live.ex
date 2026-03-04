@@ -92,7 +92,19 @@ defmodule ApothecaryWeb.ChatLive do
       />
       <div id="chat-log" class="chat-log" phx-hook="ChatScroll">
         <.chat_welcome :if={@messages == []} has_project={@current_project != nil} />
-        <.chat_message :for={msg <- @messages} msg={msg} />
+        <%= for msg <- @messages do %>
+          <%= if msg.type in [:live_status, :live_info] do %>
+            <.chat_message
+              msg={msg}
+              worktrees_state={@worktrees_state}
+              agents={@agents}
+              current_project={@current_project}
+              dispatcher_projects={@dispatcher_projects}
+            />
+          <% else %>
+            <.chat_message msg={msg} />
+          <% end %>
+        <% end %>
       </div>
 
       <.chat_input
