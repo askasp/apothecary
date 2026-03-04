@@ -61,6 +61,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:working_agent, nil)
       |> assign(:agent_output, [])
       |> assign(:diff_view, nil)
+      |> assign(:show_preview, false)
       |> assign(:pending_action, nil)
       |> assign(:loading_action, nil)
       # Tab navigation
@@ -687,6 +688,16 @@ defmodule ApothecaryWeb.DashboardLive do
   @impl true
   def handle_event("toggle-preview-help", _params, socket) do
     {:noreply, assign(socket, :show_preview_help, !socket.assigns.show_preview_help)}
+  end
+
+  @impl true
+  def handle_event("show-preview", _params, socket) do
+    {:noreply, assign(socket, :show_preview, true)}
+  end
+
+  @impl true
+  def handle_event("close-preview", _params, socket) do
+    {:noreply, assign(socket, :show_preview, false)}
   end
 
   @impl true
@@ -2589,6 +2600,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:editing_field, nil)
     |> assign(:working_agent, nil)
     |> assign(:agent_output, [])
+    |> assign(:show_preview, false)
     |> assign(:focused_pane, :tree)
     |> assign(:page_title, "Dashboard")
   end
@@ -2623,6 +2635,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:editing_field, nil)
     |> assign(:working_agent, nil)
     |> assign(:agent_output, [])
+    |> assign(:show_preview, false)
     |> assign(:has_preview_config, has_preview)
     |> assign(:page_title, "Task #{id}")
     |> sync_selected_card(id)
@@ -3210,6 +3223,7 @@ defmodule ApothecaryWeb.DashboardLive do
                       agent_output={@agent_output}
                       dev_server={@dev_servers[@selected_task_id]}
                       has_preview_config={@has_preview_config}
+                      show_preview={@show_preview}
                       pending_action={@pending_action}
                       loading_action={@loading_action}
                     />
