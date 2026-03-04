@@ -890,6 +890,10 @@ defmodule ApothecaryWeb.DashboardLive do
         socket = assign(socket, :pending_action, nil)
         {:noreply, execute_direct_merge(socket, task_id, git_path)}
 
+      {:local_merge, task_id, git_path} ->
+        socket = assign(socket, :pending_action, nil)
+        {:noreply, execute_local_merge(socket, task_id, git_path)}
+
       _ ->
         {:noreply, assign(socket, :pending_action, nil)}
     end
@@ -917,6 +921,26 @@ defmodule ApothecaryWeb.DashboardLive do
 
       true ->
         {:noreply, assign(socket, :pending_action, {:direct_merge, task.id, task.git_path})}
+    end
+  end
+
+  @impl true
+  def handle_event("local-merge", _params, %{assigns: %{loading_action: la}} = socket)
+      when la != nil,
+      do: {:noreply, socket}
+
+  def handle_event("local-merge", _params, socket) do
+    task = socket.assigns.selected_task
+
+    cond do
+      is_nil(task) || task.status not in ["brew_done", "done", "closed"] ->
+        {:noreply, put_flash(socket, :error, "Worktree is not ready for merge")}
+
+      is_nil(task.git_path) ->
+        {:noreply, put_flash(socket, :error, "No git path found for this worktree")}
+
+      true ->
+        {:noreply, assign(socket, :pending_action, {:local_merge, task.id, task.git_path})}
     end
   end
 
@@ -2040,6 +2064,10 @@ defmodule ApothecaryWeb.DashboardLive do
         socket = assign(socket, :pending_action, nil)
         execute_direct_merge(socket, task_id, git_path)
 
+      {:local_merge, task_id, git_path} ->
+        socket = assign(socket, :pending_action, nil)
+        execute_local_merge(socket, task_id, git_path)
+
       _ ->
         assign(socket, :pending_action, nil)
     end
@@ -2107,6 +2135,32 @@ defmodule ApothecaryWeb.DashboardLive do
     end)
 
     assign(socket, :loading_action, :direct_merging)
+  end
+
+  defp execute_local_merge(socket, task_id, git_path) do
+    project_dir = resolve_project_dir_for_worktree(task_id)
+    lv = self()
+
+    Elixir.Task.start(fn ->
+      result =
+        case Git.local_merge(project_dir, git_path) do
+          :ok ->
+            Worktrees.add_note(task_id, "Merged locally via git (no PR)")
+            Worktrees.cleanup_merged_worktree(task_id)
+            {:ok, "Branch merged locally into main"}
+
+          {:error, {:merge_conflict, output}} ->
+            Worktrees.add_note(task_id, "Local merge failed: merge conflict")
+            {:error, "Merge conflict: #{output}"}
+
+          {:error, reason} ->
+            {:error, "Local merge failed: #{inspect(reason)}"}
+        end
+
+      send(lv, {:async_action_result, result})
+    end)
+
+    assign(socket, :loading_action, :local_merging)
   end
 
   # --- Promote brew_done to assaying (create PR) ---
