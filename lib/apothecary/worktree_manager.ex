@@ -32,6 +32,11 @@ defmodule Apothecary.WorktreeManager do
     GenServer.call(__MODULE__, {:get_worktree, worktree_id})
   end
 
+  @doc "Look up full worktree info including project_dir. Returns {:ok, info_map} or :not_found."
+  def get_worktree_info(worktree_id) do
+    GenServer.call(__MODULE__, {:get_worktree_info, worktree_id})
+  end
+
   @doc "Release a worktree (removes it from disk). Only call after work is fully done."
   def release(worktree_id) do
     GenServer.cast(__MODULE__, {:release, worktree_id})
@@ -102,6 +107,16 @@ defmodule Apothecary.WorktreeManager do
 
     case Map.get(state.worktrees, worktree_id) do
       %{path: path, branch: branch} -> {:reply, {:ok, path, branch}, state}
+      nil -> {:reply, :not_found, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:get_worktree_info, worktree_id}, _from, state) do
+    worktree_id = to_string(worktree_id)
+
+    case Map.get(state.worktrees, worktree_id) do
+      %{} = info -> {:reply, {:ok, info}, state}
       nil -> {:reply, :not_found, state}
     end
   end

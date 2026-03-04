@@ -99,8 +99,8 @@ defmodule Apothecary.DevServer do
 
       _ ->
         case resolve_worktree_path(worktree_id) do
-          {:ok, worktree_path} ->
-            case load_or_detect_config(worktree_path) do
+          {:ok, worktree_path, project_dir} ->
+            case load_or_detect_config(worktree_path, project_dir) do
               {:ok, config} ->
                 {state, result} = do_start_server(worktree_id, worktree_path, config, state)
                 {:reply, result, state}
@@ -178,8 +178,8 @@ defmodule Apothecary.DevServer do
   def handle_call({:has_config, worktree_id}, _from, state) do
     result =
       case resolve_worktree_path(worktree_id) do
-        {:ok, path} ->
-          case load_or_detect_config(path) do
+        {:ok, path, project_dir} ->
+          case load_or_detect_config(path, project_dir) do
             {:ok, _} -> true
             _ -> false
           end
@@ -485,15 +485,22 @@ defmodule Apothecary.DevServer do
 
   # --- Private: Helpers ---
 
-  defp load_or_detect_config(path) do
+  defp load_or_detect_config(path, fallback_path \\ nil) do
     case DevConfig.load(path) do
       {:ok, _} = ok ->
         ok
 
       :not_found ->
-        case DevConfig.detect(path) do
-          {:ok, _} = ok -> ok
-          :not_detected -> :not_found
+        # If not found in worktree, try the project root (for untracked config files)
+        case maybe_load_from_fallback(fallback_path) do
+          {:ok, _} = ok ->
+            ok
+
+          _ ->
+            case DevConfig.detect(path) do
+              {:ok, _} = ok -> ok
+              :not_detected -> :not_found
+            end
         end
 
       {:error, _} = err ->
@@ -501,9 +508,16 @@ defmodule Apothecary.DevServer do
     end
   end
 
+  defp maybe_load_from_fallback(nil), do: :not_found
+
+  defp maybe_load_from_fallback(fallback_path) do
+    DevConfig.load(fallback_path)
+  end
+
   defp resolve_worktree_path(worktree_id) do
-    case Apothecary.WorktreeManager.get_worktree(worktree_id) do
-      {:ok, path, _branch} -> {:ok, path}
+    case Apothecary.WorktreeManager.get_worktree_info(worktree_id) do
+      {:ok, %{path: path, project_dir: project_dir}} -> {:ok, path, project_dir}
+      {:ok, %{path: path}} -> {:ok, path, nil}
       :not_found -> {:error, :worktree_not_found}
     end
   end
