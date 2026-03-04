@@ -1811,6 +1811,9 @@ defmodule ApothecaryWeb.DashboardLive do
         |> assign(:focused_pane, :tree)
         |> push_patch(to: project_path(socket))
 
+      socket.assigns.current_project ->
+        push_patch(socket, to: "/")
+
       true ->
         socket
     end
@@ -2526,7 +2529,10 @@ defmodule ApothecaryWeb.DashboardLive do
              project_id: project_id
            }) do
         {:ok, item} when not is_nil(item) ->
-          {:noreply, put_flash(socket, :info, "Worktree created: #{item.id}")}
+          {:noreply,
+           socket
+           |> put_flash(:info, "Worktree created: #{item.id}")
+           |> push_patch(to: project_path(socket, "tasks/#{item.id}"))}
 
         {:ok, nil} ->
           {:noreply, put_flash(socket, :error, "Failed to create worktree")}
