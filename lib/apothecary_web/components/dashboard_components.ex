@@ -137,7 +137,6 @@ defmodule ApothecaryWeb.DashboardComponents do
             name="path"
             id="project-path-input"
             value="~/"
-            autofocus
             autocomplete="off"
             phx-debounce="150"
             phx-focus="input-focus"
@@ -309,17 +308,16 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%!-- Inline mode for settings bar --%>
       <%= cond do %>
         <% @dev_server && @dev_server.status == :running -> %>
-          <span style="color: var(--accent); font-weight: 500;">
-            <a
-              href={"http://localhost:#{@port}"}
-              target="_blank"
-              style="color: var(--accent); text-decoration: none;"
-            >
-              :{@port} &#x2197;
-            </a>
-          </span>
-          <span style="color: var(--border);">&nbsp;</span>
-          <button phx-click={@stop_event} phx-value-id={@target_id} class="cursor-pointer" style="color: var(--muted); font-size: var(--font-size-xs);">
+          <a
+            href={"http://localhost:#{@port}"}
+            target="_blank"
+            class="cursor-pointer"
+            style="color: var(--accent); text-decoration: none; font-weight: 500;"
+          >
+            :{@port} &#x2197;
+          </a>
+          &nbsp;
+          <button phx-click={@stop_event} phx-value-id={@target_id} class="cursor-pointer" style="color: var(--muted);">
             stop
           </button>
 
@@ -328,13 +326,13 @@ defmodule ApothecaryWeb.DashboardComponents do
 
         <% @has_config -> %>
           <button phx-click={@start_event} phx-value-id={@target_id} class="cursor-pointer settings-value" style="color: var(--muted);">
-            start
+            preview
           </button>
 
         <% true -> %>
-          <span style="color: var(--muted);">
-            no <span style="font-family: monospace; font-size: var(--font-size-xs);">.apothecary/preview.yml</span>
-          </span>
+          <button phx-click="toggle-preview-help" class="cursor-pointer" style="color: var(--muted);" title="How to set up preview">
+            preview <span style="color: var(--accent);">?</span>
+          </button>
       <% end %>
     <% else %>
       <%!-- Block mode for detail panel --%>
@@ -342,18 +340,25 @@ defmodule ApothecaryWeb.DashboardComponents do
         <div class="section-header mb-2">PREVIEW</div>
         <%= cond do %>
           <% @dev_server && @dev_server.status == :running -> %>
-            <div class="flex items-center gap-2" style="font-size: var(--font-size-sm);">
-              <span class="action-text" phx-click="open-preview" phx-value-id={@target_id}>
-                p open :{@port}
-              </span>
-              <span style="color: var(--border);">&middot;</span>
+            <div style="font-size: var(--font-size-sm);">
+              <a
+                href={"http://localhost:#{@port}"}
+                target="_blank"
+                style="color: var(--accent); text-decoration: none;"
+              >
+                p open :{@port} &#x2197;
+              </a>
+              <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
               <span class="action-text" phx-click="view-diff" phx-value-id={@target_id}>d view diff</span>
-              <span style="color: var(--border);">&middot;</span>
+              <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
               <button phx-click={@stop_event} phx-value-id={@target_id} class="action-text">stop</button>
             </div>
 
           <% @dev_server && @dev_server.status == :starting -> %>
-            <span style="color: var(--concocting); font-size: var(--font-size-sm);">starting...</span>
+            <div class="flex items-center gap-2" style="font-size: var(--font-size-sm);">
+              <.spinner class="w-3 h-3" />
+              <span style="color: var(--concocting);">starting dev server...</span>
+            </div>
 
           <% @has_config -> %>
             <div style="font-size: var(--font-size-sm);">
@@ -363,8 +368,16 @@ defmodule ApothecaryWeb.DashboardComponents do
             </div>
 
           <% true -> %>
-            <div style="color: var(--muted); font-size: var(--font-size-sm);">
-              add <span style="font-family: monospace;">.apothecary/preview.yml</span> to enable preview
+            <div style="font-size: var(--font-size-sm);">
+              <div style="color: var(--muted); margin-bottom: 6px;">
+                no <span style="color: var(--text);">.apothecary/preview.yml</span> found
+              </div>
+              <div class="oracle-code-block" style="font-size: var(--font-size-xs);">
+                <pre><code style="color: var(--dim);">{"# .apothecary/preview.yml\ncommand: \"npm run dev\"\nport_count: 1\n# optional:\n# setup: \"npm install\"\n# base_port: 3000"}</code></pre>
+              </div>
+              <div style="color: var(--muted); font-size: var(--font-size-xs); margin-top: 4px;">
+                add this file to your project root to enable live preview
+              </div>
             </div>
         <% end %>
       </div>
@@ -381,6 +394,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :has_preview_config, :boolean, default: false
   attr :project_id, :string, default: nil
   attr :editing_setting, :atom, default: nil
+  attr :show_preview_help, :boolean, default: false
 
   def settings_line(assigns) do
     concocting? = assigns.swarm_status == :running
@@ -388,21 +402,22 @@ defmodule ApothecaryWeb.DashboardComponents do
 
     ~H"""
     <div class="px-3 py-2" style="font-size: var(--font-size-xs);">
-      <%!-- Row 1: swarm + alchemists + auto-pr --%>
-      <div class="flex items-center gap-0">
+      <div class="flex items-center gap-0 flex-wrap">
+        <%!-- Swarm --%>
         <span style="color: var(--dim);">s</span>&nbsp;
         <button
           phx-click={if @concocting?, do: "stop-swarm", else: "start-swarm"}
           class="cursor-pointer settings-value"
           style={"color: #{if @concocting?, do: "var(--concocting)", else: "var(--muted)"}; font-weight: 500;"}
         >
-          {if @concocting?, do: "▶ concocting", else: "■ stopped"}
+          {if @concocting?, do: "▶ brewing", else: "■ stopped"}
         </button>
 
         <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
 
+        <%!-- Workers --%>
         <span style="color: var(--dim);">a</span>&nbsp;
-        <span style="color: var(--dim);">alch:</span>
+        <span style="color: var(--dim);">workers:</span>
         <%= if @editing_setting == :alchemists do %>
           <span class="inline-flex items-center gap-1 ml-1">
             <button phx-click="decrement-alchemists" class="cursor-pointer" style="color: var(--accent);">&minus;</button>
@@ -423,6 +438,7 @@ defmodule ApothecaryWeb.DashboardComponents do
 
         <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
 
+        <%!-- Auto-PR --%>
         <span style="color: var(--dim);">t</span>&nbsp;
         <span style="color: var(--dim);">auto-pr:</span>
         <button
@@ -432,12 +448,10 @@ defmodule ApothecaryWeb.DashboardComponents do
         >
           &nbsp;{if @auto_pr, do: "on", else: "off"}
         </button>
-      </div>
 
-      <%!-- Row 2: preview --%>
-      <div class="flex items-center gap-0 mt-1">
-        <span style="color: var(--dim);">p</span>&nbsp;
-        <span style="color: var(--dim);">main</span>&nbsp;
+        <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+
+        <%!-- Main preview --%>
         <.preview_controls
           dev_server={@dev_server}
           has_config={@has_preview_config}
@@ -447,6 +461,25 @@ defmodule ApothecaryWeb.DashboardComponents do
           inline={true}
         />
       </div>
+
+      <%!-- Preview help expandable --%>
+      <%= if @show_preview_help do %>
+        <div class="mt-2" style="border-top: 1px solid var(--border); padding-top: 8px;">
+          <div class="flex items-center justify-between mb-1">
+            <span style="color: var(--text); font-weight: 500;">preview setup</span>
+            <button phx-click="toggle-preview-help" class="cursor-pointer" style="color: var(--muted);">&#x2715;</button>
+          </div>
+          <div style="color: var(--muted); margin-bottom: 6px;">
+            add <span style="color: var(--text);">.apothecary/preview.yml</span> to your project root to spin up a dev server for main and each worktree branch:
+          </div>
+          <div class="oracle-code-block" style="font-size: var(--font-size-xs);">
+            <pre><code style="color: var(--dim);">{"# .apothecary/preview.yml\ncommand: \"npm run dev\"\nport_count: 1\n# optional:\n# setup: \"npm install\"\n# base_port: 3000"}</code></pre>
+          </div>
+          <div style="color: var(--muted); margin-top: 4px;">
+            each running worktree gets its own port
+          </div>
+        </div>
+      <% end %>
     </div>
     """
   end
@@ -506,7 +539,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         </script>
       </div>
       <div class="mt-1" style="color: var(--muted); font-size: var(--font-size-xs);">
-        describe a concoction, or ? to ask
+        describe a worktree, or ? to ask
       </div>
     </div>
     """
@@ -580,10 +613,10 @@ defmodule ApothecaryWeb.DashboardComponents do
         </form>
       </div>
 
-      <%!-- Concocting group --%>
+      <%!-- Brewing group --%>
       <.tree_group
         :if={@concocting != []}
-        label="concocting"
+        label="brewing"
         count={length(@concocting)}
         color="var(--concocting)"
         entries={@concocting}
@@ -596,10 +629,10 @@ defmodule ApothecaryWeb.DashboardComponents do
         animated_header_dot={true}
       />
 
-      <%!-- Assaying group --%>
+      <%!-- Sampling group --%>
       <.tree_group
         :if={@assaying != []}
-        label="assaying"
+        label="sampling"
         count={length(@assaying)}
         color="var(--assaying)"
         entries={@assaying}
@@ -612,10 +645,10 @@ defmodule ApothecaryWeb.DashboardComponents do
         adding_ingredient_to={@adding_ingredient_to}
       />
 
-      <%!-- Queued group --%>
+      <%!-- Stocked group --%>
       <.tree_group
         :if={@queued != []}
-        label="queued"
+        label="stocked"
         count={length(@queued)}
         color="var(--muted)"
         entries={@queued}
@@ -660,7 +693,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         class="py-6"
         style="color: var(--muted); font-size: var(--font-size-sm);"
       >
-        no concoctions yet
+        no worktrees yet
       </div>
     </div>
     """
@@ -686,7 +719,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     <div style={"opacity: #{@opacity};"}>
       <div :if={@label} class="py-1" style={"color: #{@color}; font-size: var(--font-size-sm);"}>
         {@label} ({@count})
-        <span :if={@animated_header_dot} class="concocting-snake"><span></span><span></span><span></span></span>
+        <span :if={@animated_header_dot} class="concocting-snake"><span></span><span></span><span></span><span></span></span>
       </div>
       <div style="font-size: var(--font-size-sm);">
         <%= for {entry, idx} <- Enum.with_index(@entries) do %>
@@ -752,7 +785,7 @@ defmodule ApothecaryWeb.DashboardComponents do
                 id={"ingredient-input-#{wt.id}"}
                 autofocus
                 phx-blur="ingredient-input-blur"
-                placeholder="new ingredient..."
+                placeholder="new task..."
                 class="ingredient-inline-input"
                 phx-focus="input-focus"
               />
@@ -901,7 +934,7 @@ defmodule ApothecaryWeb.DashboardComponents do
 
       <%!-- 3. INGREDIENTS --%>
       <div class="mb-5">
-        <div class="section-header mb-2">INGREDIENTS</div>
+        <div class="section-header mb-2">TASKS</div>
         <%= if @children == [] do %>
           <div style="color: var(--muted); font-size: var(--font-size-sm);">none</div>
         <% else %>
@@ -918,7 +951,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           </div>
         <% end %>
         <div class="mt-1">
-          <span class="action-text" style="color: var(--accent); font-size: var(--font-size-sm);">+ add ingredient</span>
+          <span class="action-text" style="color: var(--accent); font-size: var(--font-size-sm);">+ add task</span>
         </div>
       </div>
 
@@ -1121,17 +1154,15 @@ defmodule ApothecaryWeb.DashboardComponents do
         <% @active_tab == :workbench && @selected_task_id && @selected_task -> %>
           <%!-- Workbench with selected task --%>
           <div class="flex items-center gap-2">
-            <span>j/k nav</span>
+            <span>h/l pane</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>esc close</span>
+            <span>j/k scroll</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>p preview</span>
+            <span>q back</span>
             <span style="color: var(--border);">&middot;</span>
             <span>d diff</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>c pr</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>m merge</span>
+            <span>p preview</span>
           </div>
           <div class="flex items-center gap-2">
             <span style="color: var(--concocting);">&#x25CF;{@running_count}</span>
@@ -1145,16 +1176,14 @@ defmodule ApothecaryWeb.DashboardComponents do
           <div class="flex items-center gap-2">
             <span>j/k nav</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>enter inspect</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>esc deselect</span>
+            <span>l detail</span>
             <span style="color: var(--border);">&middot;</span>
             <span>a add</span>
             <span style="color: var(--border);">&middot;</span>
             <span>s stop</span>
           </div>
           <div class="flex items-center gap-2">
-            <span :if={@running_count > 0} class="snake-dots"><span></span><span></span><span></span></span>
+            <span :if={@running_count > 0} class="snake-dots"><span></span><span></span><span></span><span></span></span>
             <span style="color: var(--concocting);">&#x25CF;{@running_count}</span>
             <span style="color: var(--assaying);">&#x25CE;{@pr_count}</span>
             <span style="color: var(--muted);">&#x25CB;{@queued_count}</span>
@@ -1398,9 +1427,9 @@ defmodule ApothecaryWeb.DashboardComponents do
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4" style="font-size: var(--font-size-sm);">
           <div>
             <div style="color: var(--accent);" class="mb-1">navigation</div>
-            <.hk key="j/k" desc="next/prev concoction" />
-            <.hk key="g/G" desc="first/last concoction" />
-            <.hk key="enter" desc="inspect concoction" />
+            <.hk key="j/k" desc="next/prev worktree" />
+            <.hk key="g/G" desc="first/last worktree" />
+            <.hk key="enter" desc="inspect worktree" />
             <.hk key="esc" desc="close / back" />
             <.hk key="/" desc="focus input" />
           </div>
@@ -1414,8 +1443,8 @@ defmodule ApothecaryWeb.DashboardComponents do
 
           <div>
             <div style="color: var(--accent);" class="mb-1">actions</div>
-            <.hk key="s" desc="start/stop concocting" />
-            <.hk key="+/-" desc="alchemist count" />
+            <.hk key="s" desc="start/stop brewing" />
+            <.hk key="+/-" desc="brewer count" />
             <.hk key="d" desc="view diff" />
             <.hk key="p" desc="open preview" />
             <.hk key="?" desc="this help" />
@@ -1426,7 +1455,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <.hk key="c" desc="create PR" />
             <.hk key="m" desc="merge" />
             <.hk key="r" desc="requeue" />
-            <.hk key="x" desc="close concoction" />
+            <.hk key="x" desc="close worktree" />
           </div>
         </div>
       </div>
@@ -1696,7 +1725,7 @@ defmodule ApothecaryWeb.DashboardComponents do
 
       <%= if @recipes == [] and !@show_recipe_form do %>
         <div style="color: var(--muted); font-size: var(--font-size-sm);" class="py-6">
-          no recurring concoctions yet
+          no recurring worktrees yet
         </div>
       <% else %>
         <%!-- Active group --%>
@@ -1759,7 +1788,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           <textarea
             name="recipe[description]"
             rows="3"
-            placeholder="Task description for the concoction..."
+            placeholder="Task description for the worktree..."
             class="moonlight-input w-full resize-none"
           >{@form[:description].value}</textarea>
         </div>
@@ -1886,7 +1915,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   end
 
   defp page_label(:dashboard), do: "NORMAL"
-  defp page_label(:agent), do: "ALCHEMIST"
+  defp page_label(:agent), do: "BREWER"
   defp page_label(_), do: ""
 
   # ── Agent Status Badge (used by AgentLive) ───────────────
@@ -1911,23 +1940,23 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   defp task_status_group(task) do
     case task.status do
-      s when s in ["in_progress", "claimed"] -> "concocting"
-      s when s in ["brew_done", "pr_open", "revision_needed"] -> "assaying"
+      s when s in ["in_progress", "claimed"] -> "brewing"
+      s when s in ["brew_done", "pr_open", "revision_needed"] -> "sampling"
       s when s in ["done", "closed", "merged"] -> "bottled"
-      _ -> "queued"
+      _ -> "stocked"
     end
   end
 
-  defp group_color("concocting"), do: "var(--concocting)"
-  defp group_color("assaying"), do: "var(--assaying)"
+  defp group_color("brewing"), do: "var(--concocting)"
+  defp group_color("sampling"), do: "var(--assaying)"
   defp group_color("bottled"), do: "var(--bottled)"
-  defp group_color("queued"), do: "var(--muted)"
+  defp group_color("stocked"), do: "var(--muted)"
   defp group_color(_), do: "var(--dim)"
 
-  defp group_dot("concocting"), do: "◉"
-  defp group_dot("assaying"), do: "◎"
+  defp group_dot("brewing"), do: "◉"
+  defp group_dot("sampling"), do: "◎"
   defp group_dot("bottled"), do: "●"
-  defp group_dot("queued"), do: "○"
+  defp group_dot("stocked"), do: "○"
   defp group_dot(_), do: "·"
 
   defp loading_label(:merging), do: "merging PR..."
@@ -1939,9 +1968,9 @@ defmodule ApothecaryWeb.DashboardComponents do
     count = length(Apothecary.Ingredients.list_concoctions(project_id: project_id))
 
     case count do
-      0 -> "0 concoctions"
-      1 -> "1 concoction"
-      n -> "#{n} concoctions"
+      0 -> "0 worktrees"
+      1 -> "1 worktree"
+      n -> "#{n} worktrees"
     end
   end
 

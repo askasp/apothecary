@@ -88,11 +88,15 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:show_new_project, false)
       |> assign(:new_project_error, nil)
       |> assign(:bootstrap_progress, nil)
+      # Pane focus
+      |> assign(:focused_pane, :tree)
       # Ingredient inline input
       |> assign(:adding_ingredient_to, nil)
       # Search mode
       |> assign(:search_mode, false)
       |> assign(:search_query, "")
+      # Preview help
+      |> assign(:show_preview_help, false)
       # Load state (will be refined in handle_params)
       |> load_dashboard_state(nil)
 
@@ -528,7 +532,7 @@ defmodule ApothecaryWeb.DashboardLive do
          put_flash(
            socket,
            :info,
-           "Concocting started with #{socket.assigns.target_count} alchemists"
+           "Brewing started with #{socket.assigns.target_count} brewers"
          )}
     end
   end
@@ -541,7 +545,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
       project ->
         Dispatcher.stop_swarm(project.id)
-        {:noreply, put_flash(socket, :info, "Concocting stopped")}
+        {:noreply, put_flash(socket, :info, "Brewing stopped")}
     end
   end
 
@@ -562,7 +566,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
         socket =
           if socket.assigns.swarm_status != :running do
-            put_flash(socket, :info, "Alchemist count set to #{count}")
+            put_flash(socket, :info, "Brewer count set to #{count}")
           else
             socket
           end
@@ -588,7 +592,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
         socket =
           if socket.assigns.swarm_status != :running do
-            put_flash(socket, :info, "Alchemist count set to #{count}")
+            put_flash(socket, :info, "Brewer count set to #{count}")
           else
             socket
           end
@@ -606,8 +610,23 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("toggle-preview-help", _params, socket) do
+    {:noreply, assign(socket, :show_preview_help, !socket.assigns.show_preview_help)}
+  end
+
+  @impl true
   def handle_event("toggle-done-collapse", _params, socket) do
     {:noreply, assign(socket, :collapsed_done, !socket.assigns.collapsed_done)}
+  end
+
+  @impl true
+  def handle_event("focus-tree-pane", _params, socket) do
+    {:noreply, assign(socket, :focused_pane, :tree)}
+  end
+
+  @impl true
+  def handle_event("focus-detail-pane", _params, socket) do
+    {:noreply, assign(socket, :focused_pane, :detail)}
   end
 
   @impl true
@@ -1420,8 +1439,13 @@ defmodule ApothecaryWeb.DashboardLive do
       socket.assigns.show_help ->
         assign(socket, :show_help, false)
 
+      socket.assigns.focused_pane == :detail ->
+        assign(socket, :focused_pane, :tree)
+
       socket.assigns.selected_task_id ->
-        push_patch(socket, to: project_path(socket))
+        socket
+        |> assign(:focused_pane, :tree)
+        |> push_patch(to: project_path(socket))
 
       true ->
         socket
@@ -1429,20 +1453,40 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("j", socket) do
-    max_idx = max(length(socket.assigns.card_ids) - 1, 0)
-    idx = min(socket.assigns.selected_card + 1, max_idx)
+    cond do
+      is_nil(socket.assigns.current_project) ->
+        # Landing page: navigate recent projects
+        max_idx = max(length(socket.assigns.projects) - 1, 0)
+        assign(socket, :selected_card, min(socket.assigns.selected_card + 1, max_idx))
 
-    socket
-    |> assign(:selected_card, idx)
-    |> push_event("scroll-to-selected", %{})
+      socket.assigns.focused_pane == :detail ->
+        push_event(socket, "scroll-detail", %{direction: "down"})
+
+      true ->
+        max_idx = max(length(socket.assigns.card_ids) - 1, 0)
+        idx = min(socket.assigns.selected_card + 1, max_idx)
+
+        socket
+        |> assign(:selected_card, idx)
+        |> push_event("scroll-to-selected", %{})
+    end
   end
 
   defp handle_hotkey("k", socket) do
-    idx = max(socket.assigns.selected_card - 1, 0)
+    cond do
+      is_nil(socket.assigns.current_project) ->
+        assign(socket, :selected_card, max(socket.assigns.selected_card - 1, 0))
 
-    socket
-    |> assign(:selected_card, idx)
-    |> push_event("scroll-to-selected", %{})
+      socket.assigns.focused_pane == :detail ->
+        push_event(socket, "scroll-detail", %{direction: "up"})
+
+      true ->
+        idx = max(socket.assigns.selected_card - 1, 0)
+
+        socket
+        |> assign(:selected_card, idx)
+        |> push_event("scroll-to-selected", %{})
+    end
   end
 
   defp handle_hotkey("g", socket), do: assign(socket, :selected_card, 0)
@@ -1452,18 +1496,57 @@ defmodule ApothecaryWeb.DashboardLive do
     assign(socket, :selected_card, max_idx)
   end
 
-  defp handle_hotkey(key, socket) when key in ["Enter", "l"] do
-    case Enum.at(socket.assigns.card_ids, socket.assigns.selected_card) do
-      nil -> socket
-      id -> push_patch(socket, to: project_path(socket) <> "?task=#{id}")
+  defp handle_hotkey("Enter", socket) do
+    if is_nil(socket.assigns.current_project) do
+      case Enum.at(socket.assigns.projects, socket.assigns.selected_card) do
+        nil -> socket
+        project -> push_navigate(socket, to: ~p"/projects/#{project.id}")
+      end
+    else
+      case Enum.at(socket.assigns.card_ids, socket.assigns.selected_card) do
+        nil -> socket
+        id -> push_patch(socket, to: project_path(socket) <> "?task=#{id}")
+      end
     end
   end
 
-  defp handle_hotkey(key, socket) when key in ["Backspace", "h"] do
-    if socket.assigns.selected_task_id do
-      push_patch(socket, to: project_path(socket))
+  defp handle_hotkey("l", socket) do
+    if is_nil(socket.assigns.current_project) do
+      case Enum.at(socket.assigns.projects, socket.assigns.selected_card) do
+        nil -> socket
+        project -> push_navigate(socket, to: ~p"/projects/#{project.id}")
+      end
+    else
+      # Move focus to detail pane (if a task is selected)
+      if socket.assigns.selected_task_id do
+        assign(socket, :focused_pane, :detail)
+      else
+        # No detail open — open the selected card
+        case Enum.at(socket.assigns.card_ids, socket.assigns.selected_card) do
+          nil -> socket
+          id -> push_patch(socket, to: project_path(socket) <> "?task=#{id}")
+        end
+      end
+    end
+  end
+
+  defp handle_hotkey("h", socket) do
+    if socket.assigns.focused_pane == :detail do
+      assign(socket, :focused_pane, :tree)
     else
       socket
+    end
+  end
+
+  defp handle_hotkey("Backspace", socket) do
+    if socket.assigns.focused_pane == :detail do
+      assign(socket, :focused_pane, :tree)
+    else
+      if socket.assigns.selected_task_id do
+        push_patch(socket, to: project_path(socket))
+      else
+        socket
+      end
     end
   end
 
@@ -1480,14 +1563,14 @@ defmodule ApothecaryWeb.DashboardLive do
       project ->
         if socket.assigns.swarm_status == :running do
           Dispatcher.stop_swarm(project.id)
-          put_flash(socket, :info, "Concocting stopped")
+          put_flash(socket, :info, "Brewing stopped")
         else
           Dispatcher.start_swarm(project.id, socket.assigns.target_count)
 
           put_flash(
             socket,
             :info,
-            "Concocting started with #{socket.assigns.target_count} alchemists"
+            "Brewing started with #{socket.assigns.target_count} brewers"
           )
         end
     end
@@ -1498,10 +1581,15 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("/", socket) do
-    socket
-    |> assign(:search_mode, true)
-    |> assign(:search_query, "")
-    |> push_event("focus-element", %{selector: "#tree-search-input"})
+    if is_nil(socket.assigns.current_project) do
+      # Landing page: focus the path input
+      push_event(socket, "focus-element", %{selector: "#project-path-input"})
+    else
+      socket
+      |> assign(:search_mode, true)
+      |> assign(:search_query, "")
+      |> push_event("focus-element", %{selector: "#tree-search-input"})
+    end
   end
 
   defp handle_hotkey("a", socket) do
@@ -1539,7 +1627,7 @@ defmodule ApothecaryWeb.DashboardLive do
         socket = assign(socket, :target_count, count)
 
         if socket.assigns.swarm_status != :running do
-          put_flash(socket, :info, "Alchemist count set to #{count}")
+          put_flash(socket, :info, "Brewer count set to #{count}")
         else
           socket
         end
@@ -1561,7 +1649,7 @@ defmodule ApothecaryWeb.DashboardLive do
         socket = assign(socket, :target_count, count)
 
         if socket.assigns.swarm_status != :running do
-          put_flash(socket, :info, "Alchemist count set to #{count}")
+          put_flash(socket, :info, "Brewer count set to #{count}")
         else
           socket
         end
@@ -1576,17 +1664,7 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("q", socket) do
-    if socket.assigns.selected_task_id do
-      case Ingredients.unclaim(socket.assigns.selected_task_id) do
-        {:ok, _} ->
-          put_flash(socket, :info, "Task requeued")
-
-        {:error, reason} ->
-          put_flash(socket, :error, "Failed to requeue: #{inspect(reason)}")
-      end
-    else
-      socket
-    end
+    handle_hotkey("Escape", socket)
   end
 
   defp handle_hotkey("x", socket) do
@@ -1622,13 +1700,7 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("p", socket) do
-    task = socket.assigns.selected_task
-
-    if task && task.status == "brew_done" do
-      promote_to_assaying(socket, task)
-    else
-      socket
-    end
+    assign(socket, :show_preview_help, !socket.assigns.show_preview_help)
   end
 
   defp handle_hotkey("ArrowUp", socket) do
@@ -1691,7 +1763,7 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  # Lane jumps: 1=stockroom, 2=concocting, 3=assaying, 4=bottled
+  # Lane jumps: 1=stockroom, 2=concocting, 3=sampling, 4=bottled
   defp handle_hotkey("1", socket), do: jump_to_lane(socket, ~w(ready blocked))
   defp handle_hotkey("2", socket), do: jump_to_lane(socket, ~w(running))
   defp handle_hotkey("3", socket), do: jump_to_lane(socket, ~w(pr))
@@ -2049,7 +2121,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
     if agent && agent.pid do
       Brewer.send_instruction(agent.pid, text)
-      {:noreply, put_flash(socket, :info, "Sent to alchemist-#{agent.id}")}
+      {:noreply, put_flash(socket, :info, "Sent to brewer-#{agent.id}")}
     else
       {:noreply, put_flash(socket, :error, "No active agent process")}
     end
@@ -2068,6 +2140,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:editing_field, nil)
     |> assign(:working_agent, nil)
     |> assign(:agent_output, [])
+    |> assign(:focused_pane, :tree)
     |> assign(:page_title, "Dashboard")
   end
 
@@ -2298,6 +2371,10 @@ defmodule ApothecaryWeb.DashboardLive do
       {:error, _} -> []
     end
   end
+
+  defp expand_tilde("~/" <> rest), do: Path.join(System.get_env("HOME", "~"), rest)
+  defp expand_tilde("~"), do: System.get_env("HOME", "~")
+  defp expand_tilde(path), do: path
 
   defp list_path_suggestions(input) do
     input = String.trim(input)
@@ -2636,7 +2713,11 @@ defmodule ApothecaryWeb.DashboardLive do
               <%!-- Split panel: tree left, detail right --%>
               <div class="flex h-full">
                 <%!-- Left panel: settings + input + tree --%>
-                <div class="h-full overflow-y-auto scroll-main flex-shrink-0" style="width: 36%; min-width: 280px; max-width: 420px; border-right: 1px solid var(--border);">
+                <div
+                  class="h-full overflow-y-auto scroll-main flex-shrink-0"
+                  style={"width: 36%; min-width: 280px; max-width: 420px; border-right: 1px solid var(--border); #{if @focused_pane == :tree, do: "border-top: 2px solid var(--accent);", else: "border-top: 2px solid transparent;"}"}
+                  phx-click="focus-tree-pane"
+                >
                   <.settings_line
                     target_count={@target_count}
                     auto_pr={@auto_pr}
@@ -2645,6 +2726,7 @@ defmodule ApothecaryWeb.DashboardLive do
                     has_preview_config={@has_project_preview_config}
                     project_id={@current_project && @current_project.id}
                     editing_setting={@editing_setting}
+                    show_preview_help={@show_preview_help}
                   />
 
                   <.concoction_input input_focused={@input_focused} />
@@ -2663,7 +2745,12 @@ defmodule ApothecaryWeb.DashboardLive do
                 </div>
 
                 <%!-- Right panel: detail or placeholder --%>
-                <div class="flex-1 h-full overflow-y-auto scroll-main">
+                <div
+                  id="detail-pane"
+                  class="flex-1 h-full overflow-y-auto scroll-main"
+                  style={"#{if @focused_pane == :detail, do: "border-top: 2px solid var(--accent);", else: "border-top: 2px solid transparent;"}"}
+                  phx-click="focus-detail-pane"
+                >
                   <%= if @selected_task && @selected_task_id do %>
                     <.concoction_detail
                       task={@selected_task}
@@ -2693,7 +2780,7 @@ defmodule ApothecaryWeb.DashboardLive do
                           <span>&#x25C7;</span>
                         </div>
 
-                        <div class="mb-4" style="color: var(--dim);">select a concoction to inspect</div>
+                        <div class="mb-4" style="color: var(--dim);">select a worktree to inspect</div>
 
                         <div class="mb-1" style="font-size: var(--font-size-xs);">
                           <span style="font-weight: 600;">j/k</span> navigate
@@ -2719,7 +2806,7 @@ defmodule ApothecaryWeb.DashboardLive do
                             <div>
                               <span style="color: var(--assaying);">&#x25CE;</span>
                               <span style="color: var(--dim); font-weight: 600;">{length(pr)}</span>
-                              <div style="color: var(--muted);">assaying</div>
+                              <div style="color: var(--muted);">sampling</div>
                             </div>
                             <div>
                               <span style="color: var(--muted);">&#x25CB;</span>

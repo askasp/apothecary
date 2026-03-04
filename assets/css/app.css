@@ -22,6 +22,7 @@
   /* Status */
   --concocting: #c4aa4e;
   --assaying:   #c48060;
+  --sampling:   var(--assaying);
   --queued:     #2a3e44;
   --bottled:    #3a5a58;
   --error:      #c45a5a;
@@ -115,52 +116,78 @@ html, body {
 
 /* ── Snake animation (concocting status) ──────────────── */
 
-@keyframes snake-chase {
-  0%, 100% { opacity: 0.15; }
-  33% { opacity: 1; }
-  66% { opacity: 0.4; }
+/* 4 dots chasing around an 8-position square perimeter (3×3 grid edges) */
+@keyframes snake-square {
+  0%      { transform: translate(0px, 0px); }
+  12.5%   { transform: translate(5px, 0px); }
+  25%     { transform: translate(10px, 0px); }
+  37.5%   { transform: translate(10px, 5px); }
+  50%     { transform: translate(10px, 10px); }
+  62.5%   { transform: translate(5px, 10px); }
+  75%     { transform: translate(0px, 10px); }
+  87.5%   { transform: translate(0px, 5px); }
+  100%    { transform: translate(0px, 0px); }
 }
 
+@keyframes snake-square-sm {
+  0%      { transform: translate(0px, 0px); }
+  12.5%   { transform: translate(4px, 0px); }
+  25%     { transform: translate(8px, 0px); }
+  37.5%   { transform: translate(8px, 4px); }
+  50%     { transform: translate(8px, 8px); }
+  62.5%   { transform: translate(4px, 8px); }
+  75%     { transform: translate(0px, 8px); }
+  87.5%   { transform: translate(0px, 4px); }
+  100%    { transform: translate(0px, 0px); }
+}
+
+/* Status bar snake (small) */
 .snake-dots {
-  display: inline-flex;
-  gap: 2px;
-  align-items: center;
-  margin-right: 2px;
+  display: inline-block;
+  position: relative;
+  width: 12px;
+  height: 12px;
+  vertical-align: middle;
+  margin-right: 4px;
 }
 
 .snake-dots span {
-  display: inline-block;
-  width: 4px;
-  height: 4px;
+  position: absolute;
+  width: 3px;
+  height: 3px;
   border-radius: 50%;
   background: var(--concocting);
-  animation: snake-chase 1.2s ease-in-out infinite;
+  animation: snake-square-sm 2s linear infinite;
 }
 
-.snake-dots span:nth-child(1) { animation-delay: 0s; }
-.snake-dots span:nth-child(2) { animation-delay: 0.2s; }
-.snake-dots span:nth-child(3) { animation-delay: 0.4s; }
+.snake-dots span:nth-child(1) { animation-delay: 0s; opacity: 1; }
+.snake-dots span:nth-child(2) { animation-delay: -0.25s; opacity: 0.75; }
+.snake-dots span:nth-child(3) { animation-delay: -0.5s; opacity: 0.5; }
+.snake-dots span:nth-child(4) { animation-delay: -0.75s; opacity: 0.3; }
 
-/* Snake dots for tree header */
+/* Tree header snake (slightly larger) */
 .concocting-snake {
-  display: inline-flex;
-  gap: 3px;
-  align-items: center;
+  display: inline-block;
+  position: relative;
+  width: 14px;
+  height: 14px;
+  vertical-align: middle;
   margin-left: 4px;
 }
 
 .concocting-snake span {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
+  position: absolute;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background: var(--concocting);
-  animation: snake-chase 1.4s ease-in-out infinite;
+  animation: snake-square 1.8s linear infinite;
 }
 
-.concocting-snake span:nth-child(1) { animation-delay: 0s; }
-.concocting-snake span:nth-child(2) { animation-delay: 0.25s; }
-.concocting-snake span:nth-child(3) { animation-delay: 0.5s; }
+.concocting-snake span:nth-child(1) { animation-delay: 0s; opacity: 1; }
+.concocting-snake span:nth-child(2) { animation-delay: -0.225s; opacity: 0.75; }
+.concocting-snake span:nth-child(3) { animation-delay: -0.45s; opacity: 0.5; }
+.concocting-snake span:nth-child(4) { animation-delay: -0.675s; opacity: 0.3; }
 
 /* ── Tree characters ─────────────────────────────────────── */
 

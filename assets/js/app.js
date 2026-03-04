@@ -71,6 +71,13 @@ let Hooks = {
           el.dispatchEvent(new Event("input", { bubbles: true }))
         }
       })
+      this.handleEvent("scroll-detail", ({ direction }) => {
+        const el = document.getElementById("detail-pane")
+        if (el) {
+          const amount = direction === "down" ? 120 : -120
+          el.scrollBy({ top: amount, behavior: "smooth" })
+        }
+      })
     },
     updated() {
       if (!document.activeElement || document.activeElement === document.body) {
