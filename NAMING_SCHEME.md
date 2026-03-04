@@ -1,6 +1,6 @@
 # Apothecary Naming Scheme
 
-> An **apothecary** brews **concoctions** from **ingredients**. **Brewers** do the work.
+> An **apothecary** manages **worktrees** composed of **tasks**. **Brewers** do the work.
 
 ---
 
@@ -9,9 +9,9 @@
 | Concept | Apothecary Name | Module | What It Is |
 |---|---|---|---|
 | The application | **Apothecary** | `Apothecary` | The shop where everything happens. |
-| Unit of work / PR | **Concoction** | `Apothecary.Concoction` | A self-contained piece of work with its own git worktree. Multiple ingredients combine into one concoction. |
-| Task / step within a concoction | **Ingredient** | `Apothecary.Ingredient` | A single task or step. Ingredients can depend on each other. |
-| Claude Code agent | **Brewer** | `Apothecary.Brewer` | Takes a concoction, gathers the ingredients, and does the actual brewing. |
+| Unit of work / PR | **Worktree** | `Apothecary.Worktree` | A self-contained piece of work with its own git worktree. Multiple tasks combine into one worktree. |
+| Task / step within a worktree | **Task** | `Apothecary.Task` | A single task or step. Tasks can depend on each other. |
+| Claude Code agent | **Brewer** | `Apothecary.Brewer` | Takes a worktree, works through the tasks, and does the actual brewing. |
 
 These four names are the entire naming scheme. Everything else — supervisors, registries, dispatchers, utilities — keeps standard Elixir/OTP naming.
 
@@ -22,8 +22,8 @@ These four names are the entire naming scheme. Everything else — supervisors, 
 Supervisors, registries, and infrastructure modules use idiomatic Elixir naming. No reason to theme them:
 
 - `Apothecary.BrewerSupervisor` — DynamicSupervisor for brewers
-- `Apothecary.Dispatcher` — assigns concoctions to available brewers
-- `Apothecary.WorktreeManager` — git worktree lifecycle (the technical git layer under concoctions)
+- `Apothecary.Dispatcher` — assigns worktrees to available brewers
+- `Apothecary.WorktreeManager` — git worktree lifecycle (the technical git layer under worktrees)
 - `Apothecary.CLI`, `Apothecary.Git`, `Apothecary.Startup` — utilities
 - `Apothecary.Application`, `Apothecary.PubSub` — standard OTP/Phoenix
 
@@ -31,37 +31,37 @@ Supervisors, registries, and infrastructure modules use idiomatic Elixir naming.
 
 ## How It Maps
 
-### Concoctions
+### Worktrees
 
-A concoction is a unit of work that becomes a PR. Each gets its own isolated git worktree.
+A worktree is a unit of work that becomes a PR. Each gets its own isolated git worktree.
 
 ```
-Concoction = recipe + ingredients + isolated workspace
-           = title  + ingredients + git worktree path
+Worktree = title + tasks + isolated workspace
+         = title + tasks + git worktree path
 ```
 
 - ID prefix: `wt-`
 - Statuses: `open` → `in_progress` → `done` (or `blocked`)
-- Done when all ingredients are combined and the result is committed
+- Done when all tasks are completed and the result is committed
 
-### Ingredients
+### Tasks
 
-An ingredient is a single task needed to complete a concoction. They can depend on each other.
+A task is a single step needed to complete a worktree. They can depend on each other.
 
 ```
-Ingredient = one step in the recipe
+Task = one step in the worktree
 ```
 
 - ID prefix: `t-`
 - Ordered by priority and dependencies
-- Created by brewers when they decompose complex concoctions
+- Created by brewers when they decompose complex worktrees
 
 ### Brewers
 
-A brewer is a Claude Code process working on a concoction. The dispatcher assigns concoctions to available brewers. One concoction per brewer at a time.
+A brewer is a Claude Code process working on a worktree. The dispatcher assigns worktrees to available brewers. One worktree per brewer at a time.
 
 ```
-Brewer = Claude Code process + concoction assignment
+Brewer = Claude Code process + worktree assignment
        = Apothecary.Brewer GenServer + Port
 ```
 
@@ -74,9 +74,9 @@ Brewer = Claude Code process + concoction assignment
 
 | Module | Purpose |
 |---|---|
-| `Apothecary.Concoction` | Domain struct: a unit of work / PR |
-| `Apothecary.Ingredient` | Domain struct: a task/step in a concoction |
-| `Apothecary.Ingredients` | Interface module for managing ingredients + concoctions |
+| `Apothecary.Worktree` | Domain struct: a unit of work / PR |
+| `Apothecary.Task` | Domain struct: a task/step in a worktree |
+| `Apothecary.Worktrees` | Interface module for managing worktrees + tasks |
 | `Apothecary.Brewer` | Domain module: the Claude agent process |
 | `Apothecary.BrewerState` | State struct for a brewer |
 
@@ -86,8 +86,8 @@ Brewer = Claude Code process + concoction assignment
 
 | Term | Meaning |
 |---|---|
-| **Apothecary** | The application — the shop where concoctions are brewed |
-| **Concoction** | A unit of work (worktree + PR), composed of ingredients |
-| **Ingredient** | A single task within a concoction |
-| **Brewer** | A Claude Code agent that works on concoctions |
-| **Recipe** | The set of ingredients needed for a concoction (implicit, not a separate struct) |
+| **Apothecary** | The application — the shop where worktrees are brewed |
+| **Worktree** | A unit of work (git worktree + PR), composed of tasks |
+| **Task** | A single task within a worktree |
+| **Brewer** | A Claude Code agent that works on worktrees |
+| **Recipe** | The set of tasks needed for a worktree (implicit, not a separate struct) |

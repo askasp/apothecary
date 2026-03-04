@@ -1,11 +1,11 @@
 defmodule Apothecary.Dispatcher do
   @moduledoc """
-  Coordinates concoction assignment between the ingredient queue and brewers.
+  Coordinates worktree assignment between the task queue and brewers.
 
   Per-project dispatch model:
-  - Each project has its own pool of brewers (alchemists)
-  - Brewers are scoped to a single project and only pick up that project's concoctions
-  - You can start/stop concocting independently per project
+  - Each project has its own pool of brewers
+  - Brewers are scoped to a single project and only pick up that project's worktrees
+  - You can start/stop brewing independently per project
   """
 
   use GenServer
@@ -39,7 +39,7 @@ defmodule Apothecary.Dispatcher do
     GenServer.call(__MODULE__, {:set_agent_count, project_id, count}, 60_000)
   end
 
-  @doc "Report a brewer as idle and ready for the next concoction."
+  @doc "Report a brewer as idle and ready for the next worktree."
   def agent_idle(brewer_pid) do
     GenServer.cast(__MODULE__, {:agent_idle, brewer_pid})
   end
@@ -63,8 +63,8 @@ defmodule Apothecary.Dispatcher do
 
   @impl true
   def init(_opts) do
-    # Subscribe to ingredient updates for reactive dispatch
-    Apothecary.Ingredients.subscribe()
+    # Subscribe to worktree updates for reactive dispatch
+    Apothecary.Worktrees.subscribe()
 
     state = %{
       # Global brewer ID counter
@@ -207,9 +207,9 @@ defmodule Apothecary.Dispatcher do
     {:noreply, state}
   end
 
-  # React to ingredient state changes (replaces polling)
+  # React to worktree state changes (replaces polling)
   @impl true
-  def handle_info({:ingredients_update, _ingredient_state}, state) do
+  def handle_info({:worktrees_update, _worktrees_state}, state) do
     state = try_dispatch(state)
     {:noreply, state}
   end
@@ -422,18 +422,18 @@ defmodule Apothecary.Dispatcher do
   end
 
   defp try_dispatch_project(state, project_id) do
-    case Apothecary.Ingredients.ready_concoctions(project_id: project_id) do
+    case Apothecary.Worktrees.ready_worktrees(project_id: project_id) do
       [] ->
         state
 
-      concoctions ->
-        dispatch_first_available(concoctions, state, project_id)
+      worktrees ->
+        dispatch_first_available(worktrees, state, project_id)
     end
   end
 
   defp dispatch_first_available([], state, _project_id), do: state
 
-  defp dispatch_first_available(_concoctions, state, project_id) do
+  defp dispatch_first_available(_worktrees, state, project_id) do
     pool = state.projects[project_id]
     if is_nil(pool) or pool.idle_agents == [], do: state, else: do_dispatch(state, project_id)
   end
@@ -441,27 +441,27 @@ defmodule Apothecary.Dispatcher do
   defp do_dispatch(state, project_id) do
     pool = state.projects[project_id]
 
-    case Apothecary.Ingredients.ready_concoctions(project_id: project_id) do
+    case Apothecary.Worktrees.ready_worktrees(project_id: project_id) do
       [] ->
         state
 
-      [concoction | rest] ->
+      [worktree | rest] ->
         [brewer_pid | _] = pool.idle_agents
         brewer_state = pool.agents[brewer_pid]
         brewer_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(brewer_pid)
 
-        # Atomically claim the concoction
-        case Apothecary.Ingredients.claim_concoction(concoction.id, brewer_id) do
+        # Atomically claim the worktree
+        case Apothecary.Worktrees.claim_worktree(worktree.id, brewer_id) do
           {:ok, claimed} ->
-            project_dir = resolve_project_dir(concoction)
+            project_dir = resolve_project_dir(worktree)
 
-            if concoction.kind == "question" do
+            if worktree.kind == "question" do
               # Questions run read-only against the project directory — no worktree needed
               [_ | rest_idle] = pool.idle_agents
               pool = %{pool | idle_agents: rest_idle}
               state = put_pool(state, project_id, pool)
 
-              Apothecary.Brewer.assign_concoction(
+              Apothecary.Brewer.assign_worktree(
                 brewer_pid,
                 claimed,
                 project_dir,
@@ -471,10 +471,10 @@ defmodule Apothecary.Dispatcher do
 
               state
             else
-              # Task concoctions get their own git worktree
-              case ensure_git_worktree(concoction, project_dir) do
+              # Task worktrees get their own git worktree
+              case ensure_git_worktree(worktree, project_dir) do
                 {:ok, path, branch} ->
-                  Apothecary.Ingredients.update_concoction(concoction.id, %{
+                  Apothecary.Worktrees.update_worktree(worktree.id, %{
                     git_path: path,
                     git_branch: branch
                   })
@@ -483,7 +483,7 @@ defmodule Apothecary.Dispatcher do
                   pool = %{pool | idle_agents: rest_idle}
                   state = put_pool(state, project_id, pool)
 
-                  Apothecary.Brewer.assign_concoction(
+                  Apothecary.Brewer.assign_worktree(
                     brewer_pid,
                     claimed,
                     path,
@@ -495,10 +495,10 @@ defmodule Apothecary.Dispatcher do
 
                 {:error, reason} ->
                   Logger.error(
-                    "Failed to create git worktree for #{concoction.id}: #{inspect(reason)}"
+                    "Failed to create git worktree for #{worktree.id}: #{inspect(reason)}"
                   )
 
-                  Apothecary.Ingredients.release_concoction(concoction.id)
+                  Apothecary.Worktrees.release_worktree(worktree.id)
                   dispatch_remaining(rest, state, project_id)
               end
             end
@@ -512,7 +512,7 @@ defmodule Apothecary.Dispatcher do
   defp dispatch_remaining([], state, _project_id), do: state
 
   defp dispatch_remaining(_rest, state, project_id) do
-    # Retry dispatch for remaining concoctions
+    # Retry dispatch for remaining worktrees
     do_dispatch(state, project_id)
   end
 
@@ -526,8 +526,8 @@ defmodule Apothecary.Dispatcher do
     end
   end
 
-  defp ensure_git_worktree(concoction, project_dir) do
-    Apothecary.WorktreeManager.checkout(project_dir, concoction.id)
+  defp ensure_git_worktree(worktree, project_dir) do
+    Apothecary.WorktreeManager.checkout(project_dir, worktree.id)
   end
 
   defp resolve_project_dir(%{project_id: project_id}) when not is_nil(project_id) do

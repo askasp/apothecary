@@ -1,5 +1,5 @@
 defmodule Apothecary.MCP.Tools.AddNotes do
-  @moduledoc "Add progress notes to an ingredient or your concoction. Notes persist across brewer restarts — use for context survival."
+  @moduledoc "Add progress notes to a task or your worktree. Notes persist across brewer restarts — use for context survival."
   use Hermes.Server.Component, type: :tool
 
   alias Hermes.Server.Response
@@ -7,31 +7,31 @@ defmodule Apothecary.MCP.Tools.AddNotes do
   schema do
     field(:notes, {:required, :string}, description: "The notes to add")
 
-    field(:ingredient_id, :string,
-      description: "Ingredient ID to annotate. If omitted, notes go on the concoction itself."
+    field(:task_id, :string,
+      description: "Task ID to annotate. If omitted, notes go on the worktree itself."
     )
   end
 
   @impl true
   def execute(params, frame) do
-    concoction_id = Apothecary.MCP.Server.concoction_id(frame)
-    target_id = params[:ingredient_id] || concoction_id
+    worktree_id = Apothecary.MCP.Server.worktree_id(frame)
+    target_id = params[:task_id] || worktree_id
 
     unless target_id do
       response =
         Response.tool()
-        |> Response.text("Error: provide ingredient_id or have a concoction session")
+        |> Response.text("Error: provide task_id or have a worktree session")
 
       {:reply, response, frame}
     else
-      # If targeting an ingredient, verify it belongs to this concoction
-      if params[:ingredient_id] && concoction_id do
-        case Apothecary.Ingredients.get_ingredient(params[:ingredient_id]) do
-          {:ok, ingredient} when ingredient.concoction_id != concoction_id ->
+      # If targeting a task, verify it belongs to this worktree
+      if params[:task_id] && worktree_id do
+        case Apothecary.Worktrees.get_task(params[:task_id]) do
+          {:ok, task} when task.worktree_id != worktree_id ->
             response =
               Response.tool()
               |> Response.text(
-                "Ingredient #{params[:ingredient_id]} belongs to a different concoction."
+                "Task #{params[:task_id]} belongs to a different worktree."
               )
 
             {:reply, response, frame}
@@ -46,7 +46,7 @@ defmodule Apothecary.MCP.Tools.AddNotes do
   end
 
   defp do_add_note(target_id, notes, frame) do
-    case Apothecary.Ingredients.add_note(target_id, notes) do
+    case Apothecary.Worktrees.add_note(target_id, notes) do
       {:ok, _} ->
         response =
           Response.tool()

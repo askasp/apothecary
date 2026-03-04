@@ -1,33 +1,33 @@
 defmodule Apothecary.MCP.Tools.AddDependency do
-  @moduledoc "Wire a dependency between two ingredients: blocked_id cannot start until blocker_id is done"
+  @moduledoc "Wire a dependency between two tasks: blocked_id cannot start until blocker_id is done"
   use Hermes.Server.Component, type: :tool
 
   alias Hermes.Server.Response
 
   schema do
     field(:blocked_id, {:required, :string},
-      description: "Ingredient that is blocked (e.g. t-abc123)"
+      description: "Task that is blocked (e.g. t-abc123)"
     )
 
     field(:blocker_id, {:required, :string},
-      description: "Ingredient that must complete first (e.g. t-def456)"
+      description: "Task that must complete first (e.g. t-def456)"
     )
   end
 
   @impl true
   def execute(%{blocked_id: blocked_id, blocker_id: blocker_id}, frame) do
-    concoction_id = Apothecary.MCP.Server.concoction_id(frame)
+    worktree_id = Apothecary.MCP.Server.worktree_id(frame)
 
-    # Verify both ingredients belong to this concoction
+    # Verify both tasks belong to this worktree
     with {:blocked, {:ok, blocked}} <-
-           {:blocked, Apothecary.Ingredients.get_ingredient(blocked_id)},
+           {:blocked, Apothecary.Worktrees.get_task(blocked_id)},
          {:blocker, {:ok, blocker}} <-
-           {:blocker, Apothecary.Ingredients.get_ingredient(blocker_id)},
+           {:blocker, Apothecary.Worktrees.get_task(blocker_id)},
          true <-
-           is_nil(concoction_id) or
-             (blocked.concoction_id == concoction_id and
-                blocker.concoction_id == concoction_id) do
-      case Apothecary.Ingredients.add_dependency(blocked_id, blocker_id) do
+           is_nil(worktree_id) or
+             (blocked.worktree_id == worktree_id and
+                blocker.worktree_id == worktree_id) do
+      case Apothecary.Worktrees.add_dependency(blocked_id, blocker_id) do
         {:ok, :added} ->
           response =
             Response.tool()
@@ -63,21 +63,21 @@ defmodule Apothecary.MCP.Tools.AddDependency do
       false ->
         response =
           Response.tool()
-          |> Response.text("Both ingredients must belong to your concoction.")
+          |> Response.text("Both tasks must belong to your worktree.")
 
         {:reply, response, frame}
 
       {:blocked, {:error, :not_found}} ->
         response =
           Response.tool()
-          |> Response.text("Blocked ingredient #{blocked_id} not found.")
+          |> Response.text("Blocked task #{blocked_id} not found.")
 
         {:reply, response, frame}
 
       {:blocker, {:error, :not_found}} ->
         response =
           Response.tool()
-          |> Response.text("Blocker ingredient #{blocker_id} not found.")
+          |> Response.text("Blocker task #{blocker_id} not found.")
 
         {:reply, response, frame}
     end

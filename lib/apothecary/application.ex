@@ -16,7 +16,7 @@ defmodule Apothecary.Application do
       {DNSCluster, query: Application.get_env(:apothecary, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Apothecary.PubSub},
       Apothecary.Store,
-      Apothecary.Ingredients,
+      Apothecary.Worktrees,
       Apothecary.BrewScheduler,
       Apothecary.PRMonitor,
       Hermes.Server.Registry,

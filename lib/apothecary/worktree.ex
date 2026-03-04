@@ -1,5 +1,5 @@
-defmodule Apothecary.Concoction do
-  @moduledoc "Struct representing a concoction (unit of work/PR)."
+defmodule Apothecary.Worktree do
+  @moduledoc "Struct representing a worktree (unit of work/PR)."
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
@@ -10,7 +10,7 @@ defmodule Apothecary.Concoction do
           description: String.t() | nil,
           git_path: String.t() | nil,
           git_branch: String.t() | nil,
-          parent_concoction_id: String.t() | nil,
+          parent_worktree_id: String.t() | nil,
           assigned_brewer_id: integer() | nil,
           created_at: String.t() | nil,
           updated_at: String.t() | nil,
@@ -34,7 +34,7 @@ defmodule Apothecary.Concoction do
     :description,
     :git_path,
     :git_branch,
-    :parent_concoction_id,
+    :parent_worktree_id,
     :assigned_brewer_id,
     :created_at,
     :updated_at,
@@ -42,17 +42,17 @@ defmodule Apothecary.Concoction do
     :notes,
     :mcp_servers,
     kind: "task",
-    type: "concoction",
+    type: "worktree",
     parent: nil,
     assigned_to: nil,
     blockers: [],
     dependents: []
   ]
 
-  @doc "Build a Concoction struct from a Mnesia record tuple."
+  @doc "Build a Worktree struct from a Mnesia record tuple."
   def from_record(
-        {:apothecary_concoctions, id, project_id, status, title, priority, git_path, git_branch,
-         parent_concoction_id, assigned_brewer_id, data}
+        {:apothecary_worktrees, id, project_id, status, title, priority, git_path, git_branch,
+         parent_worktree_id, assigned_brewer_id, data}
       ) do
     %__MODULE__{
       id: id,
@@ -62,9 +62,9 @@ defmodule Apothecary.Concoction do
       priority: priority,
       git_path: git_path,
       git_branch: git_branch,
-      parent_concoction_id: parent_concoction_id,
+      parent_worktree_id: parent_worktree_id,
       assigned_brewer_id: assigned_brewer_id,
-      parent: parent_concoction_id,
+      parent: parent_worktree_id,
       assigned_to: assigned_brewer_id && "brewer-#{assigned_brewer_id}",
       description: data[:description],
       notes: data[:notes],
@@ -80,8 +80,8 @@ defmodule Apothecary.Concoction do
 
   @doc "Convert to a Mnesia record tuple."
   def to_record(%__MODULE__{} = wt) do
-    {:apothecary_concoctions, wt.id, wt.project_id, wt.status, wt.title, wt.priority, wt.git_path,
-     wt.git_branch, wt.parent_concoction_id, wt.assigned_brewer_id,
+    {:apothecary_worktrees, wt.id, wt.project_id, wt.status, wt.title, wt.priority, wt.git_path,
+     wt.git_branch, wt.parent_worktree_id, wt.assigned_brewer_id,
      %{
        description: wt.description,
        notes: wt.notes,

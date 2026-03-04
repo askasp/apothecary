@@ -2,7 +2,7 @@ defmodule Apothecary.McpConfig do
   @moduledoc """
   Builds the .mcp.json config for brewer worktrees by merging:
   1. Project-level MCP servers (from the main project's .mcp.json)
-  2. Per-concoction MCP servers (from the concoction's mcp_servers field)
+  2. Per-worktree MCP servers (from the worktree's mcp_servers field)
   3. The apothecary orchestrator MCP server (always included, cannot be overridden)
   """
 
@@ -11,7 +11,7 @@ defmodule Apothecary.McpConfig do
 
   Returns a map ready to be JSON-encoded and written to .mcp.json.
   """
-  def build(agent_id, concoction_id, opts \\ []) do
+  def build(agent_id, worktree_id, opts \\ []) do
     port = Keyword.get(opts, :port, Application.get_env(:apothecary, :port, 4000))
     project_dir = Keyword.get(opts, :project_dir, Application.get_env(:apothecary, :project_dir))
     extra_mcps = Keyword.get(opts, :extra_mcps, %{})
@@ -20,13 +20,13 @@ defmodule Apothecary.McpConfig do
       "apothecary" => %{
         "type" => "http",
         "url" =>
-          "http://localhost:#{port}/mcp?brewer_id=#{agent_id}&concoction_id=#{concoction_id}"
+          "http://localhost:#{port}/mcp?brewer_id=#{agent_id}&worktree_id=#{worktree_id}"
       }
     }
 
     project_mcps = read_project_mcp_servers(project_dir)
 
-    # Merge order: project-level < per-concoction < apothecary (apothecary always wins)
+    # Merge order: project-level < per-worktree < apothecary (apothecary always wins)
     servers =
       project_mcps
       |> Map.merge(normalize(extra_mcps))

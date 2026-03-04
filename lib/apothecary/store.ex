@@ -6,8 +6,8 @@ defmodule Apothecary.Store do
 
   @tables [
     :apothecary_projects,
-    :apothecary_concoctions,
-    :apothecary_ingredients,
+    :apothecary_worktrees,
+    :apothecary_tasks,
     :apothecary_recipes,
     :apothecary_settings
   ]
@@ -47,7 +47,7 @@ defmodule Apothecary.Store do
       node: node
     )
 
-    create_table(:apothecary_concoctions,
+    create_table(:apothecary_worktrees,
       attributes: [
         :id,
         :project_id,
@@ -56,18 +56,18 @@ defmodule Apothecary.Store do
         :priority,
         :git_path,
         :git_branch,
-        :parent_concoction_id,
+        :parent_worktree_id,
         :assigned_brewer_id,
         :data
       ],
-      index: [:project_id, :status, :parent_concoction_id, :assigned_brewer_id],
+      index: [:project_id, :status, :parent_worktree_id, :assigned_brewer_id],
       copies_type: copies_type,
       node: node
     )
 
-    create_table(:apothecary_ingredients,
-      attributes: [:id, :concoction_id, :status, :title, :priority, :data],
-      index: [:concoction_id, :status],
+    create_table(:apothecary_tasks,
+      attributes: [:id, :worktree_id, :status, :title, :priority, :data],
+      index: [:worktree_id, :status],
       copies_type: copies_type,
       node: node
     )

@@ -78,6 +78,14 @@ let Hooks = {
           el.scrollBy({ top: amount, behavior: "smooth" })
         }
       })
+      this.handleEvent("focus-oracle-input", () => {
+        const el = document.getElementById("oracle-input")
+        if (el) el.focus()
+      })
+      this.handleEvent("focus-primary-input", () => {
+        const el = document.getElementById("primary-input")
+        if (el) el.focus()
+      })
     },
     updated() {
       if (!document.activeElement || document.activeElement === document.body) {

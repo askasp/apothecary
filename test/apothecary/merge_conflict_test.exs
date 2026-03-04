@@ -1,7 +1,7 @@
 defmodule Apothecary.MergeConflictTest do
   use ExUnit.Case
 
-  alias Apothecary.{Git, Ingredients}
+  alias Apothecary.{Git, Worktrees}
 
   describe "Git.merge_conflict?/1" do
     test "detects CONFLICT keyword" do
@@ -57,96 +57,96 @@ defmodule Apothecary.MergeConflictTest do
     end
   end
 
-  describe "merge conflict ingredient creation flow" do
+  describe "merge conflict task creation flow" do
     setup do
-      Phoenix.PubSub.subscribe(Apothecary.PubSub, "ingredients:updates")
+      Phoenix.PubSub.subscribe(Apothecary.PubSub, "worktrees:updates")
 
-      {:ok, concoction} =
-        Ingredients.create_concoction(%{title: "Test merge conflict", status: "in_progress"})
+      {:ok, worktree} =
+        Worktrees.create_worktree(%{title: "Test merge conflict", status: "in_progress"})
 
       # Drain creation broadcast
       receive do
-        {:ingredients_update, _} -> :ok
+        {:worktrees_update, _} -> :ok
       after
         200 -> :ok
       end
 
-      {:ok, concoction: concoction}
+      {:ok, worktree: worktree}
     end
 
-    test "creates fix ingredient and sets merge_conflict status", %{concoction: concoction} do
+    test "creates fix task and sets merge_conflict status", %{worktree: worktree} do
       # Simulate what handle_merge_conflict does
       conflict_files = ["lib/foo.ex", "lib/bar.ex"]
       files_list = Enum.join(conflict_files, ", ")
 
-      {:ok, ingredient} =
-        Ingredients.create_ingredient(%{
-          concoction_id: concoction.id,
+      {:ok, task} =
+        Worktrees.create_task(%{
+          worktree_id: worktree.id,
           title: "Fix merge conflicts with main",
           priority: 0,
           description: "Conflicting files: #{files_list}",
           status: "blocked"
         })
 
-      {:ok, _} = Ingredients.update_concoction(concoction.id, %{status: "merge_conflict"})
+      {:ok, _} = Worktrees.update_worktree(worktree.id, %{status: "merge_conflict"})
 
       # Drain broadcasts
       Process.sleep(100)
 
-      # Verify the ingredient was created with correct properties
-      {:ok, fetched} = Ingredients.get_ingredient(ingredient.id)
+      # Verify the task was created with correct properties
+      {:ok, fetched} = Worktrees.get_task(task.id)
       assert fetched.title == "Fix merge conflicts with main"
       assert fetched.status == "blocked"
       assert fetched.priority == 0
-      assert fetched.concoction_id == concoction.id
+      assert fetched.worktree_id == worktree.id
 
-      # Verify concoction is in merge_conflict status
-      {:ok, fetched_concoction} = Ingredients.get_concoction(concoction.id)
-      assert fetched_concoction.status == "merge_conflict"
+      # Verify worktree is in merge_conflict status
+      {:ok, fetched_worktree} = Worktrees.get_worktree(worktree.id)
+      assert fetched_worktree.status == "merge_conflict"
     end
 
-    test "approve flow: unblocking ingredient and setting concoction to open", %{
-      concoction: concoction
+    test "approve flow: unblocking task and setting worktree to open", %{
+      worktree: worktree
     } do
-      # Create the blocked fix ingredient
-      {:ok, ingredient} =
-        Ingredients.create_ingredient(%{
-          concoction_id: concoction.id,
+      # Create the blocked fix task
+      {:ok, task} =
+        Worktrees.create_task(%{
+          worktree_id: worktree.id,
           title: "Fix merge conflicts with main",
           priority: 0,
           status: "blocked"
         })
 
-      {:ok, _} = Ingredients.update_concoction(concoction.id, %{status: "merge_conflict"})
+      {:ok, _} = Worktrees.update_worktree(worktree.id, %{status: "merge_conflict"})
 
       # Simulate approve action (what the dashboard handler does)
-      {:ok, _} = Ingredients.update_ingredient(ingredient.id, %{status: "open"})
-      {:ok, _} = Ingredients.update_concoction(concoction.id, %{status: "open"})
+      {:ok, _} = Worktrees.update_task(task.id, %{status: "open"})
+      {:ok, _} = Worktrees.update_worktree(worktree.id, %{status: "open"})
 
       # Drain broadcasts
       Process.sleep(100)
 
-      # Verify ingredient is now open
-      {:ok, fetched} = Ingredients.get_ingredient(ingredient.id)
+      # Verify task is now open
+      {:ok, fetched} = Worktrees.get_task(task.id)
       assert fetched.status == "open"
 
-      # Verify concoction is open and ready for dispatch
-      {:ok, fetched_concoction} = Ingredients.get_concoction(concoction.id)
-      assert fetched_concoction.status == "open"
+      # Verify worktree is open and ready for dispatch
+      {:ok, fetched_worktree} = Worktrees.get_worktree(worktree.id)
+      assert fetched_worktree.status == "open"
     end
 
-    test "push failure recovery: concoction moves to brew_done", %{concoction: concoction} do
+    test "push failure recovery: worktree moves to brew_done", %{worktree: worktree} do
       # Simulate: brewer was assigned (in_progress with brewer)
       {:ok, _} =
-        Ingredients.update_concoction(concoction.id, %{
+        Worktrees.update_worktree(worktree.id, %{
           status: "in_progress",
           assigned_brewer_id: 1
         })
 
       # Simulate what happens when push fails in push_and_finalize:
-      # The concoction should be set to brew_done with brewer cleared
+      # The worktree should be set to brew_done with brewer cleared
       {:ok, _} =
-        Ingredients.update_concoction(concoction.id, %{
+        Worktrees.update_worktree(worktree.id, %{
           status: "brew_done",
           assigned_brewer_id: nil
         })
@@ -154,8 +154,8 @@ defmodule Apothecary.MergeConflictTest do
       # Drain broadcasts
       Process.sleep(100)
 
-      # Verify concoction is in brew_done (assaying lane) and not stuck in in_progress
-      {:ok, fetched} = Ingredients.get_concoction(concoction.id)
+      # Verify worktree is in brew_done (reviewing lane) and not stuck in in_progress
+      {:ok, fetched} = Worktrees.get_worktree(worktree.id)
       assert fetched.status == "brew_done"
       assert fetched.assigned_brewer_id == nil
     end

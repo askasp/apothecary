@@ -1,11 +1,11 @@
-defmodule Apothecary.MCP.Tools.CreateIngredient do
-  @moduledoc "Create a new ingredient in your assigned concoction. Use this to decompose complex work into trackable steps."
+defmodule Apothecary.MCP.Tools.CreateTask do
+  @moduledoc "Create a new task in your assigned worktree. Use this to decompose complex work into trackable steps."
   use Hermes.Server.Component, type: :tool
 
   alias Hermes.Server.Response
 
   schema do
-    field(:title, {:required, :string}, description: "Short title for the ingredient")
+    field(:title, {:required, :string}, description: "Short title for the task")
 
     field(:description, :string, description: "Detailed description of what needs to be done")
 
@@ -14,31 +14,31 @@ defmodule Apothecary.MCP.Tools.CreateIngredient do
 
   @impl true
   def execute(params, frame) do
-    concoction_id = Apothecary.MCP.Server.concoction_id(frame)
+    worktree_id = Apothecary.MCP.Server.worktree_id(frame)
 
-    unless concoction_id do
-      response = Response.tool() |> Response.text("Error: no concoction_id in session")
+    unless worktree_id do
+      response = Response.tool() |> Response.text("Error: no worktree_id in session")
       {:reply, response, frame}
     else
       attrs = %{
         title: params.title,
-        concoction_id: concoction_id,
+        worktree_id: worktree_id,
         description: params[:description],
         priority: params[:priority] || 3
       }
 
-      case Apothecary.Ingredients.create_ingredient(attrs) do
-        {:ok, ingredient} ->
+      case Apothecary.Worktrees.create_task(attrs) do
+        {:ok, task} ->
           response =
             Response.tool()
-            |> Response.text("Created ingredient #{ingredient.id}: #{ingredient.title}")
+            |> Response.text("Created task #{task.id}: #{task.title}")
 
           {:reply, response, frame}
 
         {:error, reason} ->
           response =
             Response.tool()
-            |> Response.text("Failed to create ingredient: #{inspect(reason)}")
+            |> Response.text("Failed to create task: #{inspect(reason)}")
 
           {:reply, response, frame}
       end

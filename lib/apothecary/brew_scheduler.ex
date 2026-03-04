@@ -3,7 +3,7 @@ defmodule Apothecary.BrewScheduler do
   Schedules recurring brews based on cron expressions.
 
   On startup, loads all enabled recipes and calculates the time until each
-  should fire next. Uses Process.send_after to trigger concoction creation
+  should fire next. Uses Process.send_after to trigger worktree creation
   at the right time. Naturally handles reboots by recalculating on startup.
 
   Subscribes to recipe PubSub to react to recipe changes (create, toggle, delete, update).
@@ -28,7 +28,7 @@ defmodule Apothecary.BrewScheduler do
 
   @impl true
   def init(_opts) do
-    Apothecary.Ingredients.subscribe_recipes()
+    Apothecary.Worktrees.subscribe_recipes()
     # Delay initial scheduling to ensure Mnesia tables are ready
     Process.send_after(self(), :init_schedules, 2_000)
     {:ok, %__MODULE__{}}
@@ -73,7 +73,7 @@ defmodule Apothecary.BrewScheduler do
 
   @impl true
   def handle_call(:status, _from, state) do
-    recipes = Apothecary.Ingredients.list_recipes()
+    recipes = Apothecary.Worktrees.list_recipes()
 
     scheduled =
       Enum.map(recipes, fn recipe ->
@@ -94,7 +94,7 @@ defmodule Apothecary.BrewScheduler do
   # --- Private ---
 
   defp schedule_all_recipes(state) do
-    recipes = Apothecary.Ingredients.list_recipes(enabled: true)
+    recipes = Apothecary.Worktrees.list_recipes(enabled: true)
     Logger.info("BrewScheduler: loading #{length(recipes)} enabled recipe(s)")
 
     Enum.reduce(recipes, state, fn recipe, acc ->
@@ -148,27 +148,27 @@ defmodule Apothecary.BrewScheduler do
   end
 
   defp fire_recipe(recipe_id, state) do
-    case Apothecary.Ingredients.get_recipe(recipe_id) do
+    case Apothecary.Worktrees.get_recipe(recipe_id) do
       {:ok, recipe} ->
         if recipe.enabled do
           Logger.info("BrewScheduler: firing recipe #{recipe.id} (#{recipe.title})")
 
-          # Create a concoction from the recipe
-          concoction_attrs = %{
+          # Create a worktree from the recipe
+          worktree_attrs = %{
             title: recipe.title,
             description: recipe.description,
             priority: recipe.priority || 3
           }
 
-          case Apothecary.Ingredients.create_concoction(concoction_attrs) do
-            {:ok, concoction} ->
+          case Apothecary.Worktrees.create_worktree(worktree_attrs) do
+            {:ok, worktree} ->
               Logger.info(
-                "BrewScheduler: created concoction #{concoction.id} from recipe #{recipe.id}"
+                "BrewScheduler: created worktree #{worktree.id} from recipe #{recipe.id}"
               )
 
             {:error, reason} ->
               Logger.error(
-                "BrewScheduler: failed to create concoction from recipe #{recipe.id}: #{inspect(reason)}"
+                "BrewScheduler: failed to create worktree from recipe #{recipe.id}: #{inspect(reason)}"
               )
           end
 
@@ -178,7 +178,7 @@ defmodule Apothecary.BrewScheduler do
           case next_run_ms(recipe.schedule) do
             {:ok, ms, next_dt} ->
               next_iso = DateTime.to_iso8601(next_dt)
-              Apothecary.Ingredients.mark_recipe_run(recipe_id, next_iso)
+              Apothecary.Worktrees.mark_recipe_run(recipe_id, next_iso)
               timer = Process.send_after(self(), {:fire_recipe, recipe_id}, ms)
 
               Logger.info(
@@ -192,7 +192,7 @@ defmodule Apothecary.BrewScheduler do
                 "BrewScheduler: failed to schedule next run for #{recipe.id}: #{inspect(reason)}"
               )
 
-              Apothecary.Ingredients.mark_recipe_run(recipe_id, nil)
+              Apothecary.Worktrees.mark_recipe_run(recipe_id, nil)
               state
           end
         else

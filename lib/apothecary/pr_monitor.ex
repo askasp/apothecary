@@ -1,10 +1,10 @@
 defmodule Apothecary.PRMonitor do
   @moduledoc """
-  Polls GitHub for PR status changes on concoctions with status "pr_open".
+  Polls GitHub for PR status changes on worktrees with status "pr_open".
 
-  - MERGED → mark_merged + cleanup_merged_concoction (releases disk, sets done)
+  - MERGED → mark_merged + cleanup_merged_worktree (releases disk, sets done)
   - CHANGES_REQUESTED → mark_revision_needed (dispatcher picks it up)
-  - CLOSED without merge → cleanup_cancelled_concoction (releases disk, sets cancelled)
+  - CLOSED without merge → cleanup_cancelled_worktree (releases disk, sets cancelled)
   - OPEN with no changes requested → no action
   """
 
@@ -36,13 +36,13 @@ defmodule Apothecary.PRMonitor do
   end
 
   defp check_all_prs do
-    concoctions = Apothecary.Ingredients.pr_open_concoctions()
+    worktrees = Apothecary.Worktrees.pr_open_worktrees()
 
-    Enum.each(concoctions, fn wt ->
+    Enum.each(worktrees, fn wt ->
       if wt.pr_url do
         check_pr(wt)
       else
-        Logger.warning("PRMonitor: concoction #{wt.id} is pr_open but has no pr_url")
+        Logger.warning("PRMonitor: worktree #{wt.id} is pr_open but has no pr_url")
       end
     end)
   end
@@ -53,18 +53,18 @@ defmodule Apothecary.PRMonitor do
     case Apothecary.Git.pr_status(project_dir, wt.pr_url) do
       {:ok, %{"state" => "MERGED"}} ->
         Logger.info("PRMonitor: PR merged for #{wt.id}, cleaning up")
-        Apothecary.Ingredients.add_note(wt.id, "PR merged: #{wt.pr_url}")
-        Apothecary.Ingredients.cleanup_merged_concoction(wt.id)
+        Apothecary.Worktrees.add_note(wt.id, "PR merged: #{wt.pr_url}")
+        Apothecary.Worktrees.cleanup_merged_worktree(wt.id)
 
       {:ok, %{"state" => "OPEN", "reviewDecision" => "CHANGES_REQUESTED"}} ->
         Logger.info("PRMonitor: Changes requested on #{wt.id}, marking for revision")
-        Apothecary.Ingredients.add_note(wt.id, "PR changes requested — re-dispatching brewer")
-        Apothecary.Ingredients.mark_revision_needed(wt.id)
+        Apothecary.Worktrees.add_note(wt.id, "PR changes requested — re-dispatching brewer")
+        Apothecary.Worktrees.mark_revision_needed(wt.id)
 
       {:ok, %{"state" => "CLOSED"}} ->
         Logger.info("PRMonitor: PR closed without merge for #{wt.id}, cleaning up")
-        Apothecary.Ingredients.add_note(wt.id, "PR closed without merge: #{wt.pr_url}")
-        Apothecary.Ingredients.cleanup_cancelled_concoction(wt.id)
+        Apothecary.Worktrees.add_note(wt.id, "PR closed without merge: #{wt.pr_url}")
+        Apothecary.Worktrees.cleanup_cancelled_worktree(wt.id)
 
       {:ok, %{"state" => "OPEN"}} ->
         :ok

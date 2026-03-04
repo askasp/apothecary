@@ -11,10 +11,10 @@ defmodule Apothecary.McpConfigTest do
       assert %{"apothecary" => apothecary} = servers
       assert apothecary["type"] == "http"
       assert apothecary["url"] =~ "brewer_id=1"
-      assert apothecary["url"] =~ "concoction_id=wt-abc123"
+      assert apothecary["url"] =~ "worktree_id=wt-abc123"
     end
 
-    test "merges per-concoction MCP servers" do
+    test "merges per-worktree MCP servers" do
       extra = %{
         "figma" => %{"type" => "http", "url" => "http://localhost:3845/sse"}
       }
@@ -64,7 +64,7 @@ defmodule Apothecary.McpConfigTest do
       Path.wildcard(tmp_dir) |> Enum.each(&File.rm_rf!/1)
     end
 
-    test "per-concoction MCPs override project-level MCPs with same name" do
+    test "per-worktree MCPs override project-level MCPs with same name" do
       tmp_dir =
         System.tmp_dir!() |> Path.join("mcp_config_test_#{System.unique_integer([:positive])}")
 

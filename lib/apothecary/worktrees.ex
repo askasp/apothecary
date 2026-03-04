@@ -1,18 +1,18 @@
-defmodule Apothecary.Ingredients do
+defmodule Apothecary.Worktrees do
   @moduledoc """
   BEAM-native task management backed by Mnesia.
   Replaces Poller + Beads with a single source of truth.
 
   Two-level model:
-  - Concoction: unit of work/PR, dispatched to brewers
-  - Ingredient: step within a concoction, managed by brewers
+  - Worktree: unit of work/PR, dispatched to brewers
+  - Task: step within a worktree, managed by brewers
   """
 
   use GenServer
   require Logger
 
   @pubsub Apothecary.PubSub
-  @topic "ingredients:updates"
+  @topic "worktrees:updates"
   @broadcast_debounce_ms 50
 
   # --- Client API ---
@@ -33,10 +33,10 @@ defmodule Apothecary.Ingredients do
 
   @doc "Get full state for dashboard mount (replaces Poller.get_state)."
   def get_state do
-    concoctions = list_concoctions()
-    ingredients = list_all_ingredients()
-    all_items = concoctions ++ ingredients
-    ready = compute_ready_concoctions(concoctions)
+    worktrees = list_worktrees()
+    tasks = list_all_tasks()
+    all_items = worktrees ++ tasks
+    ready = compute_ready_worktrees(worktrees)
 
     %{
       tasks: all_items,
@@ -49,15 +49,15 @@ defmodule Apothecary.Ingredients do
 
   @doc "Get state filtered by project_id."
   def get_state(project_id: project_id) do
-    concoctions = list_concoctions(project_id: project_id)
-    concoction_ids = MapSet.new(concoctions, & &1.id)
+    worktrees = list_worktrees(project_id: project_id)
+    worktree_ids = MapSet.new(worktrees, & &1.id)
 
-    ingredients =
-      list_all_ingredients()
-      |> Enum.filter(fn i -> MapSet.member?(concoction_ids, i.concoction_id) end)
+    tasks =
+      list_all_tasks()
+      |> Enum.filter(fn t -> MapSet.member?(worktree_ids, t.worktree_id) end)
 
-    all_items = concoctions ++ ingredients
-    ready = compute_ready_concoctions(concoctions)
+    all_items = worktrees ++ tasks
+    ready = compute_ready_worktrees(worktrees)
 
     %{
       tasks: all_items,
@@ -68,38 +68,38 @@ defmodule Apothecary.Ingredients do
     }
   end
 
-  @doc "Look up any item by ID (concoction or ingredient)."
+  @doc "Look up any item by ID (worktree or task)."
   def show(id) do
     id = to_string(id)
 
     if String.starts_with?(id, "wt-") do
-      get_concoction(id)
+      get_worktree(id)
     else
-      case get_ingredient(id) do
+      case get_task(id) do
         {:ok, _} = ok -> ok
-        {:error, :not_found} -> get_concoction(id)
+        {:error, :not_found} -> get_worktree(id)
       end
     end
   end
 
-  @doc "Get children of an item. For concoctions, returns ingredients. For ingredients, returns []."
+  @doc "Get children of an item. For worktrees, returns tasks. For tasks, returns []."
   def children(id) do
     id = to_string(id)
 
     if String.starts_with?(id, "wt-") do
-      {:ok, list_ingredients(concoction_id: id)}
+      {:ok, list_tasks(worktree_id: id)}
     else
       {:ok, []}
     end
   end
 
-  @doc "Create a concoction or ingredient based on attrs (uses :parent to decide)."
+  @doc "Create a worktree or task based on attrs (uses :parent to decide)."
   def create(attrs) do
-    if attrs[:parent] || attrs[:concoction_id] do
-      concoction_id = attrs[:concoction_id] || attrs[:parent]
-      create_ingredient(Map.put(attrs, :concoction_id, concoction_id))
+    if attrs[:parent] || attrs[:worktree_id] do
+      worktree_id = attrs[:worktree_id] || attrs[:parent]
+      create_task(Map.put(attrs, :worktree_id, worktree_id))
     else
-      create_concoction(attrs)
+      create_worktree(attrs)
     end
   end
 
@@ -108,9 +108,9 @@ defmodule Apothecary.Ingredients do
     id = to_string(id)
 
     if String.starts_with?(id, "wt-") do
-      update_concoction(id, %{status: "in_progress"})
+      update_worktree(id, %{status: "in_progress"})
     else
-      update_ingredient(id, %{status: "in_progress"})
+      update_task(id, %{status: "in_progress"})
     end
   end
 
@@ -119,9 +119,9 @@ defmodule Apothecary.Ingredients do
     id = to_string(id)
 
     if String.starts_with?(id, "wt-") do
-      close_concoction(id, reason)
+      close_worktree(id, reason)
     else
-      close_ingredient(id, reason)
+      close_task(id, reason)
     end
   end
 
@@ -130,20 +130,20 @@ defmodule Apothecary.Ingredients do
     id = to_string(id)
 
     if String.starts_with?(id, "wt-") do
-      update_concoction(id, %{status: "open", assigned_brewer_id: nil})
+      update_worktree(id, %{status: "open", assigned_brewer_id: nil})
     else
-      update_ingredient(id, %{status: "open"})
+      update_task(id, %{status: "open"})
     end
   end
 
-  @doc "Generic update — dispatches to concoction or ingredient based on ID prefix."
+  @doc "Generic update — dispatches to worktree or task based on ID prefix."
   def update(id, changes) do
     id = to_string(id)
 
     if String.starts_with?(id, "wt-") do
-      update_concoction(id, changes)
+      update_worktree(id, changes)
     else
-      update_ingredient(id, changes)
+      update_task(id, changes)
     end
   end
 
@@ -156,7 +156,7 @@ defmodule Apothecary.Ingredients do
   @doc "Requeue all orphaned items (in_progress but not actively worked)."
   def requeue_all_orphans(active_ids) do
     active_set = MapSet.new(active_ids, &to_string/1)
-    all = list_concoctions() ++ list_all_ingredients()
+    all = list_worktrees() ++ list_all_tasks()
 
     orphans =
       Enum.filter(all, fn item ->
@@ -167,32 +167,32 @@ defmodule Apothecary.Ingredients do
     {:ok, length(orphans)}
   end
 
-  @doc "Check if all ingredients in a concoction are done."
-  def all_ingredients_done?(concoction_id) do
-    ingredients = list_ingredients(concoction_id: concoction_id)
-    ingredients != [] and Enum.all?(ingredients, &(&1.status == "done"))
+  @doc "Check if all tasks in a worktree are done."
+  def all_tasks_done?(worktree_id) do
+    tasks = list_tasks(worktree_id: worktree_id)
+    tasks != [] and Enum.all?(tasks, &(&1.status == "done"))
   end
 
-  @doc "Check if a concoction has any ingredients."
-  def has_ingredients?(concoction_id) do
-    list_ingredients(concoction_id: concoction_id) != []
+  @doc "Check if a worktree has any tasks."
+  def has_tasks?(worktree_id) do
+    list_tasks(worktree_id: worktree_id) != []
   end
 
   def stats do
-    items = list_concoctions() ++ list_all_ingredients()
+    items = list_worktrees() ++ list_all_tasks()
     {:ok, compute_stats(items)}
   end
 
-  # --- Concoction Operations ---
+  # --- Worktree Operations ---
 
-  def create_concoction(attrs) do
+  def create_worktree(attrs) do
     id = generate_id("wt")
     now = DateTime.utc_now() |> DateTime.to_iso8601()
 
     record =
-      {:apothecary_concoctions, id, attrs[:project_id], Map.get(attrs, :status, "open"),
+      {:apothecary_worktrees, id, attrs[:project_id], Map.get(attrs, :status, "open"),
        attrs[:title], Map.get(attrs, :priority, 3), attrs[:git_path], attrs[:git_branch],
-       attrs[:parent_concoction_id], nil,
+       attrs[:parent_worktree_id], nil,
        %{
          description: attrs[:description],
          notes: nil,
@@ -208,38 +208,38 @@ defmodule Apothecary.Ingredients do
     case :mnesia.transaction(fn -> :mnesia.write(record) end) do
       {:atomic, :ok} ->
         schedule_broadcast()
-        {:ok, Apothecary.Concoction.from_record(record)}
+        {:ok, Apothecary.Worktree.from_record(record)}
 
       {:aborted, reason} ->
         {:error, reason}
     end
   end
 
-  def get_concoction(id) do
-    case :mnesia.dirty_read(:apothecary_concoctions, id) do
-      [record] -> {:ok, Apothecary.Concoction.from_record(record)}
+  def get_worktree(id) do
+    case :mnesia.dirty_read(:apothecary_worktrees, id) do
+      [record] -> {:ok, Apothecary.Worktree.from_record(record)}
       [] -> {:error, :not_found}
     end
   end
 
-  def list_concoctions do
-    :mnesia.dirty_match_object({:apothecary_concoctions, :_, :_, :_, :_, :_, :_, :_, :_, :_, :_})
-    |> Enum.map(&Apothecary.Concoction.from_record/1)
+  def list_worktrees do
+    :mnesia.dirty_match_object({:apothecary_worktrees, :_, :_, :_, :_, :_, :_, :_, :_, :_, :_})
+    |> Enum.map(&Apothecary.Worktree.from_record/1)
   end
 
-  def list_concoctions(project_id: project_id) do
+  def list_worktrees(project_id: project_id) do
     :mnesia.dirty_match_object(
-      {:apothecary_concoctions, :_, project_id, :_, :_, :_, :_, :_, :_, :_, :_}
+      {:apothecary_worktrees, :_, project_id, :_, :_, :_, :_, :_, :_, :_, :_}
     )
-    |> Enum.map(&Apothecary.Concoction.from_record/1)
+    |> Enum.map(&Apothecary.Worktree.from_record/1)
   end
 
-  def update_concoction(id, changes) do
+  def update_worktree(id, changes) do
     result =
       :mnesia.transaction(fn ->
-        case :mnesia.read(:apothecary_concoctions, id) do
+        case :mnesia.read(:apothecary_worktrees, id) do
           [record] ->
-            updated = apply_concoction_changes(record, changes)
+            updated = apply_worktree_changes(record, changes)
             :mnesia.write(updated)
             updated
 
@@ -256,7 +256,7 @@ defmodule Apothecary.Ingredients do
           schedule_broadcast()
         end
 
-        {:ok, Apothecary.Concoction.from_record(record)}
+        {:ok, Apothecary.Worktree.from_record(record)}
 
       {:aborted, :not_found} ->
         {:error, :not_found}
@@ -266,11 +266,11 @@ defmodule Apothecary.Ingredients do
     end
   end
 
-  @doc "Atomically claim a concoction for a brewer (checks status + assignment)."
-  def claim_concoction(id, brewer_id) do
+  @doc "Atomically claim a worktree for a brewer (checks status + assignment)."
+  def claim_worktree(id, brewer_id) do
     result =
       :mnesia.transaction(fn ->
-        case :mnesia.wread({:apothecary_concoctions, id}) do
+        case :mnesia.wread({:apothecary_worktrees, id}) do
           [record] ->
             status = elem(record, 3)
             current_brewer = elem(record, 9)
@@ -298,48 +298,48 @@ defmodule Apothecary.Ingredients do
     case result do
       {:atomic, record} ->
         broadcast_immediately()
-        {:ok, Apothecary.Concoction.from_record(record)}
+        {:ok, Apothecary.Worktree.from_record(record)}
 
       {:aborted, reason} ->
         {:error, reason}
     end
   end
 
-  def release_concoction(id) do
-    update_concoction(id, %{status: "open", assigned_brewer_id: nil})
+  def release_worktree(id) do
+    update_worktree(id, %{status: "open", assigned_brewer_id: nil})
   end
 
-  def close_concoction(id, _reason \\ "Completed") do
-    update_concoction(id, %{status: "done", assigned_brewer_id: nil})
+  def close_worktree(id, _reason \\ "Completed") do
+    update_worktree(id, %{status: "done", assigned_brewer_id: nil})
   end
 
-  def ready_concoctions do
-    list_concoctions() |> compute_ready_concoctions()
+  def ready_worktrees do
+    list_worktrees() |> compute_ready_worktrees()
   end
 
-  def ready_concoctions(project_id: project_id) do
-    list_concoctions(project_id: project_id) |> compute_ready_concoctions()
+  def ready_worktrees(project_id: project_id) do
+    list_worktrees(project_id: project_id) |> compute_ready_worktrees()
   end
 
-  @doc "List concoctions with status pr_open."
-  def pr_open_concoctions do
-    list_concoctions() |> Enum.filter(&(&1.status == "pr_open"))
+  @doc "List worktrees with status pr_open."
+  def pr_open_worktrees do
+    list_worktrees() |> Enum.filter(&(&1.status == "pr_open"))
   end
 
-  @doc "Mark a concoction as merged."
+  @doc "Mark a worktree as merged."
   def mark_merged(id) do
-    update_concoction(id, %{status: "merged", assigned_brewer_id: nil})
+    update_worktree(id, %{status: "merged", assigned_brewer_id: nil})
   end
 
-  @doc "Mark a concoction as needing revision (changes requested on PR)."
+  @doc "Mark a worktree as needing revision (changes requested on PR)."
   def mark_revision_needed(id) do
-    update_concoction(id, %{status: "revision_needed", assigned_brewer_id: nil})
+    update_worktree(id, %{status: "revision_needed", assigned_brewer_id: nil})
   end
 
-  @doc "Clean up a merged concoction from disk and set status to done."
-  def cleanup_merged_concoction(id) do
+  @doc "Clean up a merged worktree from disk and set status to done."
+  def cleanup_merged_worktree(id) do
     # Update status FIRST so the card moves to "bottled" even if cleanup fails
-    update_concoction(id, %{status: "done", assigned_brewer_id: nil})
+    update_worktree(id, %{status: "done", assigned_brewer_id: nil})
 
     # Best-effort cleanup — don't let failures leave status stuck in pr_open
     try do
@@ -347,7 +347,7 @@ defmodule Apothecary.Ingredients do
     catch
       :exit, reason ->
         Logger.warning(
-          "cleanup_merged_concoction: DevServer.stop_server failed for #{id}: #{inspect(reason)}"
+          "cleanup_merged_worktree: DevServer.stop_server failed for #{id}: #{inspect(reason)}"
         )
     end
 
@@ -362,35 +362,35 @@ defmodule Apothecary.Ingredients do
           :ok
 
         {:error, reason} ->
-          Logger.warning("cleanup_merged_concoction: pull_main failed: #{inspect(reason)}")
+          Logger.warning("cleanup_merged_worktree: pull_main failed: #{inspect(reason)}")
       end
     end
   end
 
-  @doc "Clean up a cancelled concoction (PR closed without merge) — release disk, set cancelled."
-  def cleanup_cancelled_concoction(id) do
-    update_concoction(id, %{status: "cancelled", assigned_brewer_id: nil})
+  @doc "Clean up a cancelled worktree (PR closed without merge) — release disk, set cancelled."
+  def cleanup_cancelled_worktree(id) do
+    update_worktree(id, %{status: "cancelled", assigned_brewer_id: nil})
 
     try do
       Apothecary.DevServer.stop_server(id)
     catch
       :exit, reason ->
         Logger.warning(
-          "cleanup_cancelled_concoction: DevServer.stop_server failed for #{id}: #{inspect(reason)}"
+          "cleanup_cancelled_worktree: DevServer.stop_server failed for #{id}: #{inspect(reason)}"
         )
     end
 
     Apothecary.WorktreeManager.release(id)
   end
 
-  # --- Ingredient Operations ---
+  # --- Task Operations ---
 
-  def create_ingredient(attrs) do
+  def create_task(attrs) do
     id = generate_id("t")
     now = DateTime.utc_now() |> DateTime.to_iso8601()
 
     record =
-      {:apothecary_ingredients, id, attrs[:concoction_id] || attrs[:parent],
+      {:apothecary_tasks, id, attrs[:worktree_id] || attrs[:parent],
        Map.get(attrs, :status, "open"), attrs[:title], Map.get(attrs, :priority, 3),
        %{
          description: attrs[:description],
@@ -404,39 +404,39 @@ defmodule Apothecary.Ingredients do
     case :mnesia.transaction(fn -> :mnesia.write(record) end) do
       {:atomic, :ok} ->
         schedule_broadcast()
-        {:ok, Apothecary.Ingredient.from_record(record)}
+        {:ok, Apothecary.Task.from_record(record)}
 
       {:aborted, reason} ->
         {:error, reason}
     end
   end
 
-  def get_ingredient(id) do
-    case :mnesia.dirty_read(:apothecary_ingredients, id) do
-      [record] -> {:ok, Apothecary.Ingredient.from_record(record)}
+  def get_task(id) do
+    case :mnesia.dirty_read(:apothecary_tasks, id) do
+      [record] -> {:ok, Apothecary.Task.from_record(record)}
       [] -> {:error, :not_found}
     end
   end
 
-  def list_all_ingredients do
-    :mnesia.dirty_match_object({:apothecary_ingredients, :_, :_, :_, :_, :_, :_})
-    |> Enum.map(&Apothecary.Ingredient.from_record/1)
+  def list_all_tasks do
+    :mnesia.dirty_match_object({:apothecary_tasks, :_, :_, :_, :_, :_, :_})
+    |> Enum.map(&Apothecary.Task.from_record/1)
   end
 
-  def list_ingredients(filters \\ []) do
-    ingredients = list_all_ingredients()
+  def list_tasks(filters \\ []) do
+    tasks = list_all_tasks()
 
-    ingredients
-    |> maybe_filter(:concoction_id, filters[:concoction_id])
+    tasks
+    |> maybe_filter(:worktree_id, filters[:worktree_id])
     |> maybe_filter(:status, filters[:status])
   end
 
-  def update_ingredient(id, changes) do
+  def update_task(id, changes) do
     result =
       :mnesia.transaction(fn ->
-        case :mnesia.read(:apothecary_ingredients, id) do
+        case :mnesia.read(:apothecary_tasks, id) do
           [record] ->
-            updated = apply_ingredient_changes(record, changes)
+            updated = apply_task_changes(record, changes)
             :mnesia.write(updated)
             updated
 
@@ -453,7 +453,7 @@ defmodule Apothecary.Ingredients do
           schedule_broadcast()
         end
 
-        {:ok, Apothecary.Ingredient.from_record(record)}
+        {:ok, Apothecary.Task.from_record(record)}
 
       {:aborted, :not_found} ->
         {:error, :not_found}
@@ -463,11 +463,11 @@ defmodule Apothecary.Ingredients do
     end
   end
 
-  @doc "Close an ingredient and unblock dependents."
-  def close_ingredient(id, _reason \\ "Completed") do
+  @doc "Close a task and unblock dependents."
+  def close_task(id, _reason \\ "Completed") do
     result =
       :mnesia.transaction(fn ->
-        case :mnesia.read(:apothecary_ingredients, id) do
+        case :mnesia.read(:apothecary_tasks, id) do
           [record] ->
             now = DateTime.utc_now() |> DateTime.to_iso8601()
 
@@ -482,7 +482,7 @@ defmodule Apothecary.Ingredients do
             data = elem(updated, 6)
 
             Enum.each(data[:dependents] || [], fn dep_id ->
-              maybe_unblock_ingredient(dep_id)
+              maybe_unblock_task(dep_id)
             end)
 
             updated
@@ -498,7 +498,7 @@ defmodule Apothecary.Ingredients do
         # rather than waiting for the debounced broadcast which can batch multiple
         # completions into a single update.
         broadcast_immediately()
-        {:ok, Apothecary.Ingredient.from_record(record)}
+        {:ok, Apothecary.Task.from_record(record)}
 
       {:aborted, :not_found} ->
         {:error, :not_found}
@@ -508,14 +508,14 @@ defmodule Apothecary.Ingredients do
     end
   end
 
-  @doc "Add a note to a concoction or ingredient."
+  @doc "Add a note to a worktree or task."
   def add_note(id, note) do
     id = to_string(id)
 
     if String.starts_with?(id, "wt-") do
-      append_note(:apothecary_concoctions, id, 10, note, &Apothecary.Concoction.from_record/1)
+      append_note(:apothecary_worktrees, id, 10, note, &Apothecary.Worktree.from_record/1)
     else
-      append_note(:apothecary_ingredients, id, 6, note, &Apothecary.Ingredient.from_record/1)
+      append_note(:apothecary_tasks, id, 6, note, &Apothecary.Task.from_record/1)
     end
   end
 
@@ -541,7 +541,7 @@ defmodule Apothecary.Ingredients do
         end
 
         # Add blocker to blocked's blockers list
-        case :mnesia.read(:apothecary_ingredients, blocked_id) do
+        case :mnesia.read(:apothecary_tasks, blocked_id) do
           [blocked] ->
             blocked_data = elem(blocked, 6)
             blockers = Enum.uniq([blocker_id | blocked_data[:blockers] || []])
@@ -551,7 +551,7 @@ defmodule Apothecary.Ingredients do
 
             # If blocker is not done, set blocked to "blocked"
             blocked =
-              case :mnesia.read(:apothecary_ingredients, to_string(blocker_id)) do
+              case :mnesia.read(:apothecary_tasks, to_string(blocker_id)) do
                 [blocker_rec] ->
                   if elem(blocker_rec, 3) != "done",
                     do: put_elem(blocked, 3, "blocked"),
@@ -568,7 +568,7 @@ defmodule Apothecary.Ingredients do
         end
 
         # Add blocked to blocker's dependents list
-        case :mnesia.read(:apothecary_ingredients, to_string(blocker_id)) do
+        case :mnesia.read(:apothecary_tasks, to_string(blocker_id)) do
           [blocker] ->
             blocker_data = elem(blocker, 6)
             dependents = Enum.uniq([to_string(blocked_id) | blocker_data[:dependents] || []])
@@ -605,7 +605,7 @@ defmodule Apothecary.Ingredients do
       else
         visited = MapSet.put(visited, current_id)
 
-        case :mnesia.read(:apothecary_ingredients, current_id) do
+        case :mnesia.read(:apothecary_tasks, current_id) do
           [record] ->
             data = elem(record, 6)
             dependents = data[:dependents] || []
@@ -626,7 +626,7 @@ defmodule Apothecary.Ingredients do
         blocker_id = to_string(blocker_id)
 
         # Remove blocker from blocked's blockers list
-        case :mnesia.read(:apothecary_ingredients, blocked_id) do
+        case :mnesia.read(:apothecary_tasks, blocked_id) do
           [blocked] ->
             blocked_data = elem(blocked, 6)
             blockers = List.delete(blocked_data[:blockers] || [], blocker_id)
@@ -637,7 +637,7 @@ defmodule Apothecary.Ingredients do
             # Check if all remaining blockers are done
             all_done =
               Enum.all?(blockers, fn bid ->
-                case :mnesia.read(:apothecary_ingredients, bid) do
+                case :mnesia.read(:apothecary_tasks, bid) do
                   [rec] -> elem(rec, 3) == "done"
                   _ -> false
                 end
@@ -655,7 +655,7 @@ defmodule Apothecary.Ingredients do
         end
 
         # Remove blocked from blocker's dependents list
-        case :mnesia.read(:apothecary_ingredients, blocker_id) do
+        case :mnesia.read(:apothecary_tasks, blocker_id) do
           [blocker] ->
             blocker_data = elem(blocker, 6)
             dependents = List.delete(blocker_data[:dependents] || [], blocked_id)
@@ -886,29 +886,29 @@ defmodule Apothecary.Ingredients do
     Phoenix.PubSub.broadcast(@pubsub, @recipe_topic, message)
   end
 
-  def ready_ingredients(concoction_id) do
-    ingredients = list_ingredients(concoction_id: concoction_id)
-    ingredient_status_map = Map.new(ingredients, fn t -> {t.id, t.status} end)
-    Enum.filter(ingredients, &ingredient_ready?(&1, ingredient_status_map))
+  def ready_tasks(worktree_id) do
+    tasks = list_tasks(worktree_id: worktree_id)
+    task_status_map = Map.new(tasks, fn t -> {t.id, t.status} end)
+    Enum.filter(tasks, &task_ready?(&1, task_status_map))
   end
 
   # --- GenServer Callbacks ---
 
   @impl true
   def init(_opts) do
-    # Recover orphaned concoctions after brewers have had time to start
+    # Recover orphaned worktrees after brewers have had time to start
     Process.send_after(self(), :recover_orphans, 10_000)
     {:ok, %{broadcast_timer: nil}}
   end
 
   @impl true
   def handle_info(:recover_orphans, state) do
-    # Only requeue concoctions whose assigned brewer isn't actually running
+    # Only requeue worktrees whose assigned brewer isn't actually running
     active_brewer_ids = get_active_brewer_ids()
 
     case requeue_all_orphans(active_brewer_ids) do
       {:ok, 0} -> :ok
-      {:ok, count} -> Logger.info("Recovered #{count} orphaned concoction(s) on startup")
+      {:ok, count} -> Logger.info("Recovered #{count} orphaned worktree(s) on startup")
     end
 
     {:noreply, state}
@@ -917,7 +917,7 @@ defmodule Apothecary.Ingredients do
   @impl true
   def handle_info(:do_broadcast, state) do
     task_state = get_state()
-    Phoenix.PubSub.broadcast(@pubsub, @topic, {:ingredients_update, task_state})
+    Phoenix.PubSub.broadcast(@pubsub, @topic, {:worktrees_update, task_state})
     {:noreply, %{state | broadcast_timer: nil}}
   end
 
@@ -934,11 +934,11 @@ defmodule Apothecary.Ingredients do
   end
 
   # Bypass debounce — broadcast state immediately from the calling process.
-  # Used for status changes (e.g. ingredient completion) so the dashboard
+  # Used for status changes (e.g. task completion) so the dashboard
   # reflects progress in real-time instead of batching updates.
   defp broadcast_immediately do
     task_state = get_state()
-    Phoenix.PubSub.broadcast(@pubsub, @topic, {:ingredients_update, task_state})
+    Phoenix.PubSub.broadcast(@pubsub, @topic, {:worktrees_update, task_state})
   end
 
   # Leading-edge debounce: fires on the FIRST change in a window, then ignores
@@ -963,43 +963,43 @@ defmodule Apothecary.Ingredients do
 
   # --- Private: Ready Computation ---
 
-  defp compute_ready_concoctions(concoctions) do
-    # Pre-fetch all concoctions into a status map for O(1) lookups
-    wt_status_map = Map.new(concoctions, fn wt -> {wt.id, wt.status} end)
-    Enum.filter(concoctions, &concoction_ready?(&1, wt_status_map))
+  defp compute_ready_worktrees(worktrees) do
+    # Pre-fetch all worktrees into a status map for O(1) lookups
+    wt_status_map = Map.new(worktrees, fn wt -> {wt.id, wt.status} end)
+    Enum.filter(worktrees, &worktree_ready?(&1, wt_status_map))
   end
 
-  defp concoction_ready?(
-         %{status: status, assigned_brewer_id: nil, parent_concoction_id: nil},
+  defp worktree_ready?(
+         %{status: status, assigned_brewer_id: nil, parent_worktree_id: nil},
          _map
        )
        when status in ["open", "revision_needed"],
        do: true
 
-  defp concoction_ready?(
-         %{status: status, assigned_brewer_id: nil, parent_concoction_id: pid},
+  defp worktree_ready?(
+         %{status: status, assigned_brewer_id: nil, parent_worktree_id: pid},
          wt_status_map
        )
        when status in ["open", "revision_needed"] and not is_nil(pid) do
     Map.get(wt_status_map, pid) in ["done", "merged"]
   end
 
-  # PR is open but new ingredients were added — redispatch to work on them
-  defp concoction_ready?(%{status: "pr_open", assigned_brewer_id: nil, id: id}, _map) do
-    list_ingredients(concoction_id: id, status: "open") |> Enum.any?()
+  # PR is open but new tasks were added — redispatch to work on them
+  defp worktree_ready?(%{status: "pr_open", assigned_brewer_id: nil, id: id}, _map) do
+    list_tasks(worktree_id: id, status: "open") |> Enum.any?()
   end
 
-  defp concoction_ready?(_, _map), do: false
+  defp worktree_ready?(_, _map), do: false
 
-  defp ingredient_ready?(%{status: "open", blockers: []}, _ingredient_status_map), do: true
+  defp task_ready?(%{status: "open", blockers: []}, _task_status_map), do: true
 
-  defp ingredient_ready?(%{status: "open", blockers: blockers}, ingredient_status_map) do
+  defp task_ready?(%{status: "open", blockers: blockers}, task_status_map) do
     Enum.all?(blockers, fn blocker_id ->
-      Map.get(ingredient_status_map, blocker_id) == "done"
+      Map.get(task_status_map, blocker_id) == "done"
     end)
   end
 
-  defp ingredient_ready?(_, _ingredient_status_map), do: false
+  defp task_ready?(_, _task_status_map), do: false
 
   # --- Private: Stats ---
 
@@ -1021,8 +1021,8 @@ defmodule Apothecary.Ingredients do
 
   # --- Private: Record Manipulation ---
 
-  defp apply_concoction_changes(record, changes) do
-    {table, id, project_id, status, title, priority, git_path, git_branch, parent_concoction_id,
+  defp apply_worktree_changes(record, changes) do
+    {table, id, project_id, status, title, priority, git_path, git_branch, parent_worktree_id,
      assigned_brewer_id, data} = record
 
     now = DateTime.utc_now() |> DateTime.to_iso8601()
@@ -1032,7 +1032,7 @@ defmodule Apothecary.Ingredients do
     priority = Map.get(changes, :priority, priority)
     git_path = Map.get(changes, :git_path, git_path)
     git_branch = Map.get(changes, :git_branch, git_branch)
-    parent_concoction_id = Map.get(changes, :parent_concoction_id, parent_concoction_id)
+    parent_worktree_id = Map.get(changes, :parent_worktree_id, parent_worktree_id)
 
     assigned_brewer_id =
       if Map.has_key?(changes, :assigned_brewer_id),
@@ -1049,15 +1049,15 @@ defmodule Apothecary.Ingredients do
       |> maybe_put(:dependents, changes[:dependents])
       |> Map.put(:updated_at, now)
 
-    {table, id, project_id, status, title, priority, git_path, git_branch, parent_concoction_id,
+    {table, id, project_id, status, title, priority, git_path, git_branch, parent_worktree_id,
      assigned_brewer_id, data}
   end
 
-  defp apply_ingredient_changes(record, changes) do
-    {table, id, concoction_id, status, title, priority, data} = record
+  defp apply_task_changes(record, changes) do
+    {table, id, worktree_id, status, title, priority, data} = record
     now = DateTime.utc_now() |> DateTime.to_iso8601()
 
-    concoction_id = Map.get(changes, :concoction_id, concoction_id)
+    worktree_id = Map.get(changes, :worktree_id, worktree_id)
     status = Map.get(changes, :status, status)
     title = Map.get(changes, :title, title)
     priority = Map.get(changes, :priority, priority)
@@ -1070,7 +1070,7 @@ defmodule Apothecary.Ingredients do
       |> maybe_put(:dependents, changes[:dependents])
       |> Map.put(:updated_at, now)
 
-    {table, id, concoction_id, status, title, priority, data}
+    {table, id, worktree_id, status, title, priority, data}
   end
 
   defp maybe_put(map, _key, nil), do: map
@@ -1081,8 +1081,8 @@ defmodule Apothecary.Ingredients do
     put_elem(record, index, fun.(data))
   end
 
-  defp maybe_unblock_ingredient(ingredient_id) do
-    case :mnesia.read(:apothecary_ingredients, ingredient_id) do
+  defp maybe_unblock_task(task_id) do
+    case :mnesia.read(:apothecary_tasks, task_id) do
       [record] ->
         if elem(record, 3) == "blocked" do
           data = elem(record, 6)
@@ -1090,7 +1090,7 @@ defmodule Apothecary.Ingredients do
 
           all_done =
             Enum.all?(blockers, fn bid ->
-              case :mnesia.read(:apothecary_ingredients, bid) do
+              case :mnesia.read(:apothecary_tasks, bid) do
                 [rec] -> elem(rec, 3) == "done"
                 _ -> false
               end
@@ -1152,7 +1152,7 @@ defmodule Apothecary.Ingredients do
       status.agents
       |> Map.values()
       |> Enum.flat_map(fn agent ->
-        if agent.current_concoction, do: [agent.current_concoction.id], else: []
+        if agent.current_worktree, do: [agent.current_worktree.id], else: []
       end)
     rescue
       _ -> []
@@ -1163,8 +1163,8 @@ defmodule Apothecary.Ingredients do
 
   # --- Private: Filtering ---
 
-  defp resolve_project_dir(concoction_id) do
-    case get_concoction(concoction_id) do
+  defp resolve_project_dir(worktree_id) do
+    case get_worktree(worktree_id) do
       {:ok, %{project_id: project_id}} when not is_nil(project_id) ->
         case Apothecary.Projects.get(project_id) do
           {:ok, project} -> project.path

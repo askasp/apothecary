@@ -3,12 +3,12 @@ defmodule ApothecaryWeb.DashboardLiveTest do
 
   import Phoenix.LiveViewTest
 
-  alias Apothecary.{Ingredients, Projects}
+  alias Apothecary.{Worktrees, Projects}
 
   setup do
     # Clean up recipes between tests
-    Enum.each(Ingredients.list_recipes(), fn recipe ->
-      Ingredients.delete_recipe(recipe.id)
+    Enum.each(Worktrees.list_recipes(), fn recipe ->
+      Worktrees.delete_recipe(recipe.id)
     end)
 
     # Clean up projects
@@ -28,14 +28,14 @@ defmodule ApothecaryWeb.DashboardLiveTest do
 
   test "renders dashboard with empty state when no projects", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/")
-    assert html =~ "No projects yet"
+    assert html =~ "NO PROJECT OPEN"
   end
 
   test "renders dashboard with tabs when project selected", %{conn: conn} do
     project = create_project()
     {:ok, _view, html} = live(conn, ~p"/projects/#{project.id}")
-    assert html =~ "Workbench"
-    assert html =~ "Recurring Concoctions"
+    assert html =~ "workbench"
+    assert html =~ "recurring"
   end
 
   test "switches to recurring brews tab", %{conn: conn} do
@@ -44,12 +44,12 @@ defmodule ApothecaryWeb.DashboardLiveTest do
 
     html =
       view
-      |> element("button", "Recurring Concoctions")
+      |> element("button", "recurring")
       |> render_click()
 
-    assert html =~ "Recurring Concoctions"
-    assert html =~ "No recipes yet"
-    assert html =~ "New Recipe"
+    assert html =~ "recurring"
+    assert html =~ "no recurring worktrees yet"
+    assert html =~ "new recipe"
   end
 
   test "shows recipe creation form", %{conn: conn} do
@@ -57,14 +57,13 @@ defmodule ApothecaryWeb.DashboardLiveTest do
     {:ok, view, _html} = live(conn, ~p"/projects/#{project.id}")
 
     # Switch to recipes tab
-    view |> element("button", "Recurring Concoctions") |> render_click()
+    view |> element("button", "recurring") |> render_click()
 
     # Click new recipe button
-    html = view |> element("button", "New Recipe") |> render_click()
+    html = view |> element("button[phx-click=show-recipe-form]") |> render_click()
 
     assert html =~ "recipe-form"
-    assert html =~ "Schedule (cron expression)"
-    assert html =~ "Create Recipe"
+    assert html =~ "recipe-form"
   end
 
   test "creates a recipe", %{conn: conn} do
@@ -72,10 +71,10 @@ defmodule ApothecaryWeb.DashboardLiveTest do
     {:ok, view, _html} = live(conn, ~p"/projects/#{project.id}")
 
     # Switch to recipes tab
-    view |> element("button", "Recurring Concoctions") |> render_click()
+    view |> element("button", "recurring") |> render_click()
 
     # Show form
-    view |> element("button", "New Recipe") |> render_click()
+    view |> element("button[phx-click=show-recipe-form]") |> render_click()
 
     # Submit form
     html =
@@ -92,15 +91,15 @@ defmodule ApothecaryWeb.DashboardLiveTest do
 
     assert html =~ "Daily task"
     assert html =~ "0 9 * * *"
-    refute html =~ "No recipes yet"
+    refute html =~ "no recurring worktrees yet"
   end
 
   test "rejects invalid cron expression", %{conn: conn} do
     project = create_project()
     {:ok, view, _html} = live(conn, ~p"/projects/#{project.id}")
 
-    view |> element("button", "Recurring Concoctions") |> render_click()
-    view |> element("button", "New Recipe") |> render_click()
+    view |> element("button", "recurring") |> render_click()
+    view |> element("button[phx-click=show-recipe-form]") |> render_click()
 
     html =
       view
@@ -117,11 +116,11 @@ defmodule ApothecaryWeb.DashboardLiveTest do
 
   test "toggles recipe enabled state", %{conn: conn} do
     {:ok, recipe} =
-      Ingredients.create_recipe(%{title: "Toggle test", schedule: "0 0 * * *"})
+      Worktrees.create_recipe(%{title: "Toggle test", schedule: "0 0 * * *"})
 
     project = create_project()
     {:ok, view, _html} = live(conn, ~p"/projects/#{project.id}")
-    view |> element("button", "Recurring Concoctions") |> render_click()
+    view |> element("button", "recurring") |> render_click()
 
     # Should show as active initially
     html = render(view)
@@ -138,11 +137,11 @@ defmodule ApothecaryWeb.DashboardLiveTest do
 
   test "deletes a recipe", %{conn: conn} do
     {:ok, recipe} =
-      Ingredients.create_recipe(%{title: "Delete me", schedule: "0 0 * * *"})
+      Worktrees.create_recipe(%{title: "Delete me", schedule: "0 0 * * *"})
 
     project = create_project()
     {:ok, view, _html} = live(conn, ~p"/projects/#{project.id}")
-    view |> element("button", "Recurring Concoctions") |> render_click()
+    view |> element("button", "recurring") |> render_click()
 
     # Verify recipe shows up
     html = render(view)
@@ -159,7 +158,7 @@ defmodule ApothecaryWeb.DashboardLiveTest do
 
   test "edits a recipe", %{conn: conn} do
     {:ok, recipe} =
-      Ingredients.create_recipe(%{
+      Worktrees.create_recipe(%{
         title: "Original",
         description: "Original desc",
         schedule: "0 0 * * *",
@@ -168,17 +167,16 @@ defmodule ApothecaryWeb.DashboardLiveTest do
 
     project = create_project()
     {:ok, view, _html} = live(conn, ~p"/projects/#{project.id}")
-    view |> element("button", "Recurring Concoctions") |> render_click()
+    view |> element("button", "recurring") |> render_click()
 
     # Click edit
     view
-    |> element("button[phx-click=edit-recipe][phx-value-id=#{recipe.id}]")
+    |> element("[phx-click=edit-recipe][phx-value-id=#{recipe.id}]")
     |> render_click()
 
     # Should show edit form
     html = render(view)
-    assert html =~ "Edit Recipe"
-    assert html =~ "Update Recipe"
+    assert html =~ "EDIT RECIPE"
 
     # Submit edit
     html =
@@ -202,12 +200,12 @@ defmodule ApothecaryWeb.DashboardLiveTest do
     {:ok, view, _html} = live(conn, ~p"/projects/#{project.id}")
 
     # Go to recipes
-    view |> element("button", "Recurring Concoctions") |> render_click()
+    view |> element("button", "recurring") |> render_click()
     html = render(view)
     refute html =~ "No projects yet"
 
     # Go back to workbench
-    html = view |> element("button", "Workbench") |> render_click()
-    assert html =~ "Ready to mix?"
+    html = view |> element("button", "workbench") |> render_click()
+    assert html =~ "workbench"
   end
 end

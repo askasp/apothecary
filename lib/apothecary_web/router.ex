@@ -18,9 +18,9 @@ defmodule ApothecaryWeb.Router do
     pipe_through :browser
 
     live "/", DashboardLive
-    live "/ingredients/:id", DashboardLive
+    live "/tasks/:id", DashboardLive
     live "/projects/:project_id", DashboardLive
-    live "/projects/:project_id/ingredients/:id", DashboardLive
+    live "/projects/:project_id/tasks/:id", DashboardLive
     live "/brewers/:id", AgentLive
   end
 

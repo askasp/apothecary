@@ -19,7 +19,7 @@ defmodule ApothecaryWeb.AgentLive do
 
     socket =
       socket
-      |> assign(:page_title, "Alchemist #{agent_id}")
+      |> assign(:page_title, "Brewer #{agent_id}")
       |> assign(:agent_id, agent_id)
       |> assign(:agent, agent)
       |> assign(:output, (agent && agent.output) || [])
@@ -78,7 +78,7 @@ defmodule ApothecaryWeb.AgentLive do
         >
           <div class="flex items-center gap-3 text-base-content/30">
             <.link navigate={~p"/"} class="hover:text-base-content/50">[bksp:back]</.link>
-            <span class="text-base-content/50">ALCHEMIST {@agent_id}</span>
+            <span class="text-base-content/50">BREWER {@agent_id}</span>
             <.agent_status_badge :if={@agent} status={@agent.status} />
           </div>
 
@@ -92,13 +92,13 @@ defmodule ApothecaryWeb.AgentLive do
                 branch: <span class="text-base-content/60">{@agent.branch || "—"}</span>
               </span>
               <span class="text-base-content/40">
-                concoction:
-                <%= if @agent.current_concoction do %>
+                worktree:
+                <%= if @agent.current_worktree do %>
                   <.link
-                    navigate={~p"/ingredients/#{@agent.current_concoction.id}"}
+                    navigate={~p"/tasks/#{@agent.current_worktree.id}"}
                     class="text-cyan-400 hover:text-cyan-300"
                   >
-                    {@agent.current_concoction.id}
+                    {@agent.current_worktree.id}
                   </.link>
                 <% else %>
                   <span class="text-base-content/30">—</span>

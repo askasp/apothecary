@@ -21,6 +21,67 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
+  # ── Braille Spinner ─────────────────────────────────────
+
+  @doc """
+  Braille character spinner — a dot chases around the 2×4 braille grid.
+  Use `offset` to desync multiple spinners on screen.
+  `type` can be :spinner (braille) or :bubbles (ambient ·∘°).
+  """
+  attr :id, :string, required: true
+  attr :offset, :integer, default: 0
+  attr :type, :atom, default: :spinner
+
+  def braille_spinner(assigns) do
+    ~H"""
+    <span
+      id={@id}
+      phx-hook=".BrailleSpinner"
+      data-offset={@offset}
+      data-type={@type}
+      phx-update="ignore"
+    >{if @type == :bubbles, do: "·∘°·", else: "⠋"}</span>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".BrailleSpinner">
+      export default {
+        SPINNER: ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"],
+        BUBBLES: ["·∘°·","°·∘°","∘°·∘","·∘°·"],
+        mounted() {
+          this.offset = parseInt(this.el.dataset.offset || "0", 10)
+          this.type = this.el.dataset.type || "spinner"
+          // Use a shared global counter so all spinners stay in sync (with offsets)
+          if (!window.__brailleFrame) {
+            window.__brailleFrame = 0
+            window.__brailleListeners = new Set()
+            window.__brailleIv = setInterval(() => {
+              window.__brailleFrame++
+              window.__brailleListeners.forEach(fn => fn())
+            }, 100)
+          }
+          this.update = () => {
+            const f = window.__brailleFrame
+            if (this.type === "bubbles") {
+              this.el.textContent = this.BUBBLES[(f + this.offset) % this.BUBBLES.length]
+            } else {
+              this.el.textContent = this.SPINNER[(f + this.offset) % this.SPINNER.length]
+            }
+          }
+          window.__brailleListeners.add(this.update)
+          this.update()
+        },
+        destroyed() {
+          window.__brailleListeners.delete(this.update)
+          if (window.__brailleListeners.size === 0) {
+            clearInterval(window.__brailleIv)
+            window.__brailleFrame = undefined
+            window.__brailleListeners = undefined
+            window.__brailleIv = undefined
+          }
+        }
+      }
+    </script>
+    """
+  end
+
   # ── Copy Button ──────────────────────────────────────────
 
   attr :target, :string, required: true
@@ -192,7 +253,7 @@ defmodule ApothecaryWeb.DashboardComponents do
                 <span :if={selected?} style="color: var(--accent);">◂</span>
               </div>
               <div class="mt-0.5" style="color: var(--muted); font-size: var(--font-size-sm);">
-                {shorten_path(project.path)} &middot; {concoction_count_label(project.id)} &middot; {format_relative_time(project.updated_at)}
+                {shorten_path(project.path)} &middot; {worktree_count_label(project.id)} &middot; {format_relative_time(project.updated_at)}
               </div>
             </.link>
           <% end %>
@@ -285,7 +346,7 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   Modes:
   - `inline: true` — compact for settings bar (no section header)
-  - `inline: false` — full block for concoction detail (with PREVIEW header)
+  - `inline: false` — full block for worktree detail (with PREVIEW header)
   """
   attr :dev_server, :any, default: nil
   attr :has_config, :boolean, default: false
@@ -397,8 +458,8 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :show_preview_help, :boolean, default: false
 
   def settings_line(assigns) do
-    concocting? = assigns.swarm_status == :running
-    assigns = assign(assigns, :concocting?, concocting?)
+    brewing? = assigns.swarm_status == :running
+    assigns = assign(assigns, :brewing?, brewing?)
 
     ~H"""
     <div class="px-3 py-2" style="font-size: var(--font-size-xs);">
@@ -406,29 +467,33 @@ defmodule ApothecaryWeb.DashboardComponents do
         <%!-- Swarm --%>
         <span style="color: var(--dim);">s</span>&nbsp;
         <button
-          phx-click={if @concocting?, do: "stop-swarm", else: "start-swarm"}
+          phx-click={if @brewing?, do: "stop-swarm", else: "start-swarm"}
           class="cursor-pointer settings-value"
-          style={"color: #{if @concocting?, do: "var(--concocting)", else: "var(--muted)"}; font-weight: 500;"}
+          style={"color: #{if @brewing?, do: "var(--concocting)", else: "var(--muted)"}; font-weight: 500;"}
         >
-          {if @concocting?, do: "▶ brewing", else: "■ stopped"}
+          <%= if @brewing? do %>
+            <.braille_spinner id="brew-spinner" offset={0} />&nbsp;brewing
+          <% else %>
+            ■ stopped
+          <% end %>
         </button>
 
         <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
 
         <%!-- Workers --%>
         <span style="color: var(--dim);">a</span>&nbsp;
-        <span style="color: var(--dim);">workers:</span>
-        <%= if @editing_setting == :alchemists do %>
+        <span style="color: var(--dim);">brewers:</span>
+        <%= if @editing_setting == :brewers do %>
           <span class="inline-flex items-center gap-1 ml-1">
-            <button phx-click="decrement-alchemists" class="cursor-pointer" style="color: var(--accent);">&minus;</button>
+            <button phx-click="decrement-brewers" class="cursor-pointer" style="color: var(--accent);">&minus;</button>
             <span style="color: var(--text); font-weight: 600;">{@target_count}</span>
-            <button phx-click="increment-alchemists" class="cursor-pointer" style="color: var(--accent);">+</button>
+            <button phx-click="increment-brewers" class="cursor-pointer" style="color: var(--accent);">+</button>
             <button phx-click="confirm-setting" class="cursor-pointer" style="color: var(--muted);">&#x2713;</button>
           </span>
         <% else %>
           <button
             phx-click="edit-setting"
-            phx-value-setting="alchemists"
+            phx-value-setting="brewers"
             class="cursor-pointer settings-value"
             style="color: var(--text); font-weight: 600;"
           >
@@ -484,13 +549,13 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
-  # ── Concoction Input ─────────────────────────────────────
+  # ── Worktree Input ─────────────────────────────────────
 
   attr :input_focused, :boolean, default: false
 
-  def concoction_input(assigns) do
+  def worktree_input(assigns) do
     ~H"""
-    <div class="px-4 py-3">
+    <div class="px-3 py-2">
       <div class="relative">
         <textarea
           id="primary-input"
@@ -545,7 +610,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
-  # ── Concoction Tree ──────────────────────────────────────
+  # ── Worktree Tree ──────────────────────────────────────
 
   attr :worktrees_by_status, :map, required: true
   attr :agents, :list, default: []
@@ -553,11 +618,11 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :selected_card, :integer, default: 0
   attr :card_ids, :list, default: []
   attr :collapsed_done, :boolean, default: true
-  attr :adding_ingredient_to, :string, default: nil
+  attr :adding_task_to, :string, default: nil
   attr :search_mode, :boolean, default: false
   attr :search_query, :string, default: ""
 
-  def concoction_tree(assigns) do
+  def worktree_tree(assigns) do
     # Map status groups to display categories
     running = assigns.worktrees_by_status["running"] || []
     pr = assigns.worktrees_by_status["pr"] || []
@@ -565,7 +630,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     blocked = assigns.worktrees_by_status["blocked"] || []
     done = assigns.worktrees_by_status["done"] || []
 
-    concocting = running
+    brewing = running
     assaying = pr
     queued = ready ++ blocked
     bottled = done
@@ -573,7 +638,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     # Apply search filter
     query = String.downcase(assigns.search_query || "")
 
-    {concocting, assaying, queued, bottled} =
+    {brewing, assaying, queued, bottled} =
       if query != "" do
         f = fn entries ->
           Enum.filter(entries, fn e ->
@@ -582,20 +647,20 @@ defmodule ApothecaryWeb.DashboardComponents do
           end)
         end
 
-        {f.(concocting), f.(assaying), f.(queued), f.(bottled)}
+        {f.(brewing), f.(assaying), f.(queued), f.(bottled)}
       else
-        {concocting, assaying, queued, bottled}
+        {brewing, assaying, queued, bottled}
       end
 
     assigns =
       assigns
-      |> assign(:concocting, concocting)
+      |> assign(:brewing, brewing)
       |> assign(:assaying, assaying)
       |> assign(:queued, queued)
       |> assign(:bottled, bottled)
 
     ~H"""
-    <div class="px-4 py-3">
+    <div class="px-3 py-1">
       <%!-- Search input --%>
       <div :if={@search_mode} class="mb-3 flex items-center gap-2">
         <span style="color: var(--muted);">/</span>
@@ -615,24 +680,24 @@ defmodule ApothecaryWeb.DashboardComponents do
 
       <%!-- Brewing group --%>
       <.tree_group
-        :if={@concocting != []}
+        :if={@brewing != []}
         label="brewing"
-        count={length(@concocting)}
+        count={length(@brewing)}
         color="var(--concocting)"
-        entries={@concocting}
+        entries={@brewing}
         dot="●"
         dot_class="dot-pulse"
         title_color="var(--text)"
         card_ids={@card_ids}
         selected_card={@selected_card}
-        adding_ingredient_to={@adding_ingredient_to}
+        adding_task_to={@adding_task_to}
         animated_header_dot={true}
       />
 
-      <%!-- Sampling group --%>
+      <%!-- Reviewing group --%>
       <.tree_group
         :if={@assaying != []}
-        label="sampling"
+        label="reviewing"
         count={length(@assaying)}
         color="var(--assaying)"
         entries={@assaying}
@@ -642,13 +707,13 @@ defmodule ApothecaryWeb.DashboardComponents do
         card_ids={@card_ids}
         selected_card={@selected_card}
         status_label="awaiting review"
-        adding_ingredient_to={@adding_ingredient_to}
+        adding_task_to={@adding_task_to}
       />
 
-      <%!-- Stocked group --%>
+      <%!-- Queued group --%>
       <.tree_group
         :if={@queued != []}
-        label="stocked"
+        label="queued"
         count={length(@queued)}
         color="var(--muted)"
         entries={@queued}
@@ -658,7 +723,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         opacity="0.5"
         card_ids={@card_ids}
         selected_card={@selected_card}
-        adding_ingredient_to={@adding_ingredient_to}
+        adding_task_to={@adding_task_to}
       />
 
       <%!-- Bottled group (collapsed by default) --%>
@@ -683,13 +748,13 @@ defmodule ApothecaryWeb.DashboardComponents do
           title_color="var(--bottled)"
           card_ids={@card_ids}
           selected_card={@selected_card}
-          adding_ingredient_to={@adding_ingredient_to}
+          adding_task_to={@adding_task_to}
         />
       <% end %>
 
       <%!-- Empty state --%>
       <div
-        :if={@concocting == [] && @assaying == [] && @queued == [] && @bottled == []}
+        :if={@brewing == [] && @assaying == [] && @queued == [] && @bottled == []}
         class="py-6"
         style="color: var(--muted); font-size: var(--font-size-sm);"
       >
@@ -711,15 +776,15 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :card_ids, :list, default: []
   attr :selected_card, :integer, default: 0
   attr :status_label, :string, default: nil
-  attr :adding_ingredient_to, :string, default: nil
+  attr :adding_task_to, :string, default: nil
   attr :animated_header_dot, :boolean, default: false
 
   defp tree_group(assigns) do
     ~H"""
     <div style={"opacity: #{@opacity};"}>
-      <div :if={@label} class="py-1" style={"color: #{@color}; font-size: var(--font-size-sm);"}>
+      <div :if={@label} class="pt-1.5 pb-0.5" style={"color: #{@color}; font-size: var(--font-size-sm);"}>
         {@label} ({@count})
-        <span :if={@animated_header_dot} class="concocting-snake"><span></span><span></span><span></span><span></span></span>
+        <.braille_spinner :if={@animated_header_dot} id="tree-brewing-spinner" offset={0} />
       </div>
       <div style="font-size: var(--font-size-sm);">
         <%= for {entry, idx} <- Enum.with_index(@entries) do %>
@@ -741,14 +806,18 @@ defmodule ApothecaryWeb.DashboardComponents do
             data-selected={if(selected?, do: "true")}
           >
             <%!-- Tree line + dot + title --%>
-            <div class="flex items-baseline gap-1.5 py-1 px-1">
+            <div class="flex items-baseline gap-1.5 py-0.5 px-1">
               <span class="tree-char">{if last?, do: "└─", else: "├─"}</span>
-              <span class={@dot_class} style={"color: #{@color};"}>{@dot}</span>
+              <%= if @animated_header_dot do %>
+                <span style={"color: #{@color};"}><.braille_spinner id={"wt-spin-#{wt.id}"} offset={idx * 3} /></span>
+              <% else %>
+                <span class={@dot_class} style={"color: #{@color};"}>{@dot}</span>
+              <% end %>
               <span style={"color: #{@title_color}; font-weight: 500;"}>{wt.title || wt.id}</span>
               <span :if={selected?} style="color: var(--accent); margin-left: auto; padding-right: 4px;">◂</span>
             </div>
             <%!-- Metadata line --%>
-            <div class="flex items-center gap-1 pl-8 pb-1.5" style="color: var(--muted); font-size: var(--font-size-xs);">
+            <div class="flex items-center gap-1 pl-8 pb-0.5" style="color: var(--muted); font-size: var(--font-size-xs);">
               <span>{wt.id}</span>
               <span :if={total_count > 0}>
                 &middot; {done_count}/{total_count} {progress_bar(done_count, total_count)}
@@ -761,32 +830,36 @@ defmodule ApothecaryWeb.DashboardComponents do
               </span>
             </div>
           </div>
-          <%!-- Inline ingredients sub-tree --%>
+          <%!-- Inline tasks sub-tree --%>
           <%= if tasks != [] do %>
             <div class="pl-8" style="font-size: var(--font-size-xs);">
               <%= for {task, tidx} <- Enum.with_index(tasks) do %>
                 <% tlast? = tidx == length(tasks) - 1
-                   {ing_dot, ing_dot_color, ing_dot_class} = ingredient_dot(task.status)
-                   ing_text_color = ingredient_text_color(task.status) %>
-                <div class="flex items-baseline gap-1.5 py-0.5 px-1">
+                   {ing_dot, ing_dot_color, ing_dot_class} = task_dot(task.status)
+                   ing_text_color = task_text_color(task.status) %>
+                <div class="flex items-baseline gap-1 py-px px-1">
                   <span class="tree-char">{if tlast?, do: "└─", else: "├─"}</span>
-                  <span class={ing_dot_class} style={"color: #{ing_dot_color};"}>{ing_dot}</span>
+                  <%= if task.status == "in_progress" do %>
+                    <span style={"color: #{ing_dot_color};"}><.braille_spinner id={"ing-spin-#{task.id}"} offset={tidx * 3} /></span>
+                  <% else %>
+                    <span class={ing_dot_class} style={"color: #{ing_dot_color};"}>{ing_dot}</span>
+                  <% end %>
                   <span style={"color: #{ing_text_color};"}>{task.title}</span>
                 </div>
               <% end %>
             </div>
           <% end %>
-          <%!-- Inline ingredient input --%>
-          <div :if={@adding_ingredient_to == wt.id} class="pl-8 py-1">
-            <form phx-submit="add-ingredient-inline">
-              <input type="hidden" name="concoction_id" value={wt.id} />
+          <%!-- Inline task input --%>
+          <div :if={@adding_task_to == wt.id} class="pl-8 py-1">
+            <form phx-submit="add-task-inline">
+              <input type="hidden" name="worktree_id" value={wt.id} />
               <input
                 name="title"
-                id={"ingredient-input-#{wt.id}"}
+                id={"task-input-#{wt.id}"}
                 autofocus
-                phx-blur="ingredient-input-blur"
+                phx-blur="task-input-blur"
                 placeholder="new task..."
-                class="ingredient-inline-input"
+                class="task-inline-input"
                 phx-focus="input-focus"
               />
             </form>
@@ -806,14 +879,14 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   defp progress_bar(_, _), do: ""
 
-  defp ingredient_dot(status) when status in ["done", "closed"], do: {"●", "var(--accent)", ""}
-  defp ingredient_dot("in_progress"), do: {"∷", "var(--concocting)", "ingredient-dot-active"}
-  defp ingredient_dot("blocked"), do: {"○", "var(--error)", ""}
-  defp ingredient_dot(_), do: {"○", "var(--muted)", ""}
+  defp task_dot(status) when status in ["done", "closed"], do: {"●", "var(--accent)", ""}
+  defp task_dot("in_progress"), do: {"∷", "var(--concocting)", "task-dot-active"}
+  defp task_dot("blocked"), do: {"○", "var(--error)", ""}
+  defp task_dot(_), do: {"○", "var(--muted)", ""}
 
-  defp ingredient_text_color(status) when status in ["done", "closed"], do: "var(--dim)"
-  defp ingredient_text_color("in_progress"), do: "var(--text)"
-  defp ingredient_text_color(_), do: "var(--muted)"
+  defp task_text_color(status) when status in ["done", "closed"], do: "var(--dim)"
+  defp task_text_color("in_progress"), do: "var(--text)"
+  defp task_text_color(_), do: "var(--muted)"
 
   defp selected_entry?(card_ids, selected_card, wt_id) do
     case Enum.at(card_ids, selected_card) do
@@ -825,7 +898,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp entry_port(%{status: :running, ports: [%{port: p} | _]}), do: p
   defp entry_port(_), do: nil
 
-  # ── Concoction Detail (Full Takeover) ────────────────────
+  # ── Worktree Detail (Full Takeover) ────────────────────
 
   attr :task, :map, required: true
   attr :children, :list, default: []
@@ -837,7 +910,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :pending_action, :any, default: nil
   attr :loading_action, :atom, default: nil
 
-  def concoction_detail(assigns) do
+  def worktree_detail(assigns) do
     pr_url = Map.get(assigns.task, :pr_url)
     status_group = task_status_group(assigns.task)
     status_color = group_color(status_group)
@@ -932,7 +1005,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         <% end %>
       </div>
 
-      <%!-- 3. INGREDIENTS --%>
+      <%!-- 3. TASKS --%>
       <div class="mb-5">
         <div class="section-header mb-2">TASKS</div>
         <%= if @children == [] do %>
@@ -1099,6 +1172,8 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :active_tab, :atom, default: :workbench
   attr :show_project_switcher, :boolean, default: false
   attr :project_count, :integer, default: 0
+  attr :questions, :list, default: []
+  attr :agents, :list, default: []
 
   def moonlight_status_bar(assigns) do
     running_count = length(assigns.worktrees_by_status["running"] || [])
@@ -1106,12 +1181,32 @@ defmodule ApothecaryWeb.DashboardComponents do
     queued_count = length((assigns.worktrees_by_status["ready"] || []) ++ (assigns.worktrees_by_status["blocked"] || []))
     done_count = length(assigns.worktrees_by_status["done"] || [])
 
+    # Count active thinkers (agents working on questions)
+    active_question_ids =
+      assigns.agents
+      |> Enum.flat_map(fn a ->
+        if a.current_worktree, do: [to_string(a.current_worktree.id)], else: []
+      end)
+      |> MapSet.new()
+
+    thinking_count =
+      Enum.count(assigns.questions, fn q ->
+        (q.notes == nil or q.notes == "") and MapSet.member?(active_question_ids, q.id)
+      end)
+
+    pending_question_count =
+      Enum.count(assigns.questions, fn q ->
+        (q.notes == nil or q.notes == "") and not MapSet.member?(active_question_ids, q.id)
+      end)
+
     assigns =
       assigns
       |> assign(:running_count, running_count)
       |> assign(:pr_count, pr_count)
       |> assign(:queued_count, queued_count)
       |> assign(:done_count, done_count)
+      |> assign(:thinking_count, thinking_count)
+      |> assign(:pending_question_count, pending_question_count)
 
     ~H"""
     <div class="status-bar flex items-center justify-between">
@@ -1141,14 +1236,21 @@ defmodule ApothecaryWeb.DashboardComponents do
         <% @active_tab == :oracle -> %>
           <%!-- Oracle status bar --%>
           <div class="flex items-center gap-2">
-            <span>&#x2191;/&#x2193; history</span>
+            <span>j/k nav</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>enter send</span>
+            <span>enter select</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>esc clear</span>
+            <span>n new question</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>d delete</span>
           </div>
-          <div style="color: var(--muted);">
-            context: <span style="font-weight: 600;">main</span>
+          <div class="flex items-center gap-2">
+            <%= if @thinking_count > 0 do %>
+              <span class="dot-pulse" style="color: var(--concocting);">&#x25C9; {@thinking_count} active</span>
+            <% end %>
+            <%= if @pending_question_count > 0 do %>
+              <span style="color: var(--muted);">&#x25CB;{@pending_question_count}</span>
+            <% end %>
           </div>
 
         <% @active_tab == :workbench && @selected_task_id && @selected_task -> %>
@@ -1183,7 +1285,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span>s stop</span>
           </div>
           <div class="flex items-center gap-2">
-            <span :if={@running_count > 0} class="snake-dots"><span></span><span></span><span></span><span></span></span>
+            <.braille_spinner :if={@running_count > 0} id="statusbar-bubbles" offset={0} type={:bubbles} />
             <span style="color: var(--concocting);">&#x25CF;{@running_count}</span>
             <span style="color: var(--assaying);">&#x25CE;{@pr_count}</span>
             <span style="color: var(--muted);">&#x25CB;{@queued_count}</span>
@@ -1476,136 +1578,272 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   attr :questions, :list, required: true
   attr :agents, :list, default: []
+  attr :selected_question_id, :string, default: nil
 
   def oracle_view(assigns) do
     active_wt_ids =
       assigns.agents
       |> Enum.flat_map(fn a ->
-        if a.current_concoction, do: [to_string(a.current_concoction.id)], else: []
+        if a.current_worktree, do: [to_string(a.current_worktree.id)], else: []
       end)
       |> MapSet.new()
 
-    sorted = Enum.sort_by(assigns.questions, fn q -> q.created_at || "" end, :asc)
-    assigns = assign(assigns, sorted: sorted, active_wt_ids: active_wt_ids)
+    sorted = Enum.sort_by(assigns.questions, fn q -> q.created_at || "" end, :desc)
+
+    thinking_count =
+      Enum.count(sorted, fn q ->
+        (q.notes == nil or q.notes == "") and MapSet.member?(active_wt_ids, q.id)
+      end)
+
+    selected =
+      if assigns.selected_question_id do
+        Enum.find(sorted, fn q -> q.id == assigns.selected_question_id end)
+      else
+        List.first(sorted)
+      end
+
+    assigns =
+      assigns
+      |> assign(:sorted, sorted)
+      |> assign(:active_wt_ids, active_wt_ids)
+      |> assign(:thinking_count, thinking_count)
+      |> assign(:selected, selected)
 
     ~H"""
-    <div class="px-3 py-3 flex-1 flex flex-col" style="min-height: 0;">
-      <div class="mb-3" style="color: var(--muted); font-size: var(--font-size-xs);">
-        context: <span style="font-weight: 600;">main</span> &middot; read-only &middot; no mutations
-      </div>
-
-      <%= if @sorted == [] do %>
-        <div class="flex-1 flex items-center justify-center" style="color: var(--muted); font-size: var(--font-size-sm);">
-          <div class="text-center">
-            <div class="mb-1">no questions yet</div>
-            <div style="font-size: var(--font-size-xs);">ask about the codebase below</div>
+    <div class="flex h-full" id="oracle-container">
+      <%!-- Left panel: question list --%>
+      <div
+        class="h-full flex flex-col flex-shrink-0"
+        style="width: 36%; min-width: 280px; max-width: 420px; border-right: 1px solid var(--border);"
+      >
+        <%!-- Header --%>
+        <div class="px-3 py-2 flex items-center justify-between" style="border-bottom: 1px solid var(--border);">
+          <div class="flex items-center gap-2" style="font-size: var(--font-size-xs); color: var(--dim);">
+            <span>divinations</span>
+            <span style="color: var(--muted);">&middot;</span>
+            <span>{length(@sorted)} total</span>
+            <%= if @thinking_count > 0 do %>
+              <span style="color: var(--muted);">&middot;</span>
+              <span class="dot-pulse" style="color: var(--concocting);">&#x25C9; {@thinking_count} thinking</span>
+            <% end %>
           </div>
         </div>
-      <% else %>
-        <div id="oracle-messages" class="flex-1 overflow-y-auto scroll-main" phx-hook=".OracleScroll">
+
+        <%!-- Question list --%>
+        <div class="flex-1 overflow-y-auto scroll-main">
           <%= for q <- @sorted do %>
-            <%!-- User question --%>
-            <div class="mb-3">
-              <div class="mb-1" style="color: var(--muted); font-size: var(--font-size-xs);">
-                you &middot; {format_relative_time(q.created_at)}
+            <% is_selected = @selected && @selected.id == q.id %>
+            <% is_thinking = (q.notes == nil or q.notes == "") and MapSet.member?(@active_wt_ids, q.id) %>
+            <% has_answer = q.notes != nil and q.notes != "" %>
+            <div
+              phx-click="select-question"
+              phx-value-id={q.id}
+              class="px-3 py-2 cursor-pointer"
+              style={"border-left: 3px solid #{if is_selected, do: "var(--accent)", else: "transparent"}; background: #{if is_selected, do: "var(--surface)", else: "transparent"};"}
+            >
+              <div class="flex items-center gap-2" style="font-size: var(--font-size-xs);">
+                <span style={"color: #{cond do
+                  is_thinking -> "var(--concocting)"
+                  has_answer -> "var(--accent)"
+                  true -> "var(--muted)"
+                end};"}>
+                  <%= cond do %>
+                    <% is_thinking -> %>
+                      <span class="dot-pulse">&#x25C9;</span>
+                    <% has_answer -> %>
+                      &#x25CF;
+                    <% true -> %>
+                      &#x25CB;
+                  <% end %>
+                </span>
+                <span style="color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-sm);">
+                  {String.slice(q.title, 0, 40)}<%= if String.length(q.title) > 40, do: "..." %>
+                </span>
               </div>
-              <div style="color: var(--text); font-size: var(--font-size-sm); font-weight: 600;">
-                {q.title}
+              <div class="flex items-center gap-2 mt-1" style="font-size: var(--font-size-xxs); color: var(--muted);">
+                <span>{format_relative_time(q.created_at)}</span>
+                <span>&middot;</span>
+                <span>main</span>
+                <%= if is_thinking do %>
+                  <span>&middot;</span>
+                  <span style="color: var(--concocting);">thinking&hellip;</span>
+                <% end %>
               </div>
             </div>
+          <% end %>
+        </div>
 
-            <%!-- Oracle response --%>
-            <%= if q.notes && q.notes != "" do %>
-              <div class="oracle-response mb-4 py-2 px-3">
+        <%!-- Input area at bottom --%>
+        <div class="px-3 py-2" style="border-top: 1px solid var(--border);">
+          <div class="relative">
+            <textarea
+              id="oracle-input"
+              rows="1"
+              phx-hook=".OracleInput"
+              autocomplete="off"
+              class="moonlight-input w-full resize-none"
+              style="min-height: 32px; max-height: 80px; font-size: var(--font-size-sm); padding: 8px 32px 8px 10px;"
+              placeholder="ask about the codebase..."
+            ></textarea>
+            <button
+              id="oracle-input-send"
+              phx-hook=".OracleSend"
+              type="button"
+              class="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer p-1"
+              style="color: var(--muted);"
+              title="Send (Enter)"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3">
+                <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" />
+              </svg>
+            </button>
+          </div>
+          <div class="mt-1" style="color: var(--muted); font-size: var(--font-size-xxs);">
+            ask &mdash; runs in parallel with existing
+          </div>
+        </div>
+      </div>
+
+      <%!-- Right panel: selected question detail --%>
+      <div class="flex-1 h-full overflow-y-auto scroll-main">
+        <%= if @selected do %>
+          <% is_thinking = (@selected.notes == nil or @selected.notes == "") and MapSet.member?(@active_wt_ids, @selected.id) %>
+          <div class="px-4 py-3">
+            <%!-- Question title --%>
+            <div class="flex items-start gap-2 mb-1">
+              <span style={"color: #{if @selected.notes && @selected.notes != "", do: "var(--accent)", else: if(is_thinking, do: "var(--concocting)", else: "var(--muted)")}; font-size: var(--font-size-sm);"}>
+                <%= cond do %>
+                  <% is_thinking -> %>
+                    <span class="dot-pulse">&#x25C9;</span>
+                  <% @selected.notes && @selected.notes != "" -> %>
+                    &#x25CF;
+                  <% true -> %>
+                    &#x25CB;
+                <% end %>
+              </span>
+              <h2 style="color: var(--text); font-size: var(--font-size-sm); font-weight: 600; line-height: 1.4;">
+                {@selected.title}
+              </h2>
+            </div>
+
+            <%!-- Meta line --%>
+            <div class="mb-4" style="color: var(--muted); font-size: var(--font-size-xxs);">
+              <span>{@selected.id}</span>
+              <span>&middot;</span>
+              <span>{format_relative_time(@selected.created_at)}</span>
+              <span>&middot;</span>
+              <span>context: <strong style="color: var(--dim);">main</strong></span>
+            </div>
+
+            <%!-- Answer or thinking state --%>
+            <%= if @selected.notes && @selected.notes != "" do %>
+              <div class="oracle-response py-2 px-3">
                 <div class="mb-1" style="color: var(--muted); font-size: var(--font-size-xs);">
-                  oracle &middot; {format_relative_time(q.created_at)}
+                  oracle &middot; {format_relative_time(@selected.created_at)}
                 </div>
                 <div class="oracle-body" style="font-size: var(--font-size-sm);">
-                  {format_oracle_response(q.notes)}
+                  {format_oracle_response(@selected.notes)}
                 </div>
               </div>
             <% else %>
-              <div :if={MapSet.member?(@active_wt_ids, q.id)} class="mb-4 py-2 px-3" style="background: var(--surface); border-left: 2px solid var(--concocting);">
-                <div class="flex items-center gap-2" style="color: var(--concocting); font-size: var(--font-size-xs);">
-                  <span class="dot-pulse">&#x25C9;</span>
-                  <span>thinking...</span>
+              <%= if is_thinking do %>
+                <div class="py-2 px-3" style="background: var(--surface); border-left: 2px solid var(--concocting);">
+                  <div class="flex items-center gap-2" style="color: var(--concocting); font-size: var(--font-size-xs);">
+                    <span class="dot-pulse">&#x25C9;</span>
+                    <span>thinking&hellip;</span>
+                  </div>
+                </div>
+              <% else %>
+                <div class="py-2 px-3" style="color: var(--muted); font-size: var(--font-size-sm);">
+                  queued &mdash; waiting for an available thinker
+                </div>
+              <% end %>
+            <% end %>
+
+            <%!-- Follow-up input --%>
+            <%= if @selected.notes && @selected.notes != "" do %>
+              <div class="mt-4">
+                <div class="relative">
+                  <textarea
+                    id="oracle-followup-input"
+                    rows="1"
+                    phx-hook=".OracleFollowup"
+                    autocomplete="off"
+                    class="moonlight-input w-full resize-none"
+                    style="min-height: 32px; max-height: 80px; font-size: var(--font-size-sm); padding: 8px 10px;"
+                    placeholder="follow up on this divination..."
+                  ></textarea>
                 </div>
               </div>
             <% end %>
-          <% end %>
-        </div>
-      <% end %>
-
-      <%!-- Oracle input --%>
-      <div class="pt-2 mt-auto">
-        <div class="relative">
-          <textarea
-            id="oracle-input"
-            rows="1"
-            phx-hook=".OracleInput"
-            autocomplete="off"
-            class="moonlight-input w-full resize-none"
-            style="min-height: 32px; max-height: 120px;"
-            placeholder="ask about the codebase"
-          ></textarea>
-          <button
-            id="oracle-input-send"
-            phx-hook=".OracleSend"
-            type="button"
-            class="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer p-1"
-            style="color: var(--muted);"
-            title="Send (Enter)"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
-              <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" />
-            </svg>
-          </button>
-          <script :type={Phoenix.LiveView.ColocatedHook} name=".OracleSend">
-            export default {
-              mounted() {
-                this.el.addEventListener("click", () => {
-                  const textarea = document.getElementById("oracle-input")
-                  if (textarea) {
-                    const text = textarea.value.trim()
-                    if (text) {
-                      this.pushEvent("oracle-ask", { text })
-                      textarea.value = ""
-                    }
-                  }
-                })
-              }
-            }
-          </script>
-          <script :type={Phoenix.LiveView.ColocatedHook} name=".OracleInput">
-            export default {
-              mounted() {
-                this.el.addEventListener("keydown", (e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault()
-                    const text = this.el.value.trim()
-                    if (text) {
-                      this.pushEvent("oracle-ask", { text })
-                      this.el.value = ""
-                    }
-                  }
-                })
-              }
-            }
-          </script>
-          <script :type={Phoenix.LiveView.ColocatedHook} name=".OracleScroll">
-            export default {
-              mounted() { this.scrollToBottom() },
-              updated() { this.scrollToBottom() },
-              scrollToBottom() {
-                this.el.scrollTop = this.el.scrollHeight
-              }
-            }
-          </script>
-        </div>
-        <div class="mt-1" style="color: var(--muted); font-size: var(--font-size-xs);">
-          ask about the codebase &mdash; oracle reads but never writes
-        </div>
+          </div>
+        <% else %>
+          <div class="h-full flex items-center justify-center" style="color: var(--muted); font-size: var(--font-size-sm);">
+            <div class="text-center">
+              <div class="mb-1">no divinations yet</div>
+              <div style="font-size: var(--font-size-xs);">ask a question in the left panel</div>
+            </div>
+          </div>
+        <% end %>
       </div>
+      <%!-- JS hooks --%>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".OracleSend">
+        export default {
+          mounted() {
+            this.el.addEventListener("click", () => {
+              const textarea = document.getElementById("oracle-input")
+              if (textarea) {
+                const text = textarea.value.trim()
+                if (text) {
+                  this.pushEvent("oracle-ask", { text })
+                  textarea.value = ""
+                }
+              }
+            })
+          }
+        }
+      </script>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".OracleInput">
+        export default {
+          mounted() {
+            this.el.addEventListener("keydown", (e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault()
+                const text = this.el.value.trim()
+                if (text) {
+                  this.pushEvent("oracle-ask", { text })
+                  this.el.value = ""
+                }
+              }
+            })
+          }
+        }
+      </script>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".OracleFollowup">
+        export default {
+          mounted() {
+            this.el.addEventListener("keydown", (e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault()
+                const text = this.el.value.trim()
+                if (text) {
+                  this.pushEvent("oracle-ask", { text })
+                  this.el.value = ""
+                }
+              }
+            })
+          }
+        }
+      </script>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".OracleScroll">
+        export default {
+          mounted() { this.scrollToBottom() },
+          updated() { this.scrollToBottom() },
+          scrollToBottom() {
+            this.el.scrollTop = this.el.scrollHeight
+          }
+        }
+      </script>
     </div>
     """
   end
@@ -1941,22 +2179,22 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp task_status_group(task) do
     case task.status do
       s when s in ["in_progress", "claimed"] -> "brewing"
-      s when s in ["brew_done", "pr_open", "revision_needed"] -> "sampling"
+      s when s in ["brew_done", "pr_open", "revision_needed"] -> "reviewing"
       s when s in ["done", "closed", "merged"] -> "bottled"
-      _ -> "stocked"
+      _ -> "queued"
     end
   end
 
   defp group_color("brewing"), do: "var(--concocting)"
-  defp group_color("sampling"), do: "var(--assaying)"
+  defp group_color("reviewing"), do: "var(--assaying)"
   defp group_color("bottled"), do: "var(--bottled)"
-  defp group_color("stocked"), do: "var(--muted)"
+  defp group_color("queued"), do: "var(--muted)"
   defp group_color(_), do: "var(--dim)"
 
   defp group_dot("brewing"), do: "◉"
-  defp group_dot("sampling"), do: "◎"
+  defp group_dot("reviewing"), do: "◎"
   defp group_dot("bottled"), do: "●"
-  defp group_dot("stocked"), do: "○"
+  defp group_dot("queued"), do: "○"
   defp group_dot(_), do: "·"
 
   defp loading_label(:merging), do: "merging PR..."
@@ -1964,8 +2202,8 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp loading_label(:creating_pr), do: "creating PR..."
   defp loading_label(_), do: "working..."
 
-  defp concoction_count_label(project_id) do
-    count = length(Apothecary.Ingredients.list_concoctions(project_id: project_id))
+  defp worktree_count_label(project_id) do
+    count = length(Apothecary.Worktrees.list_worktrees(project_id: project_id))
 
     case count do
       0 -> "0 worktrees"

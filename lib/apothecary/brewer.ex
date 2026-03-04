@@ -4,10 +4,10 @@ defmodule Apothecary.Brewer do
 
   Lifecycle:
   1. Starts in :idle state, registered with the Dispatcher
-  2. Receives a concoction assignment from the Dispatcher
+  2. Receives a worktree assignment from the Dispatcher
   3. Spawns `claude -p "<prompt>" --dangerously-skip-permissions` as a Port
   4. Streams output via PubSub for LiveView consumption
-  5. On completion, closes the concoction, pushes branch, creates PR
+  5. On completion, closes the worktree, pushes branch, creates PR
   """
 
   use GenServer
@@ -25,9 +25,9 @@ defmodule Apothecary.Brewer do
     GenServer.start_link(__MODULE__, opts)
   end
 
-  @doc "Assign a concoction to this brewer."
-  def assign_concoction(pid, worktree, worktree_path, branch, project_dir) do
-    GenServer.cast(pid, {:assign_concoction, worktree, worktree_path, branch, project_dir})
+  @doc "Assign a worktree to this brewer."
+  def assign_worktree(pid, worktree, worktree_path, branch, project_dir) do
+    GenServer.cast(pid, {:assign_worktree, worktree, worktree_path, branch, project_dir})
   end
 
   @doc "Get the current state of this brewer."
@@ -59,15 +59,15 @@ defmodule Apothecary.Brewer do
 
   @impl true
   def handle_cast(
-        {:assign_concoction, worktree, worktree_path, branch, project_dir},
+        {:assign_worktree, worktree, worktree_path, branch, project_dir},
         %{agent: agent} = state
       ) do
-    Logger.info("Brewer #{agent.id} assigned concoction #{worktree.id}: #{worktree.title}")
+    Logger.info("Brewer #{agent.id} assigned worktree #{worktree.id}: #{worktree.title}")
 
     agent = %{
       agent
       | status: :starting,
-        current_concoction: worktree,
+        current_worktree: worktree,
         started_at: DateTime.utc_now(),
         worktree_path: worktree_path,
         branch: branch,
@@ -88,7 +88,7 @@ defmodule Apothecary.Brewer do
         write_mcp_config(worktree_path, agent.id, worktree.id, extra_mcps, project_dir)
         # Write apothecary CLAUDE.md to the worktree's .claude/ directory
         write_claude_md(worktree_path)
-        Apothecary.Ingredients.list_ingredients(concoction_id: worktree.id)
+        Apothecary.Worktrees.list_tasks(worktree_id: worktree.id)
       end
 
     case spawn_claude(agent, worktree, tasks) do
@@ -112,7 +112,7 @@ defmodule Apothecary.Brewer do
         agent = %{agent | status: :error, output: [error_msg]}
         broadcast_state(agent)
         broadcast_output(agent.id, [error_msg])
-        Apothecary.Ingredients.release_concoction(worktree.id)
+        Apothecary.Worktrees.release_worktree(worktree.id)
         schedule_error_reset()
         {:noreply, %{state | agent: agent, worktree_id: worktree.id}}
     end
@@ -205,29 +205,29 @@ defmodule Apothecary.Brewer do
       broadcast_output(agent.id, remaining)
     end
 
-    Logger.info("Brewer #{agent.id} completed concoction #{state.worktree_id}")
+    Logger.info("Brewer #{agent.id} completed worktree #{state.worktree_id}")
 
     worktree_id = state.worktree_id
-    concoction = agent.current_concoction
+    wt = agent.current_worktree
 
-    if concoction && concoction.kind == "question" do
+    if wt && wt.kind == "question" do
       # Questions: save the response as notes and close — no push/PR
       response = Enum.join(output, "\n")
-      Apothecary.Ingredients.add_note(worktree_id, "Answer:\n#{response}")
-      Apothecary.Ingredients.close_concoction(worktree_id)
+      Apothecary.Worktrees.add_note(worktree_id, "Answer:\n#{response}")
+      Apothecary.Worktrees.close_worktree(worktree_id)
     else
       # Tasks: record session summary, push, and create PR
       add_session_summary(worktree_id, agent)
-      finalize_concoction(worktree_id, agent)
+      finalize_worktree(worktree_id, agent)
     end
 
     # Trigger refresh and go idle
-    Apothecary.Ingredients.force_refresh()
+    Apothecary.Worktrees.force_refresh()
 
     agent = %{
       agent
       | status: :idle,
-        current_concoction: nil,
+        current_worktree: nil,
         project_dir: nil,
         worktree_path: nil,
         branch: nil
@@ -249,7 +249,7 @@ defmodule Apothecary.Brewer do
     error_msg = "[Claude exited with code #{code}]"
     output = output ++ [error_msg]
 
-    Logger.warning("Brewer #{agent.id} concoction #{state.worktree_id} exited with code #{code}")
+    Logger.warning("Brewer #{agent.id} worktree #{state.worktree_id} exited with code #{code}")
 
     if output != [error_msg] do
       Logger.warning("Brewer #{agent.id} captured output:\n#{Enum.join(output, "\n")}")
@@ -263,7 +263,7 @@ defmodule Apothecary.Brewer do
         output
       )
 
-      Apothecary.Ingredients.release_concoction(state.worktree_id)
+      Apothecary.Worktrees.release_worktree(state.worktree_id)
     end
 
     agent = %{agent | status: :error, output: output}
@@ -283,7 +283,7 @@ defmodule Apothecary.Brewer do
       agent = %{
         agent
         | status: :idle,
-          current_concoction: nil,
+          current_worktree: nil,
           worktree_path: nil,
           branch: nil
       }
@@ -312,7 +312,7 @@ defmodule Apothecary.Brewer do
         agent.output
       )
 
-      Apothecary.Ingredients.release_concoction(state.worktree_id)
+      Apothecary.Worktrees.release_worktree(state.worktree_id)
     end
 
     agent = %{agent | status: :error, output: agent.output ++ ["[Killed by watchdog: stuck]"]}
@@ -331,8 +331,13 @@ defmodule Apothecary.Brewer do
   end
 
   @impl true
-  def terminate(_reason, %{port: port}) when not is_nil(port) do
+  def terminate(_reason, %{port: port, agent: agent}) when not is_nil(port) do
     Port.close(port)
+    cleanup_sandbox_profile(agent.id)
+  end
+
+  def terminate(_reason, %{agent: agent}) do
+    cleanup_sandbox_profile(agent.id)
   end
 
   def terminate(_reason, _state), do: :ok
@@ -340,15 +345,15 @@ defmodule Apothecary.Brewer do
   # Private — Session summary on clean exit
 
   defp add_session_summary(worktree_id, agent) do
-    ingredients = Apothecary.Ingredients.list_ingredients(concoction_id: worktree_id)
+    tasks = Apothecary.Worktrees.list_tasks(worktree_id: worktree_id)
 
     completed =
-      ingredients
+      tasks
       |> Enum.filter(&(&1.status == "done"))
       |> Enum.map(&"  - #{&1.id}: #{&1.title}")
 
     remaining =
-      ingredients
+      tasks
       |> Enum.reject(&(&1.status == "done"))
       |> Enum.map(&"  - #{&1.id}: #{&1.title} (#{&1.status})")
 
@@ -369,11 +374,11 @@ defmodule Apothecary.Brewer do
       [
         "Session completed by Brewer #{agent.id}.",
         if(completed != [],
-          do: "Completed ingredients:\n#{Enum.join(completed, "\n")}",
+          do: "Completed tasks:\n#{Enum.join(completed, "\n")}",
           else: nil
         ),
         if(remaining != [],
-          do: "Remaining ingredients:\n#{Enum.join(remaining, "\n")}",
+          do: "Remaining tasks:\n#{Enum.join(remaining, "\n")}",
           else: nil
         ),
         if(git_log != "", do: git_log, else: nil),
@@ -381,7 +386,7 @@ defmodule Apothecary.Brewer do
       ]
       |> Enum.reject(&is_nil/1)
 
-    Apothecary.Ingredients.add_note(worktree_id, Enum.join(parts, "\n"))
+    Apothecary.Worktrees.add_note(worktree_id, Enum.join(parts, "\n"))
   end
 
   # Private — Crash/kill context for recovery
@@ -390,17 +395,17 @@ defmodule Apothecary.Brewer do
     # Capture more output (100 lines) for better crash recovery
     last_output = output |> Enum.take(-100) |> Enum.join("\n")
 
-    # Find in-progress ingredients with their titles for richer context
-    ingredients = Apothecary.Ingredients.list_ingredients(concoction_id: worktree_id)
+    # Find in-progress tasks with their titles for richer context
+    tasks = Apothecary.Worktrees.list_tasks(worktree_id: worktree_id)
 
     in_progress =
-      ingredients
+      tasks
       |> Enum.filter(&(&1.status == "in_progress"))
       |> Enum.map(&"  - #{&1.id}: #{&1.title}")
 
     in_progress_section =
       if in_progress != [] do
-        "\nIn-progress ingredients at time of failure:\n#{Enum.join(in_progress, "\n")}"
+        "\nIn-progress tasks at time of failure:\n#{Enum.join(in_progress, "\n")}"
       else
         ""
       end
@@ -428,18 +433,18 @@ defmodule Apothecary.Brewer do
       ]
       |> Enum.reject(&is_nil/1)
 
-    Apothecary.Ingredients.add_note(worktree_id, Enum.join(parts, "\n"))
+    Apothecary.Worktrees.add_note(worktree_id, Enum.join(parts, "\n"))
   end
 
-  # Private — Concoction finalization
+  # Private — Worktree finalization
 
-  defp finalize_concoction(worktree_id, agent) do
+  defp finalize_worktree(worktree_id, agent) do
     project_dir = agent.project_dir
     worktree_path = agent.worktree_path
 
-    # Check if this concoction already has a PR (revision cycle)
+    # Check if this worktree already has a PR (revision cycle)
     existing_pr_url =
-      case Apothecary.Ingredients.get_concoction(worktree_id) do
+      case Apothecary.Worktrees.get_worktree(worktree_id) do
         {:ok, wt} -> wt.pr_url
         _ -> nil
       end
@@ -449,7 +454,7 @@ defmodule Apothecary.Brewer do
 
     case merge_result do
       :ok ->
-        Logger.info("Merged latest main into branch for concoction #{worktree_id}")
+        Logger.info("Merged latest main into branch for worktree #{worktree_id}")
 
       {:error, {:merge_conflict, output}} ->
         # Abort the failed merge so the worktree is clean for a future fix attempt
@@ -465,13 +470,13 @@ defmodule Apothecary.Brewer do
       {:error, reason} ->
         Logger.warning("Failed to merge main into branch for #{worktree_id}: #{inspect(reason)}")
 
-        Apothecary.Ingredients.add_note(
+        Apothecary.Worktrees.add_note(
           worktree_id,
           "Merge main failed: #{inspect(reason)}. Pushing branch as-is."
         )
     end
 
-    # If we hit a merge conflict, don't proceed to push — the concoction needs user approval
+    # If we hit a merge conflict, don't proceed to push — the worktree needs user approval
     if match?({:error, {:merge_conflict, _}}, merge_result) do
       :merge_conflict
     else
@@ -486,17 +491,17 @@ defmodule Apothecary.Brewer do
     # Push the branch
     case Apothecary.Git.push_branch(worktree_path) do
       {:ok, _} ->
-        Logger.info("Pushed branch for concoction #{worktree_id}")
+        Logger.info("Pushed branch for worktree #{worktree_id}")
 
         cond do
           existing_pr_url ->
             # Revision cycle — PR already exists, just push and go back to pr_open
-            Apothecary.Ingredients.add_note(
+            Apothecary.Worktrees.add_note(
               worktree_id,
               "Revision pushed to existing PR: #{existing_pr_url}"
             )
 
-            Apothecary.Ingredients.update_concoction(worktree_id, %{
+            Apothecary.Worktrees.update_worktree(worktree_id, %{
               status: "pr_open",
               assigned_brewer_id: nil
             })
@@ -507,7 +512,7 @@ defmodule Apothecary.Brewer do
 
             case pr_result do
               {:ok, _pr_url} ->
-                Apothecary.Ingredients.update_concoction(worktree_id, %{
+                Apothecary.Worktrees.update_worktree(worktree_id, %{
                   status: "pr_open",
                   assigned_brewer_id: nil
                 })
@@ -515,13 +520,13 @@ defmodule Apothecary.Brewer do
               {:error, reason} ->
                 branch = agent.branch || "(unknown)"
 
-                Apothecary.Ingredients.add_note(
+                Apothecary.Worktrees.add_note(
                   worktree_id,
                   "PR creation failed: #{inspect(reason)}. " <>
                     "Branch '#{branch}' was pushed — create PR manually from dashboard."
                 )
 
-                Apothecary.Ingredients.update_concoction(worktree_id, %{
+                Apothecary.Worktrees.update_worktree(worktree_id, %{
                   status: "brew_done",
                   assigned_brewer_id: nil
                 })
@@ -529,28 +534,28 @@ defmodule Apothecary.Brewer do
 
           true ->
             # Manual: branch pushed, waiting for user to create PR from dashboard
-            Apothecary.Ingredients.add_note(
+            Apothecary.Worktrees.add_note(
               worktree_id,
               "Branch pushed. Create PR from the dashboard when ready."
             )
 
-            Apothecary.Ingredients.update_concoction(worktree_id, %{
+            Apothecary.Worktrees.update_worktree(worktree_id, %{
               status: "brew_done",
               assigned_brewer_id: nil
             })
         end
 
       {:error, reason} ->
-        Logger.warning("Failed to push branch for concoction #{worktree_id}: #{inspect(reason)}")
+        Logger.warning("Failed to push branch for worktree #{worktree_id}: #{inspect(reason)}")
 
-        Apothecary.Ingredients.add_note(
+        Apothecary.Worktrees.add_note(
           worktree_id,
           "Push failed: #{inspect(reason)}. Branch is ready — retry push from the dashboard."
         )
 
-        # Set to brew_done so the concoction appears in the sampling lane
+        # Set to brew_done so the worktree appears in the reviewing lane
         # for manual retry, instead of staying stuck in "in_progress"
-        Apothecary.Ingredients.update_concoction(worktree_id, %{
+        Apothecary.Worktrees.update_worktree(worktree_id, %{
           status: "brew_done",
           assigned_brewer_id: nil
         })
@@ -564,16 +569,16 @@ defmodule Apothecary.Brewer do
         files -> Enum.join(files, ", ")
       end
 
-    Apothecary.Ingredients.add_note(
+    Apothecary.Worktrees.add_note(
       worktree_id,
       "Merge conflict detected with main branch in: #{files_list}.\n" <>
-        "A 'Fix merge conflicts' ingredient has been created.\n" <>
+        "A 'Fix merge conflicts' task has been created.\n" <>
         "Approve it from the dashboard to dispatch a brewer to resolve the conflicts."
     )
 
-    # Create a fix-merge-conflicts ingredient on this concoction
-    Apothecary.Ingredients.create_ingredient(%{
-      concoction_id: worktree_id,
+    # Create a fix-merge-conflicts task on this worktree
+    Apothecary.Worktrees.create_task(%{
+      worktree_id: worktree_id,
       title: "Fix merge conflicts with main",
       priority: 0,
       description:
@@ -587,33 +592,33 @@ defmodule Apothecary.Brewer do
     })
 
     # Set status to merge_conflict so it shows up distinctly on the dashboard
-    Apothecary.Ingredients.update_concoction(worktree_id, %{
+    Apothecary.Worktrees.update_worktree(worktree_id, %{
       status: "merge_conflict",
       assigned_brewer_id: nil
     })
   end
 
   defp create_pr_with_retry(worktree_id, worktree_path, project_dir, retries \\ 2) do
-    case Apothecary.Ingredients.get_concoction(worktree_id) do
+    case Apothecary.Worktrees.get_worktree(worktree_id) do
       {:ok, worktree} ->
         title = "[#{worktree_id}] #{worktree.title}"
         do_create_pr(worktree_id, worktree_path, project_dir, title, retries)
 
       {:error, _} ->
-        {:error, :concoction_not_found}
+        {:error, :worktree_not_found}
     end
   end
 
   defp do_create_pr(worktree_id, worktree_path, project_dir, title, retries_left) do
     case Apothecary.Git.create_pr(project_dir, worktree_path, title) do
       {:ok, pr_url} ->
-        Logger.info("Created PR for concoction #{worktree_id}: #{pr_url}")
+        Logger.info("Created PR for worktree #{worktree_id}: #{pr_url}")
 
-        Apothecary.Ingredients.update_concoction(worktree_id, %{
+        Apothecary.Worktrees.update_worktree(worktree_id, %{
           pr_url: pr_url
         })
 
-        Apothecary.Ingredients.add_note(worktree_id, "PR created: #{pr_url}")
+        Apothecary.Worktrees.add_note(worktree_id, "PR created: #{pr_url}")
         {:ok, pr_url}
 
       {:error, reason} when retries_left > 0 ->
@@ -626,7 +631,7 @@ defmodule Apothecary.Brewer do
         do_create_pr(worktree_id, worktree_path, project_dir, title, retries_left - 1)
 
       {:error, reason} ->
-        Logger.warning("Failed to create PR for concoction #{worktree_id}: #{inspect(reason)}")
+        Logger.warning("Failed to create PR for worktree #{worktree_id}: #{inspect(reason)}")
         {:error, reason}
     end
   end
@@ -703,9 +708,11 @@ defmodule Apothecary.Brewer do
       try do
         script_exe = System.find_executable("script")
 
-        cmd =
+        claude_cmd =
           "'#{claude_exe}' -p \"$APOTHECARY_PROMPT\" " <>
             "--dangerously-skip-permissions --verbose --output-format stream-json"
+
+        cmd = maybe_sandbox_wrap(claude_cmd, agent.worktree_path, agent.id)
 
         {executable, args} =
           if script_exe do
@@ -782,7 +789,7 @@ defmodule Apothecary.Brewer do
         _ -> ""
       end
 
-    ingredient_list = format_ingredient_list(tasks)
+    task_list = format_task_list(tasks)
 
     notes_section =
       if worktree.notes && worktree.notes != "" do
@@ -798,7 +805,7 @@ defmodule Apothecary.Brewer do
       if worktree.pr_url do
         """
         ## PR Revision
-        This concoction has an existing PR: #{worktree.pr_url}
+        This worktree has an existing PR: #{worktree.pr_url}
         You have been re-dispatched to address review feedback.
         Check the PR comments with `gh pr view #{worktree.pr_url} --comments` and address any requested changes.
         Do NOT create a new PR — just commit your fixes and the orchestrator will push to the existing PR branch.
@@ -817,7 +824,7 @@ defmodule Apothecary.Brewer do
     You are an autonomous coding agent working in: #{worktree_path}
 
     ## Your Work
-    Concoction ID: #{worktree.id}
+    Worktree ID: #{worktree.id}
     Title: #{worktree.title}
     Description: #{worktree.description || worktree.title}
 
@@ -827,45 +834,45 @@ defmodule Apothecary.Brewer do
     #{notes_section}
     #{git_context}
     #{revision_section}
-    ## Ingredient Management via MCP
-    You have MCP tools to manage ingredients within this concoction:
-    - **concoction_status** — See your concoction overview and all ingredients
-    - **list_ingredients** — List ingredients (with optional status filter)
-    - **create_ingredient** — Create a sub-ingredient (for decomposing complex work)
-    - **complete_ingredient** — Mark an ingredient as done
+    ## Task Management via MCP
+    You have MCP tools to manage tasks within this worktree:
+    - **worktree_status** — See your worktree overview and all tasks
+    - **list_tasks** — List tasks (with optional status filter)
+    - **create_task** — Create a sub-task (for decomposing complex work)
+    - **complete_task** — Mark a task as done
     - **add_notes** — Log progress notes (persists across restarts)
-    - **get_ingredient** — Get full details of an ingredient
-    - **add_dependency** — Wire dependencies between ingredients
+    - **get_task** — Get full details of a task
+    - **add_dependency** — Wire dependencies between tasks
 
-    #{if ingredient_list != "" do
+    #{if task_list != "" do
       """
-      ## Pre-Created Ingredients
-      #{ingredient_list}
+      ## Pre-Created Tasks
+      #{task_list}
 
-      Work through each ingredient in order. Use `complete_ingredient` to mark each done.
+      Work through each task in order. Use `complete_task` to mark each done.
       """
     else
       """
       ## Instructions
       Assess the complexity of this work:
 
-      **If the ingredient is small and self-contained:**
+      **If the task is small and self-contained:**
       1. Implement it directly
       2. Run tests to verify
-      3. Use `complete_ingredient` or `add_notes` to report what you did
+      3. Use `complete_task` or `add_notes` to report what you did
       4. Commit your changes
 
-      **If the ingredient is complex (touches multiple files/systems):**
-      1. Use `create_ingredient` to decompose into ordered sub-ingredients
+      **If the task is complex (touches multiple files/systems):**
+      1. Use `create_task` to decompose into ordered sub-tasks
       2. Use `add_dependency` to wire blocking relationships if needed
-      3. Work through each sub-ingredient, using `complete_ingredient` as you go
+      3. Work through each sub-task, using `complete_task` as you go
       4. Commit after each logical piece of work
       5. Run tests to verify everything works together
       """
     end}
 
-    **IMPORTANT:** Before starting work, call `concoction_status` to get the latest ingredient list and notes.
-    Ingredients may have been added or updated since this prompt was generated.
+    **IMPORTANT:** Before starting work, call `worktree_status` to get the latest task list and notes.
+    Tasks may have been added or updated since this prompt was generated.
 
     ## Rules
     - You are on a feature branch in a git worktree, NOT main
@@ -935,9 +942,9 @@ defmodule Apothecary.Brewer do
     end
   end
 
-  defp format_ingredient_list([]), do: ""
+  defp format_task_list([]), do: ""
 
-  defp format_ingredient_list(tasks) do
+  defp format_task_list(tasks) do
     tasks
     |> Enum.sort_by(fn t -> {t.priority || 99, t.created_at || ""} end)
     |> Enum.map(fn t ->
@@ -1048,5 +1055,95 @@ defmodule Apothecary.Brewer do
       {:ok, project} -> project.path
       _ -> nil
     end
+  end
+
+  # Sandbox — OS-level filesystem restriction to worktree
+
+  defp maybe_sandbox_wrap(cmd, worktree_path, agent_id) do
+    case :os.type() do
+      {:unix, :darwin} -> sandbox_wrap_darwin(cmd, worktree_path, agent_id)
+      {:unix, _} -> sandbox_wrap_linux(cmd, worktree_path, agent_id)
+      _ -> cmd
+    end
+  end
+
+  defp sandbox_wrap_darwin(cmd, worktree_path, agent_id) do
+    sandbox_exec = System.find_executable("sandbox-exec")
+
+    if sandbox_exec do
+      profile = generate_seatbelt_profile(worktree_path)
+      profile_path = sandbox_profile_path(agent_id)
+      File.write!(profile_path, profile)
+      Logger.info("Brewer #{agent_id} sandboxed via sandbox-exec (writes restricted to #{worktree_path})")
+      "'#{sandbox_exec}' -f '#{profile_path}' /bin/sh -c #{escape_for_sh(cmd)}"
+    else
+      Logger.warning("Brewer #{agent_id} sandbox-exec not found, running unsandboxed")
+      cmd
+    end
+  end
+
+  defp sandbox_wrap_linux(cmd, worktree_path, agent_id) do
+    bwrap = System.find_executable("bwrap")
+
+    if bwrap do
+      home = System.get_env("HOME") || "/root"
+      claude_dir = Path.join(home, ".claude")
+
+      Logger.info("Brewer #{agent_id} sandboxed via bwrap (writes restricted to #{worktree_path})")
+
+      "'#{bwrap}' " <>
+        "--ro-bind / / " <>
+        "--dev /dev " <>
+        "--proc /proc " <>
+        "--bind '#{worktree_path}' '#{worktree_path}' " <>
+        "--bind '#{claude_dir}' '#{claude_dir}' " <>
+        "--bind /tmp /tmp " <>
+        "--unshare-all " <>
+        "--share-net " <>
+        "--die-with-parent " <>
+        "-- /bin/sh -c #{escape_for_sh(cmd)}"
+    else
+      Logger.warning("Brewer #{agent_id} bwrap not found, running unsandboxed (install bubblewrap for sandbox support)")
+      cmd
+    end
+  end
+
+  defp generate_seatbelt_profile(worktree_path) do
+    home = System.get_env("HOME") || "/Users/#{System.get_env("USER")}"
+    claude_dir = Path.join(home, ".claude")
+
+    """
+    (version 1)
+    (allow default)
+
+    ; Restrict file writes to worktree and necessary system paths
+    (deny file-write*
+      (require-all
+        (require-not (subpath "#{worktree_path}"))
+        (require-not (subpath "/private/tmp"))
+        (require-not (subpath "/tmp"))
+        (require-not (subpath "/private/var/folders"))
+        (require-not (subpath "#{claude_dir}"))
+        (require-not (literal "/dev/null"))
+        (require-not (literal "/dev/tty"))
+        (require-not (literal "/dev/urandom"))
+      )
+    )
+    """
+  end
+
+  defp sandbox_profile_path(agent_id) do
+    Path.join(System.tmp_dir!(), "apothecary-sandbox-#{agent_id}.sb")
+  end
+
+  defp cleanup_sandbox_profile(agent_id) do
+    path = sandbox_profile_path(agent_id)
+    File.rm(path)
+  end
+
+  defp escape_for_sh(cmd) do
+    # Wrap the command in single quotes for the outer sh -c,
+    # escaping any single quotes within
+    "'" <> String.replace(cmd, "'", "'\\''") <> "'"
   end
 end

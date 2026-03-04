@@ -436,22 +436,22 @@ And **never** do this:
 
 <!-- usage-rules-end -->
 
-<!-- BEGIN INGREDIENT MANAGEMENT -->
-## Ingredient Management via MCP
+<!-- BEGIN TASK MANAGEMENT -->
+## Task Management via MCP
 
-**IMPORTANT**: This project uses **MCP tools** for ALL ingredient tracking. The Apothecary orchestrator manages state via Mnesia. Do NOT use markdown TODOs, external issue trackers, or other tracking methods.
+**IMPORTANT**: This project uses **MCP tools** for ALL task tracking. The Apothecary orchestrator manages state via Mnesia. Do NOT use markdown TODOs, external issue trackers, or other tracking methods.
 
 ### Available MCP Tools
 
 | Tool | Purpose |
 |------|---------|
-| `concoction_status` | See your concoction overview and all ingredients |
-| `list_ingredients` | List ingredients (with optional status filter) |
-| `create_ingredient` | Create a sub-ingredient (for decomposing complex work) |
-| `complete_ingredient` | Mark an ingredient as done with optional summary |
+| `worktree_status` | See your worktree overview and all tasks |
+| `list_tasks` | List tasks (with optional status filter) |
+| `create_task` | Create a sub-task (for decomposing complex work) |
+| `complete_task` | Mark a task as done with optional summary |
 | `add_notes` | Log progress notes (persists across restarts) |
-| `get_ingredient` | Get full details of a specific ingredient |
-| `add_dependency` | Wire dependencies between ingredients |
+| `get_task` | Get full details of a specific task |
+| `add_dependency` | Wire dependencies between tasks |
 
 ### Priorities
 
@@ -463,11 +463,11 @@ And **never** do this:
 
 ### Workflow for Brewers
 
-1. **Check your work**: Use `concoction_status` to see your concoction and any pre-created ingredients
-2. **Decompose** (if complex): Use `create_ingredient` to break work into ordered steps
+1. **Check your work**: Use `worktree_status` to see your worktree and any pre-created tasks
+2. **Decompose** (if complex): Use `create_task` to break work into ordered steps
 3. **Wire deps** (if needed): Use `add_dependency` to set blocking relationships
-4. **Work**: Implement each ingredient in priority order
-5. **Track**: Use `complete_ingredient` when done with each ingredient
+4. **Work**: Implement each task in priority order
+5. **Track**: Use `complete_task` when done with each task
 6. **Log progress**: Use `add_notes` to record decisions and context
 7. **Commit**: Commit after each logical unit of work
 
@@ -475,12 +475,12 @@ And **never** do this:
 
 When you receive work, assess its complexity:
 
-- **Small and self-contained**: Just do it directly. Use `complete_ingredient` when done.
+- **Small and self-contained**: Just do it directly. Use `complete_task` when done.
 - **Complex (multiple files/systems)**: Decompose first:
-  1. Use `create_ingredient` for each logical step
-  2. Use `add_dependency` to wire ordering if ingredients depend on each other
-  3. Use `list_ingredients` to verify the plan looks right
-  4. Start working on the first ready ingredient
+  1. Use `create_task` for each logical step
+  2. Use `add_dependency` to wire ordering if tasks depend on each other
+  3. Use `list_tasks` to verify the plan looks right
+  4. Start working on the first ready task
 
 ### Progress Notes
 
@@ -488,28 +488,28 @@ Use `add_notes` to log context that survives brewer restarts:
 - What you've tried and what worked/didn't
 - Key decisions and why you made them
 - Blockers or issues encountered
-- Partial progress on long ingredients
+- Partial progress on long tasks
 
 ### Important Rules
 
-- Use MCP tools for ALL ingredient tracking
+- Use MCP tools for ALL task tracking
 - NEVER create markdown TODO lists or other tracking systems
 - DO use `add_notes` for context that future brewers might need
-- DO use `complete_ingredient` to mark each finished step
+- DO use `complete_task` to mark each finished step
 
-<!-- END INGREDIENT MANAGEMENT -->
+<!-- END TASK MANAGEMENT -->
 
 ## Session Completion
 
 When your work is done:
 
 1. **Ensure all changes are committed** - Work is NOT done until committed
-2. **Mark ingredients as done** - Use `complete_ingredient` for each finished ingredient
-3. **Add final summary** - Use `add_notes` on the concoction with what was accomplished
+2. **Mark tasks as done** - Use `complete_task` for each finished task
+3. **Add final summary** - Use `add_notes` on the worktree with what was accomplished
 4. **Exit cleanly** - The orchestrator will:
    - Push your branch to remote
    - Create a pull request
-   - Close the concoction
+   - Close the worktree
 
 **CRITICAL RULES:**
 - Work is NOT complete until all changes are committed
@@ -517,7 +517,7 @@ When your work is done:
 - NEVER push at all - the orchestrator handles pushing and PR creation
 - NEVER create PRs yourself - the orchestrator handles this
 - DO commit frequently with descriptive messages
-- DO include the concoction or ingredient ID in commit messages
+- DO include the worktree or task ID in commit messages
 
 ## Non-Interactive Shell Commands
 

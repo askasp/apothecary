@@ -78,7 +78,7 @@ defmodule Apothecary.Bootstrapper do
   end
 
   defp start_bootstrap(parent_dir, name, path, template, opts) do
-    Task.start(fn ->
+    Elixir.Task.start(fn ->
       result = do_create(parent_dir, name, path, template, opts)
       broadcast({:bootstrap_complete, name, result})
     end)
