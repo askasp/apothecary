@@ -5,9 +5,7 @@ defmodule Apothecary.MCP.Tools.AddDependency do
   alias Hermes.Server.Response
 
   schema do
-    field(:blocked_id, {:required, :string},
-      description: "Task that is blocked (e.g. t-abc123)"
-    )
+    field(:blocked_id, {:required, :string}, description: "Task that is blocked (e.g. t-abc123)")
 
     field(:blocker_id, {:required, :string},
       description: "Task that must complete first (e.g. t-def456)"

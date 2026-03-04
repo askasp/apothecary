@@ -462,9 +462,7 @@ defmodule Apothecary.Brewer do
         Apothecary.Git.abort_merge(worktree_path)
         conflict_files = Apothecary.Git.conflict_files(output)
 
-        Logger.warning(
-          "Merge conflict for #{worktree_id} in files: #{inspect(conflict_files)}"
-        )
+        Logger.warning("Merge conflict for #{worktree_id} in files: #{inspect(conflict_files)}")
 
         handle_merge_conflict(worktree_id, conflict_files, output)
 
@@ -713,7 +711,8 @@ defmodule Apothecary.Brewer do
           "'#{claude_exe}' -p \"$APOTHECARY_PROMPT\" " <>
             "--dangerously-skip-permissions --verbose --output-format stream-json"
 
-        {cmd, sandboxed} = maybe_sandbox_wrap(claude_cmd, agent.worktree_path, agent.project_dir, agent.id)
+        {cmd, sandboxed} =
+          maybe_sandbox_wrap(claude_cmd, agent.worktree_path, agent.project_dir, agent.id)
 
         {executable, args} =
           if script_exe do
@@ -1075,7 +1074,11 @@ defmodule Apothecary.Brewer do
       profile = generate_seatbelt_profile(worktree_path, project_dir)
       profile_path = sandbox_profile_path(agent_id)
       File.write!(profile_path, profile)
-      Logger.info("Brewer #{agent_id} sandboxed via sandbox-exec (writes restricted to #{worktree_path})")
+
+      Logger.info(
+        "Brewer #{agent_id} sandboxed via sandbox-exec (writes restricted to #{worktree_path})"
+      )
+
       {"'#{sandbox_exec}' -f '#{profile_path}' /bin/sh -c #{escape_for_sh(cmd)}", true}
     else
       Logger.warning("Brewer #{agent_id} sandbox-exec not found, running unsandboxed")
@@ -1091,7 +1094,9 @@ defmodule Apothecary.Brewer do
       claude_dir = Path.join(home, ".claude")
       git_dir = if project_dir, do: Path.join(project_dir, ".git"), else: nil
 
-      Logger.info("Brewer #{agent_id} sandboxed via bwrap (writes restricted to #{worktree_path})")
+      Logger.info(
+        "Brewer #{agent_id} sandboxed via bwrap (writes restricted to #{worktree_path})"
+      )
 
       git_bind = if git_dir, do: "--bind '#{git_dir}' '#{git_dir}' ", else: ""
 
@@ -1111,7 +1116,10 @@ defmodule Apothecary.Brewer do
 
       {wrapped, true}
     else
-      Logger.warning("Brewer #{agent_id} bwrap not found, running unsandboxed (install bubblewrap for sandbox support)")
+      Logger.warning(
+        "Brewer #{agent_id} bwrap not found, running unsandboxed (install bubblewrap for sandbox support)"
+      )
+
       {cmd, false}
     end
   end

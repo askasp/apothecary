@@ -19,8 +19,7 @@ defmodule Apothecary.McpConfig do
     apothecary_mcp = %{
       "apothecary" => %{
         "type" => "http",
-        "url" =>
-          "http://localhost:#{port}/mcp?brewer_id=#{agent_id}&worktree_id=#{worktree_id}"
+        "url" => "http://localhost:#{port}/mcp?brewer_id=#{agent_id}&worktree_id=#{worktree_id}"
       }
     }
 
