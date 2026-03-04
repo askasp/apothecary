@@ -39,9 +39,9 @@ let Hooks = {
       window.addEventListener("keydown", (e) => {
         const switcherOpen = document.querySelector("[data-project-switcher]")
 
-        // In project switcher: let Tab, Ctrl+N, Ctrl+P reach LiveView
+        // In project switcher: let navigation keys reach LiveView
         if (switcherOpen) {
-          if (e.key === "Tab") {
+          if (e.key === "Tab" || e.key === "ArrowDown" || e.key === "ArrowUp") {
             e.preventDefault()
             return
           }

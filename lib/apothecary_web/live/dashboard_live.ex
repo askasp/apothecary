@@ -524,7 +524,8 @@ defmodule ApothecaryWeb.DashboardLive do
 
   def handle_event("hotkey", %{"key" => key}, socket) do
     cond do
-      socket.assigns.show_project_switcher and key in ["j", "k", "Tab", "Enter", "Escape"] ->
+      socket.assigns.show_project_switcher and
+          key in ["j", "k", "Tab", "Enter", "Escape", "ArrowDown", "ArrowUp"] ->
         {:noreply, handle_switcher_hotkey(key, socket)}
 
       socket.assigns.input_focused and key not in ["Escape"] ->
@@ -1624,7 +1625,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
   # --- Project switcher hotkeys ---
 
-  defp handle_switcher_hotkey(key, socket) when key in ["j", "Tab"] do
+  defp handle_switcher_hotkey(key, socket) when key in ["j", "Tab", "ArrowDown"] do
     filtered = filter_projects(socket.assigns.projects, socket.assigns.switcher_query)
     max_idx = max(length(filtered) - 1, 0)
 
@@ -1633,7 +1634,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> push_event("scroll-to-selected", %{})
   end
 
-  defp handle_switcher_hotkey("k", socket) do
+  defp handle_switcher_hotkey(key, socket) when key in ["k", "ArrowUp"] do
     socket
     |> assign(:switcher_selected, max(socket.assigns.switcher_selected - 1, 0))
     |> push_event("scroll-to-selected", %{})
@@ -1666,16 +1667,24 @@ defmodule ApothecaryWeb.DashboardLive do
     query_down = String.downcase(query)
 
     projects
-    |> Enum.filter(fn p -> fuzzy_match?(String.downcase(p.name), query_down) end)
-    |> Enum.sort_by(fn p ->
+    |> Enum.map(fn p ->
       name = String.downcase(p.name)
-      # Prefer starts-with, then substring, then fuzzy
-      cond do
-        String.starts_with?(name, query_down) -> 0
-        String.contains?(name, query_down) -> 1
-        true -> 2
-      end
+      {p, project_match_score(name, query_down)}
     end)
+    |> Enum.filter(fn {_p, score} -> score != nil end)
+    |> Enum.sort_by(fn {_p, score} -> score end)
+    |> Enum.map(fn {p, _score} -> p end)
+  end
+
+  # Returns a score (lower is better) or nil if no match.
+  # Prefers: exact prefix (0), substring (100), fuzzy with tight gaps (200+gap_penalty).
+  defp project_match_score(name, query) do
+    cond do
+      String.starts_with?(name, query) -> 0
+      String.contains?(name, query) -> 100
+      fuzzy_match?(name, query) -> 200 + fuzzy_gap_score(name, query)
+      true -> nil
+    end
   end
 
   defp fuzzy_match?(name, query) do
@@ -1686,6 +1695,18 @@ defmodule ApothecaryWeb.DashboardLive do
   defp fuzzy_match_chars?([], _query), do: false
   defp fuzzy_match_chars?([h | t1], [h | t2]), do: fuzzy_match_chars?(t1, t2)
   defp fuzzy_match_chars?([_ | t1], query), do: fuzzy_match_chars?(t1, query)
+
+  # Counts total gaps between matched characters (lower = tighter match)
+  defp fuzzy_gap_score(name, query) do
+    name_chars = String.graphemes(name)
+    query_chars = String.graphemes(query)
+    do_gap_score(name_chars, query_chars, 0)
+  end
+
+  defp do_gap_score(_name, [], total), do: total
+  defp do_gap_score([], _query, _total), do: 999
+  defp do_gap_score([h | t1], [h | t2], total), do: do_gap_score(t1, t2, total)
+  defp do_gap_score([_ | t1], query, total), do: do_gap_score(t1, query, total + 1)
 
   # --- Hotkey handlers ---
 
@@ -3014,21 +3035,19 @@ defmodule ApothecaryWeb.DashboardLive do
 
         <div style="border-bottom: 1px solid var(--border);" />
 
+        <%!-- Project switcher overlay --%>
+        <.project_switcher
+          :if={@show_project_switcher}
+          projects={filter_projects(@projects, @switcher_query)}
+          current_project={@current_project}
+          dispatcher_projects={@dispatcher_projects}
+          selected_index={@switcher_selected}
+          query={@switcher_query}
+        />
+
         <%!-- Main content area --%>
         <div class="flex-1 overflow-hidden">
           <%= cond do %>
-            <% @show_project_switcher -> %>
-              <div class="h-full overflow-y-auto scroll-main">
-                <div class="max-w-[540px] mx-auto">
-                  <.project_switcher
-                    projects={filter_projects(@projects, @switcher_query)}
-                    current_project={@current_project}
-                    dispatcher_projects={@dispatcher_projects}
-                    selected_index={@switcher_selected}
-                    query={@switcher_query}
-                  />
-                </div>
-              </div>
             <% is_nil(@current_project) -> %>
               <div class="h-full overflow-y-auto scroll-main">
                 <div class="max-w-[540px] mx-auto">
