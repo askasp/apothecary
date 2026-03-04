@@ -1242,6 +1242,11 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("switcher-hover", %{"index" => index}, socket) do
+    {:noreply, assign(socket, :switcher_selected, String.to_integer(index))}
+  end
+
+  @impl true
   def handle_event("switcher-select", _params, socket) do
     filtered = filter_projects(socket.assigns.projects, socket.assigns.switcher_query)
 

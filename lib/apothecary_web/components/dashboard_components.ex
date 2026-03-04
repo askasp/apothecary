@@ -322,7 +322,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             value={@query}
             autocomplete="off"
             phx-debounce="80"
-            placeholder="filter..."
+            placeholder="search projects..."
             class="moonlight-input w-full"
             style="padding: 8px 12px; font-size: var(--font-size-sm); caret-color: var(--accent);"
           />
@@ -337,10 +337,12 @@ defmodule ApothecaryWeb.DashboardComponents do
           class="block px-4 py-3 cursor-pointer project-landing-item"
           style={"text-decoration: none; #{if selected?, do: "border-left: 2px solid var(--accent); background: var(--surface);", else: "border-left: 2px solid transparent;"}"}
           data-selected={if(selected?, do: "true")}
+          phx-mouseover="switcher-hover"
+          phx-value-index={idx}
         >
           <div class="flex items-center justify-between">
             <span style={"font-size: 14px; font-weight: 600; color: #{if selected?, do: "var(--text)", else: "var(--dim)"};"}>
-              {project.name}
+              <.fuzzy_name name={project.name} query={@query} />
             </span>
             <span :if={is_current} style="color: var(--accent); font-size: var(--font-size-sm);">
               current
@@ -369,8 +371,8 @@ defmodule ApothecaryWeb.DashboardComponents do
 
       <.link
         navigate={~p"/"}
-        class="block px-4 py-3 cursor-pointer"
-        style="text-decoration: none;"
+        class="block px-4 py-3 cursor-pointer project-landing-item"
+        style="text-decoration: none; border-left: 2px solid transparent;"
       >
         <span style="color: var(--accent);">+</span>
         <span style="color: var(--dim); font-size: var(--font-size-sm);">
@@ -379,6 +381,40 @@ defmodule ApothecaryWeb.DashboardComponents do
       </.link>
     </div>
     """
+  end
+
+  defp fuzzy_name(assigns) do
+    highlights = fuzzy_highlight(assigns.name, assigns.query)
+    assigns = assign(assigns, :highlights, highlights)
+
+    ~H"""
+    <%= for {char, matched?} <- @highlights do %>
+      <span :if={matched?} class="fuzzy-match">{char}</span><span :if={!matched?}>{char}</span>
+    <% end %>
+    """
+  end
+
+  defp fuzzy_highlight(name, nil), do: Enum.map(String.graphemes(name), &{&1, false})
+  defp fuzzy_highlight(name, ""), do: Enum.map(String.graphemes(name), &{&1, false})
+
+  defp fuzzy_highlight(name, query) do
+    name_chars = String.graphemes(name)
+    query_chars = String.graphemes(String.downcase(query))
+    do_fuzzy_highlight(name_chars, query_chars, [])
+  end
+
+  defp do_fuzzy_highlight([], _query, acc), do: Enum.reverse(acc)
+
+  defp do_fuzzy_highlight(remaining, [], acc) do
+    Enum.reverse(acc) ++ Enum.map(remaining, &{&1, false})
+  end
+
+  defp do_fuzzy_highlight([h | t1], [q | t2], acc) do
+    if String.downcase(h) == q do
+      do_fuzzy_highlight(t1, t2, [{h, true} | acc])
+    else
+      do_fuzzy_highlight(t1, [q | t2], [{h, false} | acc])
+    end
   end
 
   defp project_status_dots(assigns) do
