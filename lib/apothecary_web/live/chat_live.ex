@@ -157,10 +157,6 @@ defmodule ApothecaryWeb.ChatLive do
       {:noreply, socket}
     else
       context = socket.assigns.context
-      user_msg = ChatMessage.user(socket.assigns.msg_counter, text, Context.label(context))
-      socket = update_counter(socket)
-      socket = append_message(socket, user_msg)
-
       parsed = CommandParser.parse(text, context)
       {messages, updates} = CommandHandler.execute(parsed, socket)
 

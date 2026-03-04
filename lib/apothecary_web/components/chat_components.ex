@@ -148,18 +148,24 @@ defmodule ApothecaryWeb.ChatComponents do
       assigns.dispatcher_projects
     )
 
-    assigns = assign(assigns, :body, body)
-    assigns = assign(assigns, :has_brewing, Enum.any?(assigns.agents, &(&1.status == :working)))
+    # Count spinning lines for unique spinner IDs
+    {lines, _} =
+      body
+      |> String.split("\n")
+      |> Enum.map_reduce(0, fn line, idx ->
+        case String.split(line, "⠋", parts: 2) do
+          [before, after_text] ->
+            {{:spin, idx, before, after_text}, idx + 1}
+          _ ->
+            {{:text, line}, idx}
+        end
+      end)
+
+    assigns = assign(assigns, :lines, lines)
 
     ~H"""
     <div class="chat-status-block">
-      <div class="chat-system-label">
-        <%= if @has_brewing do %>
-          <.braille_spinner id="status-spinner" offset={0} />
-        <% end %>
-        <span style="color: var(--dim);">status</span>
-      </div>
-      <pre class="chat-pre"><%= @body %></pre>
+      <pre class="chat-pre"><%= for line <- @lines do %><.status_line line={line} prefix="ss" /><% end %></pre>
     </div>
     """
   end
@@ -186,25 +192,52 @@ defmodule ApothecaryWeb.ChatComponents do
     end)
 
     body = if wt, do: Formatters.format_worktree_info(wt, tasks, wt_agents), else: "worktree not found"
-    has_brewing = wt_agents != []
 
-    assigns =
-      assigns
-      |> assign(:body, body)
-      |> assign(:has_brewing, has_brewing)
-      |> assign(:wt_title, if(wt, do: wt.title, else: ""))
+    {lines, _} =
+      body
+      |> String.split("\n")
+      |> Enum.map_reduce(0, fn line, idx ->
+        case String.split(line, "⠋", parts: 2) do
+          [before, after_text] ->
+            {{:spin, idx, before, after_text}, idx + 1}
+          _ ->
+            {{:text, line}, idx}
+        end
+      end)
+
+    prefix = "si-#{assigns.wt_id}"
+    assigns = assign(assigns, :lines, lines)
+    assigns = assign(assigns, :prefix, prefix)
 
     ~H"""
     <div class="chat-status-block">
-      <div class="chat-system-label">
-        <%= if @has_brewing do %>
-          <.braille_spinner id={"info-spinner-#{@wt_id}"} offset={0} />
-        <% end %>
-        <span style="color: var(--dim);">info</span>
-      </div>
-      <pre class="chat-pre"><%= @body %></pre>
+      <pre class="chat-pre"><%= for line <- @lines do %><.status_line line={line} prefix={@prefix} /><% end %></pre>
     </div>
     """
+  end
+
+  # ── Status line (handles spinner replacement in pre) ───
+
+  attr :line, :any, required: true
+  attr :prefix, :string, required: true
+
+  defp status_line(%{line: {:spin, idx, before, after_text}} = assigns) do
+    spinner_id = "#{assigns.prefix}-#{idx}"
+
+    assigns =
+      assigns
+      |> assign(:before, before)
+      |> assign(:after_text, after_text)
+      |> assign(:spinner_id, spinner_id)
+      |> assign(:offset, idx)
+
+    ~H"<%= @before %><.braille_spinner id={@spinner_id} offset={@offset} type={:spinner} /><%= @after_text %>\n"
+  end
+
+  defp status_line(%{line: {:text, text}} = assigns) do
+    assigns = assign(assigns, :text, text)
+
+    ~H"<%= @text %>\n"
   end
 
   # ── Welcome screen ─────────────────────────────────────

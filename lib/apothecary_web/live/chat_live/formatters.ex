@@ -71,7 +71,6 @@ defmodule ApothecaryWeb.ChatLive.Formatters do
   end
 
   defp build_sections(grouped, tasks_by_wt, agents_by_wt) do
-    # Flatten all worktrees with their section info
     all_blocks =
       grouped
       |> Enum.flat_map(fn {group, wts} ->
@@ -88,14 +87,13 @@ defmodule ApothecaryWeb.ChatLive.Formatters do
         header_block ++ wt_blocks
       end)
 
-    # Determine which is last for └─ vs ├─
     total = length(all_blocks)
 
     all_blocks
     |> Enum.with_index()
     |> Enum.map(fn
       {{:section, header}, _idx} ->
-        "│\n│ #{header}"
+        "│\n│\n│ #{header}"
 
       {{:wt, wt, _group}, idx} ->
         is_last = idx == total - 1
@@ -109,25 +107,25 @@ defmodule ApothecaryWeb.ChatLive.Formatters do
   defp format_worktree_block(wt, tasks, agents, is_last) do
     short = short_id(wt.id)
     connector = if is_last, do: "└─", else: "├─"
-    cont = if is_last, do: "  ", else: "│ "
+    cont = if is_last, do: " ", else: "│"
 
     # Status dot
     dot =
       cond do
-        agents != [] -> "⠋ "
-        wt.status == "pr_open" -> "◎ "
-        wt.status == "done" -> "● "
-        true -> "○ "
+        agents != [] -> "⠋"
+        wt.status == "pr_open" -> "◎"
+        wt.status == "done" -> "●"
+        true -> "○"
       end
 
     kind_label = if wt.kind == "question", do: " [oracle]", else: ""
-    header = "#{connector} #{dot}#{wt.title}  #{short}#{kind_label}"
+    header = "#{connector} #{dot} #{wt.title}  #{short}#{kind_label}"
 
     # Brewer line
     agent_lines =
       Enum.map(agents, fn agent ->
         elapsed = format_elapsed(agent.started_at)
-        "#{cont}brewer #{agent.id} · #{elapsed}"
+        "#{cont} brewer #{agent.id} · #{elapsed}"
       end)
 
     # PR review line
@@ -135,7 +133,7 @@ defmodule ApothecaryWeb.ChatLive.Formatters do
       if wt.status == "pr_open" do
         pr_ref = if wt.pr_url, do: extract_pr_number(wt.pr_url), else: nil
         label = if pr_ref, do: "##{pr_ref} · ready for review", else: "ready for review"
-        ["#{cont}#{label}"]
+        ["#{cont} #{label}"]
       else
         []
       end
@@ -147,22 +145,30 @@ defmodule ApothecaryWeb.ChatLive.Formatters do
       |> Enum.with_index()
       |> Enum.map(fn {task, idx} ->
         tc = if idx == length(tasks) - 1, do: "└─", else: "├─"
-        dot = task_dot(task)
-        "#{cont}#{tc}#{dot}#{task.title}"
+        d = task_dot_char(task)
+        "#{cont} #{tc}#{d} #{task.title}"
       end)
 
-    # Progress bar
+    # Progress bar with bubbles marker
     progress =
       if tasks != [] do
         done = Enum.count(tasks, &(&1.status == "done"))
         total = length(tasks)
         bar = progress_bar(done, total)
-        ["#{cont}#{bar} #{done}/#{total}"]
+
+        if done < total do
+          ["#{cont} #{bar} #{done}/#{total} °·○°"]
+        else
+          ["#{cont} #{bar} #{done}/#{total}"]
+        end
       else
         []
       end
 
-    lines = [header] ++ agent_lines ++ review_line ++ task_lines ++ progress
+    # Spacing line
+    spacing = ["#{cont}"]
+
+    lines = [header] ++ agent_lines ++ review_line ++ task_lines ++ progress ++ spacing
     Enum.join(lines, "\n")
   end
 
@@ -213,8 +219,8 @@ defmodule ApothecaryWeb.ChatLive.Formatters do
         |> Enum.sort_by(& &1.created_at)
         |> Enum.with_index(1)
         |> Enum.map_join("\n", fn {task, n} ->
-          dot = task_dot(task)
-          "  #{n}. #{dot}#{task.title}"
+          d = task_dot_char(task)
+          "  #{n}. #{d} #{task.title}"
         end)
 
       header <> lines <> "\n  #{bar} #{done}/#{total}"
@@ -309,13 +315,13 @@ defmodule ApothecaryWeb.ChatLive.Formatters do
 
     dot =
       cond do
-        agents != [] -> "⠋ "
-        wt.status == "pr_open" -> "◎ "
-        wt.status == "done" -> "● "
-        true -> "○ "
+        agents != [] -> "⠋"
+        wt.status == "pr_open" -> "◎"
+        wt.status == "done" -> "●"
+        true -> "○"
       end
 
-    header = "#{dot}#{wt.title}  #{short}"
+    header = "#{dot} #{wt.title}  #{short}"
 
     pr_line = if wt.pr_url, do: "\n  PR #{wt.pr_url}", else: ""
 
@@ -341,8 +347,8 @@ defmodule ApothecaryWeb.ChatLive.Formatters do
           |> Enum.sort_by(& &1.created_at)
           |> Enum.with_index(1)
           |> Enum.map_join("\n", fn {task, n} ->
-            dot = task_dot(task)
-            "  #{n}. #{dot}#{task.title}"
+            d = task_dot_char(task)
+            "  #{n}. #{d} #{task.title}"
           end)
 
         "\n\n" <> task_lines <> "\n  #{bar} #{done}/#{total}"
@@ -355,9 +361,10 @@ defmodule ApothecaryWeb.ChatLive.Formatters do
 
   # ── Helpers ─────────────────────────────────────────────
 
-  defp task_dot(%Task{status: "done"}), do: "● "
-  defp task_dot(%Task{assigned_to: a}) when not is_nil(a), do: "⠋ "
-  defp task_dot(_), do: "○ "
+  defp task_dot_char(%Task{status: "done"}), do: "●"
+  defp task_dot_char(%Task{assigned_to: a}) when not is_nil(a), do: "⠋"
+  defp task_dot_char(_), do: "○"
+
 
   defp progress_bar(done, total) when total > 0 do
     filled = round(done / total * 4)
