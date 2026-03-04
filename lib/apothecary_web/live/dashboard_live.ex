@@ -1856,7 +1856,21 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  defp handle_hotkey("g", socket), do: assign(socket, :selected_card, 0)
+  defp handle_hotkey("g", socket) do
+    task = socket.assigns.selected_task
+
+    cond do
+      is_nil(task) ->
+        socket
+
+      task.status in ["brew_done", "done", "closed"] && is_nil(Map.get(task, :pr_url)) &&
+          task.git_path ->
+        assign(socket, :pending_action, {:local_merge, task.id, task.git_path})
+
+      true ->
+        socket
+    end
+  end
 
   defp handle_hotkey("G", socket) do
     max_idx = max(length(socket.assigns.card_ids) - 1, 0)
