@@ -1315,17 +1315,11 @@ defmodule ApothecaryWeb.DashboardLive do
       text == "" ->
         {:noreply, socket}
 
-      is_nil(socket.assigns.selected_task_id) ->
-        create_from_input(text, socket)
-
       socket.assigns.working_agent ->
         send_to_agent(text, socket)
 
-      selected_worktree_closed?(socket) ->
-        create_from_input(text, socket)
-
       true ->
-        create_child_from_input(text, socket)
+        create_from_input(text, socket)
     end
   end
 
@@ -2789,34 +2783,6 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  defp create_child_from_input(text, socket) do
-    selected = socket.assigns.selected_task_id
-
-    worktree_id =
-      if String.starts_with?(to_string(selected), "wt-") do
-        selected
-      else
-        case Worktrees.get_task(selected) do
-          {:ok, task} -> task.worktree_id || selected
-          _ -> selected
-        end
-      end
-
-    case Worktrees.create_task(%{title: text, worktree_id: worktree_id, priority: 3}) do
-      {:ok, item} when not is_nil(item) ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Task added: #{item.id}")
-         |> push_patch(to: project_path(socket))}
-
-      {:ok, nil} ->
-        {:noreply, put_flash(socket, :error, "Failed to add task")}
-
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
-    end
-  end
-
   defp send_to_agent(text, socket) do
     agent = socket.assigns.working_agent
 
@@ -2890,11 +2856,6 @@ defmodule ApothecaryWeb.DashboardLive do
       nil -> socket
       idx -> assign(socket, :selected_card, idx)
     end
-  end
-
-  defp selected_worktree_closed?(socket) do
-    task = socket.assigns.selected_task
-    task != nil and task.status in ["merged", "done", "cancelled"]
   end
 
   defp refresh_selected_task(socket) do
