@@ -8,6 +8,14 @@ defmodule Apothecary.Git do
 
   alias Apothecary.CLI
 
+  @doc "Check if a git repository has a remote named 'origin'."
+  def has_origin?(dir) do
+    case CLI.run("git", ["remote"], cd: dir) do
+      {:ok, output} -> "origin" in String.split(String.trim(output), "\n")
+      _ -> false
+    end
+  end
+
   @doc "List all git worktrees in porcelain format."
   def list_worktrees(project_dir) do
     case CLI.run("git", ["worktree", "list", "--porcelain"], cd: project_dir) do
@@ -18,7 +26,21 @@ defmodule Apothecary.Git do
 
   @doc "Create a new worktree with a branch based on the given base branch."
   def create_worktree(project_dir, path, branch, base_branch \\ "main") do
-    CLI.run("git", ["worktree", "add", "-b", branch, path, base_branch], cd: project_dir)
+    case CLI.run("git", ["worktree", "add", "-b", branch, path, base_branch], cd: project_dir) do
+      {:ok, _} = ok ->
+        ok
+
+      {:error, {128, msg}} = error ->
+        if String.contains?(msg, "invalid reference") do
+          # No commits yet — use --orphan to create worktree without a base
+          CLI.run("git", ["worktree", "add", "--orphan", "-b", branch, path], cd: project_dir)
+        else
+          error
+        end
+
+      error ->
+        error
+    end
   end
 
   @doc "Remove a worktree."
@@ -49,37 +71,52 @@ defmodule Apothecary.Git do
         ref |> String.trim() |> String.split("/") |> List.last()
 
       {:error, _} ->
-        # Fallback: check if main or master exists
-        case CLI.run("git", ["rev-parse", "--verify", "main"], cd: project_dir) do
-          {:ok, _} -> "main"
-          _ -> "master"
+        # Fallback: check if main or master exists as local branch
+        cond do
+          match?({:ok, _}, CLI.run("git", ["rev-parse", "--verify", "refs/heads/main"], cd: project_dir)) ->
+            "main"
+
+          match?({:ok, _}, CLI.run("git", ["rev-parse", "--verify", "refs/heads/master"], cd: project_dir)) ->
+            "master"
+
+          true ->
+            # Last resort: use HEAD
+            "HEAD"
         end
     end
   end
 
   @doc "Reset a worktree branch to the latest main."
   def reset_to_main(project_dir, worktree_path) do
-    base = main_branch(project_dir)
+    if has_origin?(project_dir) do
+      base = main_branch(project_dir)
 
-    with {:ok, _} <- CLI.run("git", ["fetch", "origin", base], cd: worktree_path),
-         {:ok, _} <- CLI.run("git", ["reset", "--hard", "origin/#{base}"], cd: worktree_path) do
+      with {:ok, _} <- CLI.run("git", ["fetch", "origin", base], cd: worktree_path),
+           {:ok, _} <- CLI.run("git", ["reset", "--hard", "origin/#{base}"], cd: worktree_path) do
+        :ok
+      end
+    else
       :ok
     end
   end
 
   @doc "Fetch latest main and merge it into the current worktree branch."
   def merge_main_into(project_dir, worktree_path) do
-    base = main_branch(project_dir)
+    if has_origin?(project_dir) do
+      base = main_branch(project_dir)
 
-    with {:ok, _} <- CLI.run("git", ["fetch", "origin", base], cd: worktree_path),
-         {:ok, _} <- CLI.run("git", ["merge", "origin/#{base}", "--no-edit"], cd: worktree_path) do
-      :ok
+      with {:ok, _} <- CLI.run("git", ["fetch", "origin", base], cd: worktree_path),
+           {:ok, _} <- CLI.run("git", ["merge", "origin/#{base}", "--no-edit"], cd: worktree_path) do
+        :ok
+      else
+        {:error, {_code, output}} = error ->
+          if merge_conflict?(output), do: {:error, {:merge_conflict, output}}, else: error
+
+        error ->
+          error
+      end
     else
-      {:error, {_code, output}} = error ->
-        if merge_conflict?(output), do: {:error, {:merge_conflict, output}}, else: error
-
-      error ->
-        error
+      :ok
     end
   end
 
@@ -107,12 +144,16 @@ defmodule Apothecary.Git do
 
   @doc "Push the current branch in a worktree to origin."
   def push_branch(worktree_path) do
-    case current_branch(worktree_path) do
-      {:ok, branch} ->
-        CLI.run("git", ["push", "-u", "origin", branch], cd: worktree_path)
+    if has_origin?(worktree_path) do
+      case current_branch(worktree_path) do
+        {:ok, branch} ->
+          CLI.run("git", ["push", "-u", "origin", branch], cd: worktree_path)
 
-      {:error, reason} ->
-        {:error, reason}
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      {:ok, "no remote"}
     end
   end
 
@@ -197,8 +238,12 @@ defmodule Apothecary.Git do
 
   @doc "Pull latest changes on the main branch."
   def pull_main(project_dir) do
-    base = main_branch(project_dir)
-    CLI.run("git", ["pull", "--rebase", "origin", base], cd: project_dir)
+    if has_origin?(project_dir) do
+      base = main_branch(project_dir)
+      CLI.run("git", ["pull", "--rebase", "origin", base], cd: project_dir)
+    else
+      {:ok, "no remote"}
+    end
   end
 
   @doc "Get the recent commit log for a worktree. Returns {:ok, log} or {:error, reason}."

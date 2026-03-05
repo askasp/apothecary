@@ -36,7 +36,7 @@ let Hooks = {
         const html = document.documentElement
         html.classList.add("theme-transitioning")
         html.classList.remove("theme-moonlight", "theme-studio", "theme-daylight")
-        if (theme && theme !== "moonlight") {
+        if (theme && theme !== "studio") {
           html.classList.add("theme-" + theme)
         }
         localStorage.setItem("apothecary-theme", theme)
@@ -50,7 +50,7 @@ let Hooks = {
       if (stored && stored !== this.el.dataset.theme) {
         this.pushEvent("set-theme", { theme: stored })
       }
-      this._applyTheme(stored || this.el.dataset.theme || "moonlight")
+      this._applyTheme(stored || this.el.dataset.theme || "studio")
 
       // Block hotkeys when typing in an input/textarea so keys like 's'
       // don't trigger hotkey actions. Capture phase runs before LiveView's

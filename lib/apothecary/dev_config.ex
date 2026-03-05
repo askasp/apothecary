@@ -53,7 +53,7 @@ defmodule Apothecary.DevConfig do
         {:error, "port_count must be a positive integer in preview.yml"}
 
       true ->
-        base_port = yaml["base_port"] || 4200
+        base_port = yaml["base_port"] || guess_base_port(command)
         ports = parse_ports(yaml["ports"], port_count)
         env = parse_env(yaml["env"])
 
@@ -78,6 +78,21 @@ defmodule Apothecary.DevConfig do
 
   defp parse(nil), do: {:error, "preview.yml is empty"}
   defp parse(_), do: {:error, "preview.yml must be a YAML map"}
+
+  # Infer a reasonable base_port from the command when not explicitly set.
+  defp guess_base_port(command) when is_binary(command) do
+    cmd = String.downcase(command)
+
+    cond do
+      String.contains?(cmd, "phx.server") -> 4000
+      String.contains?(cmd, "mix") -> 4000
+      String.contains?(cmd, "dev") -> 5173
+      String.contains?(cmd, "start") -> 3000
+      true -> 3000
+    end
+  end
+
+  defp guess_base_port(_), do: 3000
 
   defp parse_ports(nil, port_count) do
     Enum.map(0..(port_count - 1), fn i ->

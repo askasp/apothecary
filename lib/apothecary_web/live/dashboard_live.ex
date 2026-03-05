@@ -104,7 +104,7 @@ defmodule ApothecaryWeb.DashboardLive do
       # Oracle state
       |> assign(:selected_question_id, nil)
       # Theme (actual value set from client via ThemePersist hook)
-      |> assign(:theme, "moonlight")
+      |> assign(:theme, "studio")
       # Load state (will be refined in handle_params)
       |> load_dashboard_state(nil)
 
@@ -1709,7 +1709,8 @@ defmodule ApothecaryWeb.DashboardLive do
 
   defp handle_switcher_hotkey(key, socket) when key in ["j", "Tab", "ArrowDown"] do
     filtered = filter_projects(socket.assigns.projects, socket.assigns.switcher_query)
-    max_idx = max(length(filtered) - 1, 0)
+    # +1 for the "open another project" item at the bottom
+    max_idx = length(filtered)
 
     socket
     |> assign(:switcher_selected, min(socket.assigns.switcher_selected + 1, max_idx))
@@ -1725,14 +1726,21 @@ defmodule ApothecaryWeb.DashboardLive do
   defp handle_switcher_hotkey("Enter", socket) do
     filtered = filter_projects(socket.assigns.projects, socket.assigns.switcher_query)
 
-    case Enum.at(filtered, socket.assigns.switcher_selected) do
-      nil ->
-        socket
+    if socket.assigns.switcher_selected >= length(filtered) do
+      # "Open another project" selected — go to landing
+      socket
+      |> assign(:show_project_switcher, false)
+      |> push_navigate(to: ~p"/")
+    else
+      case Enum.at(filtered, socket.assigns.switcher_selected) do
+        nil ->
+          socket
 
-      project ->
-        socket
-        |> assign(:show_project_switcher, false)
-        |> push_navigate(to: ~p"/projects/#{project.id}")
+        project ->
+          socket
+          |> assign(:show_project_switcher, false)
+          |> push_navigate(to: ~p"/projects/#{project.id}")
+      end
     end
   end
 
@@ -1817,6 +1825,9 @@ defmodule ApothecaryWeb.DashboardLive do
 
       socket.assigns.editing_field ->
         assign(socket, :editing_field, nil)
+
+      socket.assigns.show_preview ->
+        socket |> assign(:show_preview, false) |> assign(:preview_port, nil)
 
       socket.assigns.input_focused ->
         socket
@@ -2140,10 +2151,34 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("p", socket) do
-    if socket.assigns.current_project do
-      assign(socket, :show_preview_help, !socket.assigns.show_preview_help)
-    else
-      socket
+    cond do
+      # Toggle preview if already open
+      socket.assigns.show_preview ->
+        socket |> assign(:show_preview, false) |> assign(:preview_port, nil)
+
+      # Open preview for selected task's dev server
+      socket.assigns.selected_task_id &&
+          match?(
+            %{status: :running, ports: [_ | _]},
+            socket.assigns.dev_servers[socket.assigns.selected_task_id]
+          ) ->
+        %{ports: [%{port: p} | _]} = socket.assigns.dev_servers[socket.assigns.selected_task_id]
+        socket |> assign(:show_preview, true) |> assign(:preview_port, p)
+
+      # Open preview for main project dev server
+      socket.assigns.current_project &&
+          match?(
+            %{status: :running, ports: [_ | _]},
+            socket.assigns.dev_servers[socket.assigns.current_project.id]
+          ) ->
+        %{ports: [%{port: p} | _]} = socket.assigns.dev_servers[socket.assigns.current_project.id]
+        socket |> assign(:show_preview, true) |> assign(:preview_port, p)
+
+      socket.assigns.current_project ->
+        assign(socket, :show_preview_help, !socket.assigns.show_preview_help)
+
+      true ->
+        socket
     end
   end
 
@@ -3251,21 +3286,26 @@ defmodule ApothecaryWeb.DashboardLive do
                   style={"#{if @focused_pane == :detail, do: "border-top: 2px solid var(--accent);", else: "border-top: 2px solid transparent;"}"}
                   phx-click="focus-detail-pane"
                 >
-                  <%= if @selected_task && @selected_task_id do %>
-                    <.worktree_detail
-                      task={@selected_task}
-                      children={@children}
-                      editing_field={@editing_field}
-                      working_agent={@working_agent}
-                      agent_output={@agent_output}
-                      dev_server={@dev_servers[@selected_task_id]}
-                      has_preview_config={@has_preview_config}
-                      show_preview={@show_preview}
-                      preview_port={@preview_port}
-                      pending_action={@pending_action}
-                      loading_action={@loading_action}
-                    />
-                  <% else %>
+                  <%= cond do %>
+                    <% @show_preview && @preview_port -> %>
+                      <.preview_panel
+                        port={@preview_port}
+                        dev_servers={@dev_servers}
+                        current_project={@current_project}
+                      />
+                    <% @selected_task && @selected_task_id -> %>
+                      <.worktree_detail
+                        task={@selected_task}
+                        children={@children}
+                        editing_field={@editing_field}
+                        working_agent={@working_agent}
+                        agent_output={@agent_output}
+                        dev_server={@dev_servers[@selected_task_id]}
+                        has_preview_config={@has_preview_config}
+                        pending_action={@pending_action}
+                        loading_action={@loading_action}
+                      />
+                    <% true -> %>
                     <% running = @worktrees_by_status["running"] || []
                     pr = @worktrees_by_status["pr"] || []
 

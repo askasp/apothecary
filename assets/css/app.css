@@ -14,39 +14,9 @@
   --font-mono: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
 }
 
-/* ── Theme: Moonlight (default) ───────────────────────────── */
+/* ── Theme: Studio (default) ──────────────────────────────── */
 
-:root, .theme-moonlight {
-  --bg:       #0a0e10;
-  --surface:  #101618;
-  --border:   #1a2428;
-  --text:     #b0c8d0;
-  --dim:      #708a92;
-  --muted:    #4a6670;
-  --accent:   #5aaa9a;
-
-  --concocting: #c4aa4e;
-  --assaying:   #c48060;
-  --reviewing:  var(--assaying);
-  --queued:     #4a6670;
-  --bottled:    #4a7270;
-  --error:      #c45a5a;
-
-  --font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
-  --font-size-base:  14px;
-  --font-size-sm:    14px;
-  --font-size-xs:    12px;
-  --font-size-xxs:   11px;
-  --font-size-title: 16px;
-  --line-height:     1.6;
-
-  --bg-pattern: radial-gradient(circle, rgba(90, 130, 150, 0.12) 1px, transparent 1px);
-  --shadow-overlay: rgba(0, 0, 0, 0.5);
-}
-
-/* ── Theme: Studio ────────────────────────────────────────── */
-
-.theme-studio {
+:root, .theme-studio {
   --bg:       #1b1e24;
   --surface:  #242830;
   --border:   #353b46;
@@ -71,6 +41,36 @@
   --line-height:     1.55;
 
   --bg-pattern: radial-gradient(circle, rgba(108, 158, 255, 0.05) 1px, transparent 1px);
+  --shadow-overlay: rgba(0, 0, 0, 0.5);
+}
+
+/* ── Theme: Moonlight ────────────────────────────────────── */
+
+.theme-moonlight {
+  --bg:       #0a0e10;
+  --surface:  #101618;
+  --border:   #1a2428;
+  --text:     #b0c8d0;
+  --dim:      #708a92;
+  --muted:    #4a6670;
+  --accent:   #5aaa9a;
+
+  --concocting: #c4aa4e;
+  --assaying:   #c48060;
+  --reviewing:  var(--assaying);
+  --queued:     #4a6670;
+  --bottled:    #4a7270;
+  --error:      #c45a5a;
+
+  --font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+  --font-size-base:  14px;
+  --font-size-sm:    14px;
+  --font-size-xs:    12px;
+  --font-size-xxs:   11px;
+  --font-size-title: 16px;
+  --line-height:     1.6;
+
+  --bg-pattern: radial-gradient(circle, rgba(90, 130, 150, 0.12) 1px, transparent 1px);
   --shadow-overlay: rgba(0, 0, 0, 0.5);
 }
 

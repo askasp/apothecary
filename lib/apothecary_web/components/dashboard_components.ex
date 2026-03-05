@@ -388,9 +388,11 @@ defmodule ApothecaryWeb.DashboardComponents do
 
         <div class="switcher-divider"></div>
 
+        <% add_selected? = @selected_index >= length(@projects) %>
         <.link
           navigate={~p"/"}
-          class="switcher-item switcher-add"
+          class={["switcher-item switcher-add", add_selected? && "switcher-item--selected"]}
+          data-selected={if(add_selected?, do: "true")}
         >
           <span style="color: var(--accent);">+</span>
           <span style="color: var(--dim); font-size: var(--font-size-sm);">
@@ -501,15 +503,15 @@ defmodule ApothecaryWeb.DashboardComponents do
         <% @dev_server && @dev_server.status == :running -> %>
           <span style="color: var(--dim);">preview</span>
           &nbsp;
-          <a
-            href={"http://localhost:#{@port}"}
-            target="_blank"
+          <span
             class="cursor-pointer"
             style="color: var(--accent); text-decoration: none;"
+            phx-click="show-preview"
+            phx-value-port={@port}
           >
             <span style="font-weight: 600;">main</span>
-            &nbsp;:{@port} &#x2197;
-          </a>
+            &nbsp;:{@port}
+          </span>
         <% @dev_server && @dev_server.status == :starting -> %>
           <span style="color: var(--dim);">preview</span>
           &nbsp;
@@ -1119,7 +1121,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp entry_port(%{status: :running, ports: [%{port: p} | _]}), do: p
   defp entry_port(_), do: nil
 
-  # ── Worktree Detail (Full Takeover) ────────────────────
+  # ── Worktree Detail ────────────────────────────────────
 
   attr :task, :map, required: true
   attr :children, :list, default: []
@@ -1128,8 +1130,6 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :agent_output, :list, default: []
   attr :dev_server, :map, default: nil
   attr :has_preview_config, :boolean, default: false
-  attr :show_preview, :boolean, default: false
-  attr :preview_port, :integer, default: nil
   attr :pending_action, :any, default: nil
   attr :loading_action, :atom, default: nil
 
@@ -1145,21 +1145,6 @@ defmodule ApothecaryWeb.DashboardComponents do
     git_changes = Map.get(assigns.task, :git_changes, nil)
     last_commit = Map.get(assigns.task, :last_commit, nil)
 
-    # All available preview ports from dev server
-    preview_ports =
-      case assigns.dev_server do
-        %{ports: ports, status: :running} when is_list(ports) -> ports
-        _ -> []
-      end
-
-    # Use the preview_port from assigns (set by show-preview event), or fall back to first port
-    effective_preview_port =
-      case {assigns.preview_port, preview_ports} do
-        {port, _} when is_integer(port) -> port
-        {_, [%{port: p} | _]} -> p
-        _ -> nil
-      end
-
     assigns =
       assigns
       |> assign(:pr_url, pr_url)
@@ -1171,68 +1156,9 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> assign(:git_changes, git_changes)
       |> assign(:last_commit, last_commit)
       |> assign(:loading?, assigns.loading_action != nil)
-      |> assign(:preview_port, effective_preview_port)
-      |> assign(:preview_ports, preview_ports)
 
     ~H"""
-    <%= if @show_preview && @preview_port do %>
-      <div class="flex flex-col h-full">
-        <div
-          class="flex items-center justify-between px-4 py-2 flex-shrink-0"
-          style="border-bottom: 1px solid var(--border);"
-        >
-          <div class="flex items-center gap-3" style="font-size: var(--font-size-sm);">
-            <span style="color: var(--accent); font-weight: 600;">PREVIEW</span>
-            <%= if length(@preview_ports) > 1 do %>
-              <%!-- Port switcher for multi-port previews --%>
-              <%= for port_info <- @preview_ports do %>
-                <%= if port_info.port == @preview_port do %>
-                  <span style="color: var(--text); font-weight: 500;">
-                    :{port_info.port}
-                    <span style="color: var(--muted); font-weight: 400;">{port_info.name}</span>
-                  </span>
-                <% else %>
-                  <span
-                    class="action-text cursor-pointer"
-                    phx-click="show-preview"
-                    phx-value-port={port_info.port}
-                    style="font-weight: 400;"
-                  >
-                    :{port_info.port}
-                    <span style="color: var(--muted);">{port_info.name}</span>
-                  </span>
-                <% end %>
-              <% end %>
-            <% else %>
-              <span style="color: var(--muted);">:{@preview_port}</span>
-            <% end %>
-            <a
-              href={"http://localhost:#{@preview_port}"}
-              target="_blank"
-              style="color: var(--dim); text-decoration: none;"
-            >
-              open &#x2197;
-            </a>
-          </div>
-          <button
-            phx-click="close-preview"
-            class="cursor-pointer"
-            style="color: var(--muted); font-size: var(--font-size-xs);"
-          >
-            esc
-          </button>
-        </div>
-        <div class="flex-1 min-h-0">
-          <iframe
-            id={"preview-iframe-#{@task.id}"}
-            src={"http://localhost:#{@preview_port}"}
-            class="w-full h-full border-0"
-            phx-update="ignore"
-          />
-        </div>
-      </div>
-    <% else %>
-      <div class="px-4 py-4 scroll-main overflow-y-auto flex-1">
+    <div class="px-4 py-4 scroll-main overflow-y-auto flex-1">
         <%!-- 1. Title + Status --%>
         <div class="mb-5">
           <div class="flex items-start justify-between">
@@ -1493,7 +1419,116 @@ defmodule ApothecaryWeb.DashboardComponents do
           </div>
         </div>
       </div>
-    <% end %>
+    """
+  end
+
+  # ── Preview Panel (unified preview with source switcher) ─
+
+  @doc """
+  Full-panel preview with source switcher bar.
+  Shows all available preview sources (main project + worktrees with running dev servers).
+  """
+  attr :port, :integer, required: true
+  attr :dev_servers, :map, default: %{}
+  attr :current_project, :map, default: nil
+
+  def preview_panel(assigns) do
+    # Build list of all available preview sources
+    project_id = assigns.current_project && assigns.current_project.id
+
+    main_source =
+      case assigns.dev_servers[project_id] do
+        %{ports: [%{port: p} | _], status: :running} -> %{id: :main, label: "main", port: p}
+        _ -> nil
+      end
+
+    wt_sources =
+      assigns.dev_servers
+      |> Enum.filter(fn {id, server} ->
+        id != project_id and
+          match?(%{status: :running, ports: [_ | _]}, server)
+      end)
+      |> Enum.map(fn {id, %{ports: [%{port: p} | _]}} ->
+        short_id = id |> to_string() |> String.replace_leading("wt-", "") |> String.slice(0, 6)
+        %{id: id, label: short_id, port: p}
+      end)
+      |> Enum.sort_by(& &1.label)
+
+    sources = Enum.reject([main_source | wt_sources], &is_nil/1)
+
+    active_source =
+      Enum.find(sources, List.first(sources), fn s -> s.port == assigns.port end)
+
+    assigns =
+      assigns
+      |> assign(:sources, sources)
+      |> assign(:active_source, active_source)
+
+    ~H"""
+    <div class="flex flex-col h-full">
+      <%!-- Preview bar --%>
+      <div
+        class="flex items-center justify-between px-4 py-2 flex-shrink-0"
+        style="border-bottom: 1px solid var(--border); font-size: var(--font-size-sm);"
+      >
+        <div class="flex items-center gap-3">
+          <button
+            phx-click="close-preview"
+            class="cursor-pointer"
+            style="color: var(--accent); text-decoration: none;"
+          >
+            &larr; back
+          </button>
+          <span style="color: var(--border);">|</span>
+          <span style="color: var(--dim);">preview</span>
+          <span style="color: var(--accent);">&#x25CF;</span>
+          <%!-- Source switcher --%>
+          <%= for source <- @sources do %>
+            <%= if source.port == @port do %>
+              <span style="color: var(--text); font-weight: 600;">
+                {source.label}
+                <span style="color: var(--muted); font-weight: 400;">:{source.port}</span>
+              </span>
+            <% else %>
+              <button
+                phx-click="show-preview"
+                phx-value-port={source.port}
+                class="cursor-pointer"
+                style="color: var(--muted);"
+              >
+                {source.label}
+              </button>
+            <% end %>
+          <% end %>
+        </div>
+        <div class="flex items-center gap-3">
+          <a
+            href={"http://localhost:#{@port}"}
+            target="_blank"
+            style="color: var(--accent); text-decoration: none;"
+          >
+            open &#x2197;
+          </a>
+          <button
+            phx-click="close-preview"
+            class="cursor-pointer"
+            style="color: var(--muted);"
+          >
+            &#x2715;
+          </button>
+        </div>
+      </div>
+      <%!-- Iframe --%>
+      <div class="flex-1 min-h-0">
+        <iframe
+          id={"preview-iframe-#{@port}"}
+          src={"http://localhost:#{@port}"}
+          class="w-full h-full border-0"
+          style="background: white;"
+          phx-update="ignore"
+        />
+      </div>
+    </div>
     """
   end
 
