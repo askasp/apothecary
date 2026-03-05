@@ -368,9 +368,9 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @impl true
   def handle_info({:agent_output, agent_id, lines}, socket) do
-    working = socket.assigns[:working_agent]
+    working_agent = socket.assigns[:working_agent]
 
-    if working && working.id == agent_id do
+    if working_agent && working_agent.id == agent_id do
       output =
         (socket.assigns.agent_output ++ lines)
         |> Enum.take(-200)
