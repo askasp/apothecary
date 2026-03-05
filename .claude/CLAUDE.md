@@ -10,8 +10,6 @@ Tasks are managed by the Apothecary orchestrator via MCP tools.
 - **add_notes** — Log progress notes (persists across restarts)
 - **get_task** — Get full details of a task
 - **add_dependency** — Wire dependencies between tasks
-- **get_project_context** — Get shared project knowledge saved by other agents
-- **save_project_context** — Save project knowledge for other agents to reuse
 
 ### Workflow
 1. Use `worktree_status` to see your worktree and any pre-created tasks
