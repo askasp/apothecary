@@ -29,7 +29,7 @@ defmodule ApothecaryWeb.Layouts do
     ~H"""
     <main
       class="h-screen flex flex-col"
-      style="font-family: var(--font-mono); font-size: var(--font-size-base); background: var(--bg); color: var(--text);"
+      style="font-family: var(--font-family); font-size: var(--font-size-base); background: var(--bg); color: var(--text);"
     >
       {render_slot(@inner_block)}
     </main>

@@ -31,6 +31,27 @@ let Hooks = {
     mounted() {
       this.el.focus()
 
+      // Theme: apply from localStorage on mount, sync changes
+      this._applyTheme = (theme) => {
+        const html = document.documentElement
+        html.classList.add("theme-transitioning")
+        html.classList.remove("theme-moonlight", "theme-studio", "theme-daylight")
+        if (theme && theme !== "moonlight") {
+          html.classList.add("theme-" + theme)
+        }
+        localStorage.setItem("apothecary-theme", theme)
+        requestAnimationFrame(() => {
+          setTimeout(() => html.classList.remove("theme-transitioning"), 250)
+        })
+      }
+
+      // Restore from localStorage on first mount
+      const stored = localStorage.getItem("apothecary-theme")
+      if (stored && stored !== this.el.dataset.theme) {
+        this.pushEvent("set-theme", { theme: stored })
+      }
+      this._applyTheme(stored || this.el.dataset.theme || "moonlight")
+
       // Block hotkeys when typing in an input/textarea so keys like 's'
       // don't trigger hotkey actions. Capture phase runs before LiveView's
       // phx-window-keydown handler. Allow Escape through for closing overlays.
@@ -109,6 +130,9 @@ let Hooks = {
       if (!document.activeElement || document.activeElement === document.body) {
         this.el.focus()
       }
+      // Sync theme class when LiveView re-renders with new theme
+      const theme = this.el.dataset.theme
+      if (theme) this._applyTheme(theme)
     }
   },
   TextareaSubmit: {

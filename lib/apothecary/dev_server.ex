@@ -350,12 +350,10 @@ defmodule Apothecary.DevServer do
   defp run_setup(setup_cmd, worktree_path, env) do
     Logger.info("DevServer running setup: #{setup_cmd} in #{worktree_path}")
 
-    charlist_env = Enum.map(env, fn {k, v} -> {String.to_charlist(k), String.to_charlist(v)} end)
-
     try do
       case System.cmd("sh", ["-c", setup_cmd],
              cd: worktree_path,
-             env: charlist_env,
+             env: env,
              stderr_to_stdout: true
            ) do
         {_output, 0} -> :ok

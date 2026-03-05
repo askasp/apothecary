@@ -144,6 +144,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :projects, :list, default: []
   attr :show_project_switcher, :boolean, default: false
   attr :worktrees_by_status, :map, default: %{}
+  attr :theme, :string, default: "moonlight"
 
   def top_bar(assigns) do
     ~H"""
@@ -167,9 +168,22 @@ defmodule ApothecaryWeb.DashboardComponents do
           </button>
         <% end %>
       </div>
-      <%= cond do %>
-        <% @current_project -> %>
-          <div class="flex items-center gap-3">
+      <div class="flex items-center gap-4">
+        <%!-- Theme toggle --%>
+        <div class="theme-toggle">
+          <button
+            :for={t <- ~w(moonlight studio daylight)}
+            phx-click="set-theme"
+            phx-value-theme={t}
+            type="button"
+            class={"theme-toggle-option #{if @theme == t, do: "theme-toggle-option--active"}"}
+          >
+            {t}
+          </button>
+        </div>
+        <%!-- Tab navigation --%>
+        <%= if @current_project do %>
+          <div class="flex items-center gap-3" style="border-left: 1px solid var(--border); padding-left: 12px;">
             <button
               :for={{tab, label} <- [workbench: "workbench", oracle: "oracle", recipes: "recurring"]}
               phx-click="switch-tab"
@@ -180,8 +194,8 @@ defmodule ApothecaryWeb.DashboardComponents do
               {label}
             </button>
           </div>
-        <% true -> %>
-      <% end %>
+        <% end %>
+      </div>
     </div>
     """
   end
@@ -199,7 +213,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%!-- Centered header --%>
       <div
         class="mb-8"
-        style="color: var(--dim); font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase;"
+        style="color: var(--dim); font-size: var(--font-size-sm); letter-spacing: 0.08em; text-transform: uppercase;"
       >
         NO PROJECT OPEN
       </div>
@@ -217,7 +231,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             phx-focus="input-focus"
             phx-blur="input-blur"
             class="moonlight-input w-full"
-            style="caret-color: var(--accent); padding: 16px 20px; font-size: 14px;"
+            style="caret-color: var(--accent); padding: 16px 20px; font-size: var(--font-size-base);"
           />
           <div
             :if={@project_path_suggestions != []}
@@ -270,7 +284,7 @@ defmodule ApothecaryWeb.DashboardComponents do
               style={"text-decoration: none; #{if selected?, do: "border-left: 2px solid var(--accent); background: var(--surface);", else: "border-left: 2px solid transparent;"}"}
             >
               <div class="flex items-center justify-between">
-                <span style={"font-size: 14px; font-weight: 600; color: #{if selected?, do: "var(--text)", else: "var(--dim)"};"}>
+                <span style={"font-size: var(--font-size-base); font-weight: 600; color: #{if selected?, do: "var(--text)", else: "var(--dim)"};"}>
                   {project.name}
                 </span>
                 <span :if={selected?} style="color: var(--accent);">◂</span>
@@ -485,24 +499,20 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%!-- Inline mode for settings bar --%>
       <%= cond do %>
         <% @dev_server && @dev_server.status == :running -> %>
+          <span style="color: var(--dim);">preview</span>
+          &nbsp;
           <a
             href={"http://localhost:#{@port}"}
             target="_blank"
             class="cursor-pointer"
-            style="color: var(--accent); text-decoration: none; font-weight: 500;"
+            style="color: var(--accent); text-decoration: none;"
           >
-            :{@port} &#x2197;
+            <span style="font-weight: 600;">main</span>
+            &nbsp;:{@port} &#x2197;
           </a>
-          &nbsp;
-          <button
-            phx-click={@stop_event}
-            phx-value-id={@target_id}
-            class="cursor-pointer"
-            style="color: var(--muted);"
-          >
-            stop
-          </button>
         <% @dev_server && @dev_server.status == :starting -> %>
+          <span style="color: var(--dim);">preview</span>
+          &nbsp;
           <span style="color: var(--concocting);">starting...</span>
         <% @has_config -> %>
           <button
@@ -624,39 +634,33 @@ defmodule ApothecaryWeb.DashboardComponents do
 
     ~H"""
     <div class="px-3 py-2" style="font-size: var(--font-size-xs);">
-      <div class="flex items-center gap-0 flex-wrap">
-        <%!-- Swarm --%>
-        <span style="color: var(--dim);">s</span>&nbsp;
+      <div class="flex items-center flex-wrap">
+        <%!-- Brewer pill --%>
         <button
           phx-click={if @brewing?, do: "stop-swarm", else: "start-swarm"}
-          class="cursor-pointer settings-value"
-          style={"color: #{if @brewing?, do: "var(--concocting)", else: "var(--muted)"}; font-weight: 500;"}
+          class="cursor-pointer inline-flex items-center gap-1"
+          style={"border: 1px solid #{if @brewing?, do: "var(--concocting)", else: "var(--border)"}; border-radius: 4px; padding: 2px 8px;"}
         >
-          <%= if @brewing? do %>
-            <.braille_spinner id="brew-spinner" offset={0} />&nbsp;brewing
-          <% else %>
-            ■ stopped
-          <% end %>
+          <span style={"color: #{if @brewing?, do: "var(--concocting)", else: "var(--muted)"};"}>
+            <%= if @brewing? do %>
+              <.braille_spinner id="brew-spinner" offset={0} />
+            <% else %>
+              &#x2847;
+            <% end %>
+          </span>
+          <span style={"color: #{if @brewing?, do: "var(--text)", else: "var(--muted)"}; font-weight: 600;"}>
+            {@target_count}
+          </span>
+          <span style={"color: #{if @brewing?, do: "var(--dim)", else: "var(--muted)"};"}>
+            brewers
+          </span>
         </button>
-        <span
-          :if={@any_unsandboxed}
-          style="color: var(--error); font-weight: 500; margin-left: 4px;"
-          title="Brewers are running without OS-level sandbox. Install bubblewrap (Linux) or check sandbox-exec (macOS)."
-        >
-          unsandboxed
-        </span>
-
-        <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
-
-        <%!-- Workers --%>
-        <span style="color: var(--dim);">a</span>&nbsp;
-        <span style="color: var(--dim);">brewers:</span>
+        <%!-- +/- controls outside pill --%>
         <%= if @editing_setting == :brewers do %>
           <span class="inline-flex items-center gap-1 ml-1">
             <button phx-click="decrement-brewers" class="cursor-pointer" style="color: var(--accent);">
               &minus;
             </button>
-            <span style="color: var(--text); font-weight: 600;">{@target_count}</span>
             <button phx-click="increment-brewers" class="cursor-pointer" style="color: var(--accent);">
               +
             </button>
@@ -668,18 +672,27 @@ defmodule ApothecaryWeb.DashboardComponents do
           <button
             phx-click="edit-setting"
             phx-value-setting="brewers"
-            class="cursor-pointer settings-value"
-            style="color: var(--text); font-weight: 600;"
+            class="cursor-pointer ml-1"
+            style="color: var(--muted);"
+            title="Adjust brewer count"
           >
-            &nbsp;{@target_count}
+            &#x25B4;&#x25BE;
           </button>
         <% end %>
-
-        <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+        <%!-- Stopped label --%>
+        <span :if={!@brewing?} style="color: var(--muted); margin-left: 8px;">stopped</span>
+        <span
+          :if={@any_unsandboxed}
+          style="color: var(--error); font-weight: 500; margin-left: 4px;"
+          title="Brewers are running without OS-level sandbox."
+        >
+          unsandboxed
+        </span>
 
         <%!-- Auto-PR --%>
+        <span style="color: var(--border); margin: 0 6px;">&middot;</span>
         <span style="color: var(--dim);">t</span>&nbsp;
-        <span style="color: var(--dim);">auto-pr:</span>
+        <span style="color: var(--dim);">auto-pr</span>
         <button
           phx-click="toggle-auto-pr"
           class="cursor-pointer settings-value"
@@ -688,17 +701,17 @@ defmodule ApothecaryWeb.DashboardComponents do
           &nbsp;{if @auto_pr, do: "on", else: "off"}
         </button>
 
-        <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
-
-        <%!-- Main preview --%>
-        <.preview_controls
-          dev_server={@dev_server}
-          has_config={@has_preview_config}
-          target_id={@project_id || "project"}
-          start_event="start-project-dev"
-          stop_event="stop-project-dev"
-          inline={true}
-        />
+        <%!-- Preview — pushed to far right --%>
+        <span class="ml-auto flex items-center">
+          <.preview_controls
+            dev_server={@dev_server}
+            has_config={@has_preview_config}
+            target_id={@project_id || "project"}
+            start_event="start-project-dev"
+            stop_event="stop-project-dev"
+            inline={true}
+          />
+        </span>
       </div>
 
       <%!-- Preview help expandable --%>
@@ -1235,7 +1248,7 @@ defmodule ApothecaryWeb.DashboardComponents do
                     phx-focus="input-focus"
                     phx-blur="input-blur"
                     class="moonlight-input w-full"
-                    style="font-size: 18px; font-weight: 600;"
+                    style="font-size: var(--font-size-title); font-weight: 600;"
                   />
                   <div class="flex items-center gap-2 mt-1">
                     <button type="submit" class="action-pill">save</button>
@@ -1247,7 +1260,7 @@ defmodule ApothecaryWeb.DashboardComponents do
                   phx-click="start-edit"
                   phx-value-field="title"
                   class="cursor-pointer"
-                  style="font-size: 18px; font-weight: 600; color: var(--text);"
+                  style="font-size: var(--font-size-title); font-weight: 600; color: var(--text);"
                 >
                   {@task.title}
                 </div>

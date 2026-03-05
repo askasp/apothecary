@@ -103,6 +103,8 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:show_preview_help, false)
       # Oracle state
       |> assign(:selected_question_id, nil)
+      # Theme (actual value set from client via ThemePersist hook)
+      |> assign(:theme, "moonlight")
       # Load state (will be refined in handle_params)
       |> load_dashboard_state(nil)
 
@@ -1268,6 +1270,12 @@ defmodule ApothecaryWeb.DashboardLive do
   def handle_event("switch-tab", %{"tab" => tab}, socket) do
     active_tab = String.to_existing_atom(tab)
     {:noreply, assign(socket, :active_tab, active_tab)}
+  end
+
+  @impl true
+  def handle_event("set-theme", %{"theme" => theme}, socket)
+      when theme in ~w(moonlight studio daylight) do
+    {:noreply, assign(socket, :theme, theme)}
   end
 
   # --- Oracle event handlers ---
@@ -3140,6 +3148,7 @@ defmodule ApothecaryWeb.DashboardLive do
         tabindex="0"
         phx-throttle="100"
         class="flex flex-col h-screen outline-none"
+        data-theme={@theme}
       >
         <%!-- Top bar --%>
         <.top_bar
@@ -3150,6 +3159,7 @@ defmodule ApothecaryWeb.DashboardLive do
           projects={@projects}
           show_project_switcher={@show_project_switcher}
           worktrees_by_status={@worktrees_by_status}
+          theme={@theme}
         />
 
         <div style="border-bottom: 1px solid var(--border);" />

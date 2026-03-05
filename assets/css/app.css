@@ -1,4 +1,4 @@
-/* Apothecary — Moonlight theme
+/* Apothecary — Multi-theme design system
    No daisyUI. Custom properties + Tailwind utility classes only. */
 
 @import "tailwindcss" source(none);
@@ -8,9 +8,15 @@
 
 @plugin "../vendor/heroicons";
 
-/* ── Moonlight Color Palette ─────────────────────────────── */
+/* ── Shared ────────────────────────────────────────────────── */
 
 :root {
+  --font-mono: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+}
+
+/* ── Theme: Moonlight (default) ───────────────────────────── */
+
+:root, .theme-moonlight {
   --bg:       #0a0e10;
   --surface:  #101618;
   --border:   #1a2428;
@@ -19,7 +25,6 @@
   --muted:    #4a6670;
   --accent:   #5aaa9a;
 
-  /* Status */
   --concocting: #c4aa4e;
   --assaying:   #c48060;
   --reviewing:  var(--assaying);
@@ -27,13 +32,76 @@
   --bottled:    #4a7270;
   --error:      #c45a5a;
 
-  /* Typography */
-  --font-mono: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
-  --font-size-base: 14px;
-  --font-size-sm: 14px;
-  --font-size-xs: 12px;
-  --font-size-xxs: 11px;
+  --font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+  --font-size-base:  14px;
+  --font-size-sm:    14px;
+  --font-size-xs:    12px;
+  --font-size-xxs:   11px;
   --font-size-title: 16px;
+  --line-height:     1.6;
+
+  --bg-pattern: radial-gradient(circle, rgba(90, 130, 150, 0.12) 1px, transparent 1px);
+  --shadow-overlay: rgba(0, 0, 0, 0.5);
+}
+
+/* ── Theme: Studio ────────────────────────────────────────── */
+
+.theme-studio {
+  --bg:       #1b1e24;
+  --surface:  #242830;
+  --border:   #353b46;
+  --text:     #e2e6ec;
+  --dim:      #8d93a0;
+  --muted:    #515868;
+  --accent:   #6c9eff;
+
+  --concocting: #f0b030;
+  --assaying:   #e8805a;
+  --reviewing:  var(--assaying);
+  --queued:     #515868;
+  --bottled:    #50b870;
+  --error:      #ee5555;
+
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-size-base:  14px;
+  --font-size-sm:    14px;
+  --font-size-xs:    12px;
+  --font-size-xxs:   11px;
+  --font-size-title: 16px;
+  --line-height:     1.55;
+
+  --bg-pattern: radial-gradient(circle, rgba(108, 158, 255, 0.05) 1px, transparent 1px);
+  --shadow-overlay: rgba(0, 0, 0, 0.5);
+}
+
+/* ── Theme: Daylight ──────────────────────────────────────── */
+
+.theme-daylight {
+  --bg:       #f5f6f8;
+  --surface:  #ffffff;
+  --border:   #dce0e6;
+  --text:     #1a1e28;
+  --dim:      #555e70;
+  --muted:    #8890a0;
+  --accent:   #3a6adf;
+
+  --concocting: #b08820;
+  --assaying:   #c06040;
+  --reviewing:  var(--assaying);
+  --queued:     #8890a0;
+  --bottled:    #2a8a50;
+  --error:      #cc3333;
+
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-size-base:  14px;
+  --font-size-sm:    14px;
+  --font-size-xs:    12px;
+  --font-size-xxs:   11px;
+  --font-size-title: 16px;
+  --line-height:     1.55;
+
+  --bg-pattern: radial-gradient(circle, rgba(60, 70, 90, 0.04) 1px, transparent 1px);
+  --shadow-overlay: rgba(0, 0, 0, 0.15);
 }
 
 /* ── Base ────────────────────────────────────────────────── */
@@ -41,14 +109,12 @@
 html, body {
   margin: 0;
   padding: 0;
-  background:
-    radial-gradient(circle, rgba(90, 130, 150, 0.12) 1px, transparent 1px),
-    var(--bg);
+  background: var(--bg-pattern), var(--bg);
   background-size: 32px 32px;
   color: var(--text);
-  font-family: var(--font-mono);
+  font-family: var(--font-family);
   font-size: var(--font-size-base);
-  line-height: 1.6;
+  line-height: var(--line-height);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -71,7 +137,7 @@ html, body {
 /* Make LiveView wrapper divs transparent for layout */
 [data-phx-session], [data-phx-teleported-src] { display: contents; }
 
-/* ── Moonlight utility classes ────────────────────────────── */
+/* ── Theme utility classes ────────────────────────────────── */
 
 /* Colors */
 .color-bg       { color: var(--bg); }
@@ -131,7 +197,7 @@ html, body {
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text);
-  font-family: var(--font-mono);
+  font-family: var(--font-family);
   font-size: var(--font-size-base);
   outline: none;
   padding: 12px 16px;
@@ -154,6 +220,7 @@ html, body {
   border-radius: 6px;
   max-height: 140px;
   overflow-y: auto;
+  font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   scrollbar-width: thin;
   scrollbar-color: var(--muted) transparent;
@@ -171,7 +238,7 @@ html, body {
   padding: 2px 8px;
   border-radius: 4px;
   font-size: var(--font-size-sm);
-  font-family: var(--font-mono);
+  font-family: var(--font-family);
   cursor: pointer;
   border: none;
   display: inline-block;
@@ -194,7 +261,7 @@ html, body {
 .action-outlined {
   color: var(--dim);
   font-size: var(--font-size-sm);
-  font-family: var(--font-mono);
+  font-family: var(--font-family);
   cursor: pointer;
   background: transparent;
   border: 1px solid var(--border);
@@ -300,7 +367,7 @@ html, body {
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--shadow-overlay);
   display: flex;
   justify-content: center;
   padding-top: 60px;
@@ -315,7 +382,7 @@ html, body {
   border-radius: 8px;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 12px 40px var(--shadow-overlay);
   animation: switcher-slide-in 0.12s ease-out;
   height: fit-content;
 }
@@ -326,7 +393,7 @@ html, body {
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text);
-  font-family: var(--font-mono);
+  font-family: var(--font-family);
   font-size: var(--font-size-sm);
   padding: 10px 12px;
   outline: none;
@@ -367,7 +434,7 @@ html, body {
 }
 
 .switcher-item-name {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 600;
   color: var(--dim);
 }
@@ -469,6 +536,7 @@ html, body {
   margin: 6px 0;
   padding: 8px 10px;
   overflow-x: auto;
+  font-family: var(--font-mono);
 }
 
 .oracle-code-block pre {
@@ -496,7 +564,7 @@ html, body {
   border: none;
   border-bottom: 1px solid var(--border);
   color: var(--text);
-  font-family: var(--font-mono);
+  font-family: var(--font-family);
   font-size: var(--font-size-xs);
   outline: none;
   padding: 2px 0;
@@ -508,7 +576,7 @@ html, body {
   border: none;
   border-bottom: 1px solid var(--border);
   color: var(--text);
-  font-family: var(--font-mono);
+  font-family: var(--font-family);
   font-size: var(--font-size-sm);
   outline: none;
   width: 100%;
@@ -718,7 +786,7 @@ html, body {
   background: transparent;
   border: none;
   color: var(--text);
-  font-family: var(--font-mono);
+  font-family: var(--font-family);
   font-size: var(--font-size-base);
   outline: none;
   resize: none;
@@ -755,7 +823,7 @@ html, body {
   cursor: pointer;
   border: none;
   background: transparent;
-  font-family: var(--font-mono);
+  font-family: var(--font-family);
   font-size: var(--font-size-sm);
   color: var(--text);
   border-left: 2px solid transparent;
@@ -775,4 +843,40 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 250px;
+}
+
+/* ── Theme toggle ──────────────────────────────────────── */
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--font-size-xxs);
+  user-select: none;
+}
+
+.theme-toggle-option {
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--muted);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.theme-toggle-option:hover {
+  color: var(--dim);
+}
+
+.theme-toggle-option--active {
+  color: var(--text);
+  background: var(--surface);
+}
+
+/* ── Theme transitions ─────────────────────────────────── */
+
+.theme-transitioning,
+.theme-transitioning *,
+.theme-transitioning *::before,
+.theme-transitioning *::after {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease !important;
 }
