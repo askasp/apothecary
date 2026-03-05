@@ -20,6 +20,8 @@ defmodule Apothecary.MCP.Server do
   component(Apothecary.MCP.Tools.AddNotes)
   component(Apothecary.MCP.Tools.AddDependency)
   component(Apothecary.MCP.Tools.WorktreeStatus)
+  component(Apothecary.MCP.Tools.GetProjectContext)
+  component(Apothecary.MCP.Tools.SaveProjectContext)
 
   require Logger
 
