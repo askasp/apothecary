@@ -538,6 +538,11 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  # Cmd+K (macOS) toggles project switcher
+  def handle_event("hotkey", %{"metaKey" => true, "key" => "k"}, socket) do
+    handle_event("hotkey", %{"ctrlKey" => true, "key" => "k"}, socket)
+  end
+
   def handle_event("hotkey", %{"metaKey" => true}, socket), do: {:noreply, socket}
 
   def handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
