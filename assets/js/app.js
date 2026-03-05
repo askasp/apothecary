@@ -162,13 +162,13 @@ let Hooks = {
           if (e.key === "ArrowDown" || e.key === "Tab" || (e.ctrlKey && e.key === "n")) {
             e.preventDefault()
             this.selectedIndex = (this.selectedIndex + 1) % this.results.length
-            this.renderDropdown()
+            this.renderDropdown(false)
             return
           }
           if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) {
             e.preventDefault()
             this.selectedIndex = (this.selectedIndex - 1 + this.results.length) % this.results.length
-            this.renderDropdown()
+            this.renderDropdown(false)
             return
           }
           if (e.key === "Enter") {
@@ -286,7 +286,7 @@ let Hooks = {
       }
     },
 
-    renderDropdown() {
+    renderDropdown(rebuildContent = true) {
       if (!this.dropdown || this.results.length === 0) return
       this.dropdown.classList.remove("hidden")
 
@@ -294,44 +294,61 @@ let Hooks = {
       const rect = this.el.getBoundingClientRect()
       this.dropdown.style.left = rect.left + "px"
       this.dropdown.style.width = rect.width + "px"
-      // Temporarily render off-screen to measure height
-      this.dropdown.style.top = "-9999px"
 
-      this.dropdown.innerHTML = this.results.map((file, i) => {
-        const parts = file.split("/")
-        const fileName = parts.pop()
-        const dir = parts.join("/")
-        const isSelected = i === this.selectedIndex
-        return `<div class="file-ac-item ${isSelected ? "file-ac-selected" : ""}" data-index="${i}">
-          <span class="file-ac-name">${this.escapeHtml(fileName)}</span>
-          ${dir ? `<span class="file-ac-dir">${this.escapeHtml(dir)}/</span>` : ""}
-        </div>`
-      }).join("")
+      if (rebuildContent) {
+        // Temporarily render off-screen to measure height
+        this.dropdown.style.top = "-9999px"
 
-      // Position above textarea (or below if not enough space above)
-      const dropdownHeight = this.dropdown.offsetHeight
-      const spaceAbove = rect.top
-      if (spaceAbove >= dropdownHeight) {
-        this.dropdown.style.top = (rect.top - dropdownHeight - 4) + "px"
+        this.dropdown.innerHTML = this.results.map((file, i) => {
+          const parts = file.split("/")
+          const fileName = parts.pop()
+          const dir = parts.join("/")
+          const isSelected = i === this.selectedIndex
+          return `<div class="file-ac-item ${isSelected ? "file-ac-selected" : ""}" data-index="${i}">
+            <span class="file-ac-name">${this.escapeHtml(fileName)}</span>
+            ${dir ? `<span class="file-ac-dir">${this.escapeHtml(dir)}/</span>` : ""}
+          </div>`
+        }).join("")
+
+        // Position above textarea (or below if not enough space above)
+        const dropdownHeight = this.dropdown.offsetHeight
+        const spaceAbove = rect.top
+        if (spaceAbove >= dropdownHeight) {
+          this.dropdown.style.top = (rect.top - dropdownHeight - 4) + "px"
+        } else {
+          this.dropdown.style.top = (rect.bottom + 4) + "px"
+        }
+
+        // Click handlers
+        this.dropdown.querySelectorAll(".file-ac-item").forEach(item => {
+          item.addEventListener("mousedown", (e) => {
+            e.preventDefault()
+            const idx = parseInt(item.dataset.index)
+            this.selectFile(this.results[idx])
+          })
+          item.addEventListener("mouseenter", () => {
+            this.selectedIndex = parseInt(item.dataset.index)
+            this.updateSelection()
+          })
+        })
       } else {
-        this.dropdown.style.top = (rect.bottom + 4) + "px"
+        this.updateSelection()
       }
 
       // Scroll selected into view
       const selected = this.dropdown.querySelector(".file-ac-selected")
       if (selected) selected.scrollIntoView({ block: "nearest" })
+    },
 
-      // Click handlers
+    updateSelection() {
+      if (!this.dropdown) return
       this.dropdown.querySelectorAll(".file-ac-item").forEach(item => {
-        item.addEventListener("mousedown", (e) => {
-          e.preventDefault()
-          const idx = parseInt(item.dataset.index)
-          this.selectFile(this.results[idx])
-        })
-        item.addEventListener("mouseenter", () => {
-          this.selectedIndex = parseInt(item.dataset.index)
-          this.renderDropdown()
-        })
+        const idx = parseInt(item.dataset.index)
+        if (idx === this.selectedIndex) {
+          item.classList.add("file-ac-selected")
+        } else {
+          item.classList.remove("file-ac-selected")
+        }
       })
     },
 
