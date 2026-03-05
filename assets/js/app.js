@@ -62,12 +62,12 @@ let Hooks = {
 
         // In project switcher: let navigation keys reach LiveView
         if (switcherOpen) {
-          if (e.key === "Tab" || e.key === "ArrowDown" || e.key === "ArrowUp" ||
+          if (e.key === "ArrowDown" || e.key === "ArrowUp" ||
               e.key === "j" || e.key === "k") {
             e.preventDefault()
             return
           }
-          if (e.ctrlKey && (e.key === "n" || e.key === "p" || e.key === "Tab")) {
+          if (e.ctrlKey && (e.key === "n" || e.key === "p" || e.key === "k")) {
             e.preventDefault()
             return
           }
@@ -77,8 +77,8 @@ let Hooks = {
           }
         }
 
-        // Ctrl+Tab opens project switcher — let it through to LiveView
-        if (e.ctrlKey && e.key === "Tab") {
+        // Ctrl+K opens project switcher — let it through to LiveView
+        if (e.ctrlKey && e.key === "k") {
           e.preventDefault()
           return
         }
