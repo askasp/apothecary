@@ -887,6 +887,85 @@ defmodule Apothecary.Worktrees do
     Phoenix.PubSub.broadcast(@pubsub, @recipe_topic, message)
   end
 
+  @doc "Delete a task, cleaning up dependency references from other tasks."
+  def delete_task(id) do
+    result =
+      :mnesia.transaction(fn ->
+        case :mnesia.read(:apothecary_tasks, id) do
+          [record] ->
+            data = elem(record, 6)
+
+            # Remove this task from blockers lists of its dependents
+            Enum.each(data[:dependents] || [], fn dep_id ->
+              case :mnesia.read(:apothecary_tasks, dep_id) do
+                [dep] ->
+                  dep_data = elem(dep, 6)
+                  blockers = List.delete(dep_data[:blockers] || [], id)
+
+                  dep =
+                    update_record_data(dep, 6, fn d -> Map.put(d, :blockers, blockers) end)
+
+                  # Unblock if no remaining undone blockers
+                  dep =
+                    if elem(dep, 3) == "blocked" do
+                      all_done =
+                        Enum.all?(blockers, fn bid ->
+                          case :mnesia.read(:apothecary_tasks, bid) do
+                            [rec] -> elem(rec, 3) == "done"
+                            _ -> false
+                          end
+                        end)
+
+                      if all_done, do: put_elem(dep, 3, "open"), else: dep
+                    else
+                      dep
+                    end
+
+                  :mnesia.write(dep)
+
+                [] ->
+                  :ok
+              end
+            end)
+
+            # Remove this task from dependents lists of its blockers
+            Enum.each(data[:blockers] || [], fn blocker_id ->
+              case :mnesia.read(:apothecary_tasks, blocker_id) do
+                [blocker] ->
+                  blocker_data = elem(blocker, 6)
+                  dependents = List.delete(blocker_data[:dependents] || [], id)
+
+                  blocker =
+                    update_record_data(blocker, 6, fn d -> Map.put(d, :dependents, dependents) end)
+
+                  :mnesia.write(blocker)
+
+                [] ->
+                  :ok
+              end
+            end)
+
+            :mnesia.delete({:apothecary_tasks, id})
+            record
+
+          [] ->
+            :mnesia.abort(:not_found)
+        end
+      end)
+
+    case result do
+      {:atomic, record} ->
+        broadcast_immediately()
+        {:ok, Apothecary.Task.from_record(record)}
+
+      {:aborted, :not_found} ->
+        {:error, :not_found}
+
+      {:aborted, reason} ->
+        {:error, reason}
+    end
+  end
+
   def ready_tasks(worktree_id) do
     tasks = list_tasks(worktree_id: worktree_id)
     task_status_map = Map.new(tasks, fn t -> {t.id, t.status} end)
