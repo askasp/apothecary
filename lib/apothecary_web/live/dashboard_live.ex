@@ -547,21 +547,26 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  def handle_event("hotkey", %{"ctrlKey" => true}, socket), do: {:noreply, socket}
+  # Ctrl+Tab toggles project switcher regardless of active tab
+  def handle_event("hotkey", %{"ctrlKey" => true, "key" => "Tab"}, socket) do
+    cond do
+      socket.assigns.show_project_switcher ->
+        {:noreply, assign(socket, :show_project_switcher, false)}
 
-  # Shift+Tab always opens project switcher regardless of active tab
-  def handle_event("hotkey", %{"shiftKey" => true, "key" => "Tab"}, socket) do
-    if socket.assigns.current_project do
-      {:noreply,
-       socket
-       |> assign(:show_project_switcher, true)
-       |> assign(:switcher_selected, 0)
-       |> assign(:switcher_query, "")
-       |> push_event("focus-element", %{selector: "#project-switcher-search"})}
-    else
-      {:noreply, socket}
+      socket.assigns.current_project ->
+        {:noreply,
+         socket
+         |> assign(:show_project_switcher, true)
+         |> assign(:switcher_selected, 0)
+         |> assign(:switcher_query, "")
+         |> push_event("focus-element", %{selector: "#project-switcher-search"})}
+
+      true ->
+        {:noreply, socket}
     end
   end
+
+  def handle_event("hotkey", %{"ctrlKey" => true}, socket), do: {:noreply, socket}
 
   def handle_event("hotkey", %{"key" => key}, socket) do
     cond do

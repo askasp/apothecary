@@ -401,7 +401,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         </.link>
 
         <div class="switcher-footer">
-          <span>&#x2191;&#x2193; navigate</span>
+          <span>j/k navigate</span>
           <span>&middot;</span>
           <span>enter select</span>
           <span>&middot;</span>
@@ -1847,7 +1847,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span style="color: var(--border);">&middot;</span>
             <span>w/e/o tabs</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>⇧tab project</span>
+            <span>⌃tab project</span>
             <span style="color: var(--border);">&middot;</span>
             <span>? help</span>
           </div>
@@ -2161,7 +2161,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <.hk key="enter" desc="inspect worktree" />
             <.hk key="esc" desc="close / back" />
             <.hk key="/" desc="search" />
-            <.hk key="⇧tab" desc="switch project" />
+            <.hk key="⌃tab" desc="switch project" />
           </div>
 
           <div>
