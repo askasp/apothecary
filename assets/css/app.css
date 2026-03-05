@@ -874,6 +874,10 @@ html, body {
 
 /* ── Theme transitions ─────────────────────────────────── */
 
+details[open] > summary .merge-arrow {
+  transform: rotate(90deg);
+}
+
 .theme-transitioning,
 .theme-transitioning *,
 .theme-transitioning *::before,
