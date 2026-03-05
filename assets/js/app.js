@@ -60,9 +60,16 @@ let Hooks = {
       window.addEventListener("keydown", (e) => {
         const switcherOpen = document.querySelector("[data-project-switcher]")
 
-        // In project switcher: let navigation keys reach LiveView
+        // Shift+Tab opens project switcher — prevent default to avoid focusing previous element
+        if (e.shiftKey && e.key === "Tab") {
+          e.preventDefault()
+          return
+        }
+
+        // In project switcher: let navigation keys (j/k/Tab/arrows/Ctrl+N/P) reach LiveView
         if (switcherOpen) {
-          if (e.key === "Tab" || e.key === "ArrowDown" || e.key === "ArrowUp") {
+          if (e.key === "Tab" || e.key === "ArrowDown" || e.key === "ArrowUp" ||
+              e.key === "j" || e.key === "k" || e.key === "Enter" || e.key === "Escape") {
             e.preventDefault()
             return
           }
