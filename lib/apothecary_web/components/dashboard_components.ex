@@ -807,8 +807,8 @@ defmodule ApothecaryWeb.DashboardComponents do
         <div
           id="file-autocomplete-dropdown"
           phx-update="ignore"
-          class="hidden absolute left-0 right-0 bottom-full mb-1 max-h-48 overflow-y-auto z-50"
-          style="background: var(--surface); border: 1px solid var(--border);"
+          class="hidden fixed max-h-48 overflow-y-auto"
+          style="background: var(--surface); border: 1px solid var(--border); z-index: 9999;"
         >
         </div>
         <button

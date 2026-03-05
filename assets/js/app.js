@@ -283,6 +283,13 @@ let Hooks = {
       if (!this.dropdown || this.results.length === 0) return
       this.dropdown.classList.remove("hidden")
 
+      // Position fixed dropdown above the textarea
+      const rect = this.el.getBoundingClientRect()
+      this.dropdown.style.left = rect.left + "px"
+      this.dropdown.style.width = rect.width + "px"
+      // Temporarily render off-screen to measure height
+      this.dropdown.style.top = "-9999px"
+
       this.dropdown.innerHTML = this.results.map((file, i) => {
         const parts = file.split("/")
         const fileName = parts.pop()
@@ -293,6 +300,15 @@ let Hooks = {
           ${dir ? `<span class="file-ac-dir">${this.escapeHtml(dir)}/</span>` : ""}
         </div>`
       }).join("")
+
+      // Position above textarea (or below if not enough space above)
+      const dropdownHeight = this.dropdown.offsetHeight
+      const spaceAbove = rect.top
+      if (spaceAbove >= dropdownHeight) {
+        this.dropdown.style.top = (rect.top - dropdownHeight - 4) + "px"
+      } else {
+        this.dropdown.style.top = (rect.bottom + 4) + "px"
+      }
 
       // Scroll selected into view
       const selected = this.dropdown.querySelector(".file-ac-selected")
