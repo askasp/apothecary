@@ -356,6 +356,23 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:worktrees_by_status, worktrees_by_status)
       |> rebuild_card_ids(worktrees_by_status)
 
+    # Auto-open preview with logs when a dev server enters error state
+    socket =
+      if info.status == :error do
+        error_port =
+          case info[:ports] do
+            [%{port: p} | _] -> p
+            _ -> 0
+          end
+
+        socket
+        |> assign(:show_preview, true)
+        |> assign(:preview_port, error_port)
+        |> assign(:show_preview_logs, true)
+      else
+        socket
+      end
+
     {:noreply, socket}
   end
 
