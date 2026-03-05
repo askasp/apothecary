@@ -2305,18 +2305,23 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("p", socket) do
+    # Resolve the effective worktree ID: prefer open detail panel, then focused card
+    effective_wt_id =
+      socket.assigns.selected_task_id ||
+        Enum.at(socket.assigns.card_ids, socket.assigns.selected_card)
+
     cond do
       # Toggle preview if already open
       socket.assigns.show_preview ->
         socket |> assign(:show_preview, false) |> assign(:preview_port, nil)
 
-      # Open preview for selected task's dev server
-      socket.assigns.selected_task_id &&
+      # Open preview for effective worktree's dev server
+      effective_wt_id &&
           match?(
             %{status: :running, ports: [_ | _]},
-            socket.assigns.dev_servers[socket.assigns.selected_task_id]
+            socket.assigns.dev_servers[effective_wt_id]
           ) ->
-        %{ports: ports} = socket.assigns.dev_servers[socket.assigns.selected_task_id]
+        %{ports: ports} = socket.assigns.dev_servers[effective_wt_id]
         port = if length(ports) == 1, do: hd(ports).port, else: nil
         socket |> assign(:show_preview, true) |> assign(:preview_port, port)
 
