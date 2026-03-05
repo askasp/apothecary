@@ -533,29 +533,8 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  # Ctrl+J/K/H/L always work for navigation, even when an input has focus
-  def handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
-      when key in ["j", "k", "h", "l"] do
-    cond do
-      socket.assigns.loading_action != nil ->
-        {:noreply, socket}
-
-      socket.assigns.show_project_switcher and key in ["j", "k"] ->
-        {:noreply, handle_switcher_hotkey(key, socket)}
-
-      socket.assigns.diff_view != nil ->
-        {:noreply, handle_diff_hotkey(key, socket)}
-
-      socket.assigns.active_tab == :oracle and key in ["j", "k"] ->
-        {:noreply, handle_oracle_hotkey(key, socket)}
-
-      true ->
-        {:noreply, handle_hotkey(key, socket)}
-    end
-  end
-
-  # Ctrl+Tab toggles project switcher regardless of active tab
-  def handle_event("hotkey", %{"ctrlKey" => true, "key" => "Tab"}, socket) do
+  # Ctrl+K toggles project switcher regardless of active tab
+  def handle_event("hotkey", %{"ctrlKey" => true, "key" => "k"}, socket) do
     cond do
       socket.assigns.show_project_switcher ->
         {:noreply, assign(socket, :show_project_switcher, false)}
@@ -570,6 +549,27 @@ defmodule ApothecaryWeb.DashboardLive do
 
       true ->
         {:noreply, socket}
+    end
+  end
+
+  # Ctrl+J/K/H/L always work for navigation, even when an input has focus
+  def handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
+      when key in ["j", "h", "l"] do
+    cond do
+      socket.assigns.loading_action != nil ->
+        {:noreply, socket}
+
+      socket.assigns.show_project_switcher and key == "j" ->
+        {:noreply, handle_switcher_hotkey(key, socket)}
+
+      socket.assigns.diff_view != nil ->
+        {:noreply, handle_diff_hotkey(key, socket)}
+
+      socket.assigns.active_tab == :oracle and key == "j" ->
+        {:noreply, handle_oracle_hotkey(key, socket)}
+
+      true ->
+        {:noreply, handle_hotkey(key, socket)}
     end
   end
 
