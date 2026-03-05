@@ -1303,18 +1303,42 @@ defmodule ApothecaryWeb.DashboardComponents do
         Enum.filter(@children, fn c ->
           String.contains?(c.title || "", "merge conflict")
         end) %>
-      <div
+      <details
         :if={merge_fix_tasks != []}
-        class="mb-4 px-3 py-2 rounded"
+        class="mb-4 rounded"
         style="background: color-mix(in srgb, var(--concocting) 12%, transparent); border: 1px solid color-mix(in srgb, var(--concocting) 30%, transparent); font-size: var(--font-size-sm);"
       >
-        <span style="color: var(--concocting); font-weight: 600;">
-          &#x26A0; merge conflicts auto-fixed
-        </span>
-        <span style="color: var(--dim);">
-          &mdash; review the conflict resolution before merging
-        </span>
-      </div>
+        <summary class="px-3 py-2 cursor-pointer select-none list-none flex items-center gap-1">
+          <span
+            class="merge-arrow inline-block transition-transform duration-150"
+            style="font-size: 0.65em; color: var(--dim);"
+          >
+            ▶
+          </span>
+          <span style="color: var(--concocting); font-weight: 600;">
+            &#x26A0; merge conflicts auto-fixed
+          </span>
+          <span style="color: var(--dim);">
+            &mdash; review decisions
+          </span>
+        </summary>
+        <div class="px-3 pb-2" style="color: var(--fg); border-top: 1px solid color-mix(in srgb, var(--concocting) 20%, transparent);">
+          <div :for={task <- merge_fix_tasks} class="mt-2">
+            <div :if={task.notes && task.notes != ""}>
+              <pre
+                class="whitespace-pre-wrap break-words"
+                style="font-size: var(--font-size-xs); color: var(--muted); line-height: 1.5; margin: 0;"
+              >{task.notes}</pre>
+            </div>
+            <div
+              :if={is_nil(task.notes) || task.notes == ""}
+              style="color: var(--dim); font-size: var(--font-size-xs);"
+            >
+              No resolution notes recorded.
+            </div>
+          </div>
+        </div>
+      </details>
 
       <%!-- 3. TASKS --%>
       <div class="mb-5">
