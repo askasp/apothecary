@@ -1043,7 +1043,7 @@ defmodule Apothecary.Brewer do
   end
 
   defp broadcast_output(agent_id, lines) do
-    Phoenix.PubSub.broadcast(@pubsub, "brewer:#{agent_id}", {:agent_output, lines})
+    Phoenix.PubSub.broadcast(@pubsub, "brewer:#{agent_id}", {:agent_output, agent_id, lines})
   end
 
   defp report_state(agent) do
