@@ -1283,7 +1283,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span
               :if={@task.status not in ["done", "closed", "merged"]}
               class="action-outlined"
-              phx-click="requeue-task"
+              phx-click="requeue"
             >
               r requeue
             </span>
@@ -1396,7 +1396,12 @@ defmodule ApothecaryWeb.DashboardComponents do
           </div>
         <% end %>
         <div class="mt-1">
-          <span class="action-text" style="color: var(--accent); font-size: var(--font-size-sm);">
+          <span
+            class="action-text cursor-pointer"
+            style="color: var(--accent); font-size: var(--font-size-sm);"
+            phx-click="add-task-to-worktree"
+            phx-value-id={@task.id}
+          >
             + add task
           </span>
         </div>
