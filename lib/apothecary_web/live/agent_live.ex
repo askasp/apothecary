@@ -34,7 +34,7 @@ defmodule ApothecaryWeb.AgentLive do
   end
 
   @impl true
-  def handle_info({:agent_output, lines}, socket) do
+  def handle_info({:agent_output, _agent_id, lines}, socket) do
     output = socket.assigns.output ++ lines
     {:noreply, assign(socket, :output, Enum.take(output, -500))}
   end
