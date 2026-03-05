@@ -1,6 +1,6 @@
 # Apothecary Demo Recording Plan
 
-Silent screen recording, ~4-5 minutes total. Record segment by segment, merge later.
+Silent screen recording, ~5-6 minutes total. Record segment by segment, merge later.
 
 ## Setup
 
@@ -11,7 +11,7 @@ Silent screen recording, ~4-5 minutes total. Record segment by segment, merge la
 - `demo/title-cards.html` open in a separate browser window, fullscreen (`f` key)
 - Notifications off (Do Not Disturb)
 
-**Important:** The inline preview is the star of the show. The "before" (Segment 4) vs individual worktree previews (Segment 7) vs merged "after" (Segment 8) is the narrative arc.
+**Narrative arc:** Show the full lifecycle of ONE concoction first (create, watch, preview, merge) so the viewer understands the flow. Then blow it up to THREE in parallel — the contrast makes the parallelism land harder.
 
 ## Recording Workflow
 
@@ -73,72 +73,105 @@ For each segment:
 
 ---
 
-## Segment 5 — Create Three Concoctions
+## Segment 5 — Create a Concoction
 
-**Title card:** "Create three concoctions"
+**Title card:** "Create a concoction"
 
 1. Cmd+Tab to dashboard workbench.
 2. Click the "What shall we concoct?" textarea.
 3. Type: "Add a dark mode toggle with a sun/moon icon that persists preference to localStorage"
 4. Hit send. Concoction card appears.
-5. Create a second: "Add a footer component with links to GitHub and docs"
-6. Create a third: "Add a hero section with animated gradient background"
-7. Three concoction cards now visible. Pause briefly so viewer sees them.
+5. Pause briefly so viewer sees the single concoction.
 
 ---
 
-## Segment 6 — Watch the Swarm
+## Segment 6 — Watch It Work
 
-**Title card:** "Watch the swarm" / "Three agents in parallel"
+**Title card:** "Watch it work" / "One agent, full lifecycle"
 
 1. Cmd+Tab to dashboard.
 2. Click the **Concoct** button (or press `s`). Cauldron animates.
-3. Scale to 3 alchemists so all three concoctions run in parallel.
-4. Watch all three cards move from STOCKROOM to CONCOCTING as agents claim them simultaneously.
-5. Activity ticker lights up — dots go green.
-6. Click a CONCOCTING card to open the detail drawer.
-7. Show agent output streaming in real-time.
-8. **Key moment:** ingredients appear as the agent self-decomposes the task. Checkboxes populate, progress bar moves.
-9. Close drawer. Briefly peek at the other two to show all three agents working in parallel.
-10. Let this run. Speed up waiting parts in post (2-4x).
+3. Watch the card move from STOCKROOM to CONCOCTING as the agent claims it.
+4. Activity ticker lights up — dot goes green.
+5. Click the CONCOCTING card to open the detail drawer.
+6. Show agent output streaming in real-time.
+7. **Key moment:** ingredients appear as the agent self-decomposes the task. Checkboxes populate, progress bar moves.
+8. Let it run to completion. Speed up waiting parts in post (2-4x).
 
 ---
 
-## Segment 7 — Preview Each Worktree
+## Segment 7 — Preview the Change
 
-**Title card:** "Preview each worktree" / "Inline, side by side"
+**Title card:** "Preview the change" / "Inline preview"
 
-**Note:** The viewer saw the "before" in Segment 4. Now they see what each of the three agents built — all via inline preview.
+1. Cmd+Tab to dashboard.
+2. The worktree should now be visible in the tree panel.
+3. Click the worktree to select it in the detail pane.
+4. Click the preview link — inline preview opens showing the dark mode toggle change.
+5. **Show the actual change.** Toggle dark mode on/off. This is the first payoff.
+6. Press Escape to close the inline preview.
+
+---
+
+## Segment 8 — Merge & See the Result
+
+**Title card:** "Merge & see the result"
+
+1. Cmd+Tab to dashboard.
+2. Select the completed concoction. Show the PR in the detail drawer.
+3. Merge it. Card slides to BOTTLED.
+4. Click **main** in the tree panel. Open the inline preview.
+5. The app now has the dark mode toggle merged into main.
+6. Show the updated app briefly. First "after" moment.
+7. Press Escape to close preview.
+
+---
+
+## Segment 9 — Now, Three at Once
+
+**Title card:** "Now, three at once" / "Parallel agents, parallel previews"
+
+**Note:** The viewer now understands the full lifecycle. Time to show it scales.
+
+1. Cmd+Tab to dashboard workbench.
+2. Create three concoctions in quick succession:
+   - "Add a footer component with links to GitHub and docs"
+   - "Add a hero section with animated gradient background"
+   - "Add a testimonials carousel with auto-rotation"
+3. Click **Concoct**. Scale to 3 alchemists so all three run in parallel.
+4. Watch all three cards move to CONCOCTING simultaneously.
+5. Briefly peek at each detail drawer — three agents working at the same time.
+6. Let them run. Speed up waiting parts in post (2-4x).
+
+---
+
+## Segment 10 — Preview Each Worktree
+
+**Title card:** "Preview each worktree" / "Inline, one by one"
 
 1. Cmd+Tab to dashboard.
 2. Three worktrees should now be visible in the tree panel.
-3. Click the first worktree to select it in the detail pane.
-4. Click the preview link — inline preview opens showing the dark mode toggle change.
-5. **Show the actual change.** Toggle dark mode on/off. This is the payoff.
-6. Press Escape to close preview. Click the second worktree.
-7. Open its preview — see the footer component the agent built.
-8. Press Escape. Click the third worktree.
-9. Open its preview — see the hero section with animated gradient.
-10. Three agents, three features, all previewable inline. Return to dashboard.
+3. Click the first worktree. Open inline preview — see the footer.
+4. Press Escape. Click the second worktree. Open preview — see the hero section.
+5. Press Escape. Click the third worktree. Open preview — see the testimonials carousel.
+6. Three agents, three features, all previewable inline.
 
 ---
 
-## Segment 8 — Merge All & See the Result
+## Segment 11 — Merge All
 
-**Title card:** "Merge all & see the result"
+**Title card:** "Merge all" / "Everything combined"
 
 1. Cmd+Tab to dashboard.
-2. Select the first completed concoction. Show the PR in the detail drawer.
-3. Merge it. Card slides to BOTTLED.
-4. Merge the second concoction.
-5. Merge the third concoction.
-6. **Key moment:** Click **main** in the tree panel. Open the inline preview.
-7. The app now has all three changes — dark mode toggle, footer, and hero section.
-8. Show the updated app briefly. The "after" state with everything combined.
+2. Merge all three concoctions one by one. Cards slide to BOTTLED.
+3. **Key moment:** Click **main** in the tree panel. Open the inline preview.
+4. The app now has everything — dark mode, footer, hero, testimonials. Four features total.
+5. Show the fully updated app. The "after" state with all changes combined.
+6. This is the big payoff.
 
 ---
 
-## Segment 9 — Ask the Oracle
+## Segment 12 — Ask the Oracle
 
 **Title card:** "Ask the Oracle" / "Codebase Q&A, powered by agents"
 
@@ -152,7 +185,7 @@ For each segment:
 
 ---
 
-## Segment 10 — Recurring Concoctions
+## Segment 13 — Recurring Concoctions
 
 **Title card:** "Recurring concoctions" / "Scheduled work on autopilot"
 
@@ -166,7 +199,7 @@ For each segment:
 
 ---
 
-## Segment 11 — Outro
+## Segment 14 — Outro
 
 **Title card:** "Apothecary" / "github.com/askasp/apothecary"
 
@@ -194,10 +227,12 @@ If a segment has dead time while agents work, cut it or speed it up in iMovie/kd
 
 - Project selection
 - Main preview opening inline (the "before")
-- Concoction creation (typing + send)
-- Cards moving between lanes
-- Ingredients appearing in real-time
-- All three inline previews loading — the parallel payoff
+- Single concoction creation and lifecycle
+- First inline preview — the dark mode toggle payoff
+- First merge and seeing the result on main
+- Creating three concoctions in rapid succession
+- All three cards moving to CONCOCTING simultaneously
+- Each worktree inline preview loading
 - Merging all three and seeing the combined result on main
 - Oracle question being asked and answer appearing
 - Recipe creation

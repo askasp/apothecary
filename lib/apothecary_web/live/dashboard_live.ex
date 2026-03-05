@@ -63,6 +63,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:diff_view, nil)
       |> assign(:show_preview, false)
       |> assign(:preview_port, nil)
+      |> assign(:show_preview_logs, false)
       |> assign(:pending_action, nil)
       |> assign(:loading_action, nil)
       # Tab navigation
@@ -702,12 +703,28 @@ defmodule ApothecaryWeb.DashboardLive do
         _ -> nil
       end
 
-    {:noreply, socket |> assign(:show_preview, true) |> assign(:preview_port, port)}
+    # Auto-show logs if the server is in error state
+    show_logs =
+      Enum.any?(socket.assigns.dev_servers, fn {_id, server} ->
+        server[:status] == :error and
+          Enum.any?(server[:ports] || [], fn p -> p.port == port end)
+      end)
+
+    {:noreply,
+     socket
+     |> assign(:show_preview, true)
+     |> assign(:preview_port, port)
+     |> assign(:show_preview_logs, show_logs || socket.assigns.show_preview_logs)}
   end
 
   @impl true
   def handle_event("close-preview", _params, socket) do
-    {:noreply, socket |> assign(:show_preview, false) |> assign(:preview_port, nil)}
+    {:noreply, socket |> assign(:show_preview, false) |> assign(:preview_port, nil) |> assign(:show_preview_logs, false)}
+  end
+
+  @impl true
+  def handle_event("toggle-preview-logs", _params, socket) do
+    {:noreply, assign(socket, :show_preview_logs, !socket.assigns.show_preview_logs)}
   end
 
   @impl true
@@ -2226,6 +2243,35 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
+  defp handle_hotkey("t", socket) do
+    path =
+      case selected_worktree(socket) do
+        %{git_path: gp} when is_binary(gp) and gp != "" ->
+          if File.dir?(gp), do: gp, else: nil
+
+        _ ->
+          nil
+      end
+
+    # Fall back to current project path
+    path =
+      path ||
+        case socket.assigns.current_project do
+          %{path: p} when is_binary(p) and p != "" ->
+            if File.dir?(p), do: p, else: nil
+
+          _ ->
+            nil
+        end
+
+    if path do
+      System.cmd("open", ["-a", "Terminal", path])
+      put_flash(socket, :info, "Opening terminal in #{path}")
+    else
+      put_flash(socket, :error, "No path found to open terminal")
+    end
+  end
+
   defp handle_hotkey("d", socket) do
     case selected_worktree(socket) do
       nil -> socket
@@ -3292,6 +3338,7 @@ defmodule ApothecaryWeb.DashboardLive do
                         port={@preview_port}
                         dev_servers={@dev_servers}
                         current_project={@current_project}
+                        show_logs={@show_preview_logs}
                       />
                     <% @selected_task && @selected_task_id -> %>
                       <.worktree_detail

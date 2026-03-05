@@ -512,10 +512,32 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span style="font-weight: 600;">main</span>
             &nbsp;:{@port}
           </span>
+          &nbsp;
+          <button phx-click={@stop_event} phx-value-id={@target_id} class="action-text">
+            stop
+          </button>
         <% @dev_server && @dev_server.status == :starting -> %>
           <span style="color: var(--dim);">preview</span>
           &nbsp;
-          <span style="color: var(--concocting);">starting...</span>
+          <span style="color: var(--concocting);">
+            <.braille_spinner id="preview-start-spinner" offset={0} />
+            starting...
+          </span>
+        <% @dev_server && @dev_server.status == :error -> %>
+          <span style="color: var(--dim);">preview</span>
+          &nbsp;
+          <span
+            class="cursor-pointer"
+            style="color: var(--error);"
+            phx-click="show-preview"
+            phx-value-port={@port || 0}
+          >
+            crashed
+          </span>
+          &nbsp;
+          <button phx-click={@start_event} phx-value-id={@target_id} class="action-text">
+            restart
+          </button>
         <% @has_config -> %>
           <button
             phx-click={@start_event}
@@ -627,11 +649,13 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   def settings_line(assigns) do
     brewing? = assigns.swarm_status == :running
+    any_working? = Enum.any?(assigns.agents, fn a -> a.status == :working end)
     any_unsandboxed = Enum.any?(assigns.agents, fn a -> a.status == :working && !a.sandboxed end)
 
     assigns =
       assigns
       |> assign(:brewing?, brewing?)
+      |> assign(:any_working?, any_working?)
       |> assign(:any_unsandboxed, any_unsandboxed)
 
     ~H"""
@@ -643,8 +667,12 @@ defmodule ApothecaryWeb.DashboardComponents do
           class="cursor-pointer inline-flex items-center gap-1"
           style={"border: 1px solid #{if @brewing?, do: "var(--concocting)", else: "var(--border)"}; border-radius: 4px; padding: 2px 8px;"}
         >
-          <span style={"color: #{if @brewing?, do: "var(--concocting)", else: "var(--muted)"};"}>
-            <%= if @brewing? do %>
+          <span style={"color: #{cond do
+            @brewing? && @any_working? -> "var(--concocting)"
+            @brewing? -> "var(--text)"
+            true -> "var(--muted)"
+          end};"}>
+            <%= if @brewing? && @any_working? do %>
               <.braille_spinner id="brew-spinner" offset={0} />
             <% else %>
               &#x2847;
@@ -1431,6 +1459,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :port, :integer, required: true
   attr :dev_servers, :map, default: %{}
   attr :current_project, :map, default: nil
+  attr :show_logs, :boolean, default: false
 
   def preview_panel(assigns) do
     # Build list of all available preview sources
@@ -1438,15 +1467,18 @@ defmodule ApothecaryWeb.DashboardComponents do
 
     main_source =
       case assigns.dev_servers[project_id] do
-        %{ports: [%{port: p} | _], status: :running} -> %{id: :main, label: "main", port: p}
-        _ -> nil
+        %{ports: [%{port: p} | _], status: s} when s in [:running, :starting, :error] ->
+          %{id: project_id, label: "main", port: p}
+
+        _ ->
+          nil
       end
 
     wt_sources =
       assigns.dev_servers
       |> Enum.filter(fn {id, server} ->
         id != project_id and
-          match?(%{status: :running, ports: [_ | _]}, server)
+          match?(%{status: s, ports: [_ | _]} when s in [:running, :starting, :error], server)
       end)
       |> Enum.map(fn {id, %{ports: [%{port: p} | _]}} ->
         short_id = id |> to_string() |> String.replace_leading("wt-", "") |> String.slice(0, 6)
@@ -1459,10 +1491,23 @@ defmodule ApothecaryWeb.DashboardComponents do
     active_source =
       Enum.find(sources, List.first(sources), fn s -> s.port == assigns.port end)
 
+    # Get output/error for the active server
+    active_server =
+      if active_source do
+        assigns.dev_servers[active_source.id]
+      end
+
+    output = (active_server && active_server[:output]) || []
+    error = active_server && active_server[:error]
+    server_status = active_server && active_server.status
+
     assigns =
       assigns
       |> assign(:sources, sources)
       |> assign(:active_source, active_source)
+      |> assign(:output, output)
+      |> assign(:error, error)
+      |> assign(:server_status, server_status)
 
     ~H"""
     <div class="flex flex-col h-full">
@@ -1481,7 +1526,14 @@ defmodule ApothecaryWeb.DashboardComponents do
           </button>
           <span style="color: var(--border);">|</span>
           <span style="color: var(--dim);">preview</span>
-          <span style="color: var(--accent);">&#x25CF;</span>
+          <%= case @server_status do %>
+            <% :error -> %>
+              <span style="color: var(--error);">&#x25CF;</span>
+            <% :starting -> %>
+              <span style="color: var(--concocting);"><.braille_spinner id="preview-bar-spin" offset={0} /></span>
+            <% _ -> %>
+              <span style="color: var(--accent);">&#x25CF;</span>
+          <% end %>
           <%!-- Source switcher --%>
           <%= for source <- @sources do %>
             <%= if source.port == @port do %>
@@ -1502,6 +1554,16 @@ defmodule ApothecaryWeb.DashboardComponents do
           <% end %>
         </div>
         <div class="flex items-center gap-3">
+          <button
+            phx-click="toggle-preview-logs"
+            class="cursor-pointer"
+            style={"color: #{if @show_logs, do: "var(--text)", else: "var(--muted)"};"}
+          >
+            logs
+            <%= if @error do %>
+              <span style="color: var(--error);">!</span>
+            <% end %>
+          </button>
           <a
             href={"http://localhost:#{@port}"}
             target="_blank"
@@ -1518,16 +1580,63 @@ defmodule ApothecaryWeb.DashboardComponents do
           </button>
         </div>
       </div>
-      <%!-- Iframe --%>
-      <div class="flex-1 min-h-0">
-        <iframe
-          id={"preview-iframe-#{@port}"}
-          src={"http://localhost:#{@port}"}
-          class="w-full h-full border-0"
-          style="background: white;"
-          phx-update="ignore"
-        />
-      </div>
+      <%!-- Content: logs, starting spinner, error, or iframe --%>
+      <%= cond do %>
+        <% @show_logs or @server_status == :error -> %>
+          <div class="flex-1 min-h-0 overflow-y-auto scroll-main">
+            <%= if @error do %>
+              <div class="px-4 py-2" style="color: var(--error); font-size: var(--font-size-sm);">
+                {@error}
+              </div>
+            <% end %>
+            <div
+              id="preview-logs"
+              class="px-4 py-2"
+              style="font-size: var(--font-size-xs); color: var(--dim); white-space: pre-wrap; font-family: var(--font-mono);"
+              phx-hook="ScrollBottom"
+            >
+              <%= if @output == [] do %>
+                <span style="color: var(--muted);">no output yet</span>
+              <% else %>
+                {Enum.join(@output, "\n")}
+              <% end %>
+            </div>
+          </div>
+        <% @server_status == :starting -> %>
+          <div class="flex-1 min-h-0 flex items-center justify-center">
+            <div class="text-center">
+              <div style="color: var(--concocting); font-size: 24px;" class="mb-3">
+                <.braille_spinner id="preview-panel-spinner" offset={0} />
+              </div>
+              <div style="color: var(--dim); font-size: var(--font-size-sm);">
+                starting preview server...
+              </div>
+              <div
+                :if={@output != []}
+                class="mt-3 text-left mx-auto"
+                style="max-width: 400px; font-size: var(--font-size-xs); color: var(--muted); font-family: var(--font-mono);"
+              >
+                {List.last(@output)}
+              </div>
+            </div>
+          </div>
+        <% @server_status == :running -> %>
+          <div class="flex-1 min-h-0">
+            <iframe
+              id={"preview-iframe-#{@port}"}
+              src={"http://localhost:#{@port}"}
+              class="w-full h-full border-0"
+              style="background: white;"
+              phx-update="ignore"
+            />
+          </div>
+        <% true -> %>
+          <div class="flex-1 min-h-0 flex items-center justify-center">
+            <span style="color: var(--muted); font-size: var(--font-size-sm);">
+              server not running
+            </span>
+          </div>
+      <% end %>
     </div>
     """
   end
@@ -2025,6 +2134,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <.hk key="c" desc="focus input" />
             <.hk key="a" desc="add task" />
             <.hk key="d" desc="view diff" />
+            <.hk key="t" desc="open terminal" />
             <.hk key="p" desc="open preview" />
             <.hk key="P" desc="pull origin main" />
             <.hk key="?" desc="this help" />

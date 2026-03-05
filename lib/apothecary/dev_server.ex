@@ -83,12 +83,29 @@ defmodule Apothecary.DevServer do
 
   @impl true
   def init(_opts) do
+    Process.flag(:trap_exit, true)
+
     {:ok,
      %{
        servers: %{},
        used_slots: MapSet.new(),
        port_to_wt: %{}
      }}
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    Logger.info("DevServer shutting down, stopping #{map_size(state.servers)} server(s)")
+
+    for {_wt_id, %{port: port}} when not is_nil(port) <- state.servers do
+      try do
+        Port.close(port)
+      rescue
+        _ -> :ok
+      end
+    end
+
+    :ok
   end
 
   @impl true

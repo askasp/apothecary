@@ -43,14 +43,21 @@ defmodule Apothecary.DevConfig do
 
   defp parse(yaml) when is_map(yaml) do
     command = yaml["command"]
-    port_count = yaml["port_count"]
+
+    # Infer port_count from ports list if not explicitly set
+    port_count =
+      case {yaml["port_count"], yaml["ports"]} do
+        {n, _} when is_integer(n) and n >= 1 -> n
+        {_, ports} when is_list(ports) and ports != [] -> length(ports)
+        _ -> nil
+      end
 
     cond do
       is_nil(command) or command == "" ->
         {:error, "command is required in preview.yml"}
 
-      is_nil(port_count) or not is_integer(port_count) or port_count < 1 ->
-        {:error, "port_count must be a positive integer in preview.yml"}
+      is_nil(port_count) ->
+        {:error, "port_count or ports list is required in preview.yml"}
 
       true ->
         base_port = yaml["base_port"] || guess_base_port(command)
