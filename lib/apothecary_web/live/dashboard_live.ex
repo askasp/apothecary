@@ -42,7 +42,9 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:projects, projects)
       |> assign(:current_project, nil)
       |> assign(:swarm_status, :paused)
+      |> assign(:oracle_status, :paused)
       |> assign(:target_count, 1)
+      |> assign(:oracle_target_count, 0)
       |> assign(:active_count, 0)
       |> assign(:agents, agents)
       |> assign(:dispatcher_projects, dispatcher_status[:projects] || %{})
@@ -177,7 +179,9 @@ defmodule ApothecaryWeb.DashboardLive do
   defp apply_swarm_state(socket, nil) do
     socket
     |> assign(:swarm_status, :paused)
+    |> assign(:oracle_status, :paused)
     |> assign(:target_count, 1)
+    |> assign(:oracle_target_count, 0)
     |> assign(:active_count, 0)
   end
 
@@ -186,7 +190,9 @@ defmodule ApothecaryWeb.DashboardLive do
 
     socket
     |> assign(:swarm_status, project_status.status)
+    |> assign(:oracle_status, project_status[:oracle_status] || :paused)
     |> assign(:target_count, max(project_status.target_count, 1))
+    |> assign(:oracle_target_count, project_status[:oracle_target_count] || 0)
     |> assign(:active_count, project_status.active_count)
   end
 
@@ -307,7 +313,9 @@ defmodule ApothecaryWeb.DashboardLive do
     socket =
       socket
       |> assign(:swarm_status, project_status.status)
+      |> assign(:oracle_status, project_status[:oracle_status] || :paused)
       |> assign(:target_count, max(project_status.target_count, 1))
+      |> assign(:oracle_target_count, project_status[:oracle_target_count] || 0)
       |> assign(:active_count, project_status.active_count)
       |> assign(:agents, agents)
       |> assign(:dispatcher_projects, status[:projects] || %{})
@@ -527,6 +535,20 @@ defmodule ApothecaryWeb.DashboardLive do
 
   def handle_event("hotkey", %{"ctrlKey" => true}, socket), do: {:noreply, socket}
 
+  # Shift+Tab always opens project switcher regardless of active tab
+  def handle_event("hotkey", %{"shiftKey" => true, "key" => "Tab"}, socket) do
+    if socket.assigns.current_project do
+      {:noreply,
+       socket
+       |> assign(:show_project_switcher, true)
+       |> assign(:switcher_selected, 0)
+       |> assign(:switcher_query, "")
+       |> push_event("focus-element", %{selector: "#project-switcher-search"})}
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_event("hotkey", %{"key" => key}, socket) do
     cond do
       socket.assigns.show_project_switcher and
@@ -715,6 +737,11 @@ defmodule ApothecaryWeb.DashboardLive do
      |> assign(:show_preview, true)
      |> assign(:preview_port, port)
      |> assign(:show_preview_logs, show_logs || socket.assigns.show_preview_logs)}
+  end
+
+  @impl true
+  def handle_event("show-preview-picker", _params, socket) do
+    {:noreply, socket |> assign(:show_preview, true) |> assign(:preview_port, nil)}
   end
 
   @impl true
@@ -1387,8 +1414,8 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
-  def handle_event("edit-setting", %{"setting" => "brewers"}, socket) do
-    {:noreply, assign(socket, :editing_setting, :brewers)}
+  def handle_event("edit-setting", %{"setting" => setting}, socket) do
+    {:noreply, assign(socket, :editing_setting, String.to_existing_atom(setting))}
   end
 
   @impl true
@@ -1416,6 +1443,28 @@ defmodule ApothecaryWeb.DashboardLive do
     end
 
     {:noreply, assign(socket, :target_count, count)}
+  end
+
+  @impl true
+  def handle_event("increment-oracles", _params, socket) do
+    count = min(socket.assigns.oracle_target_count + 1, 5)
+
+    if socket.assigns.current_project do
+      Dispatcher.set_oracle_count(socket.assigns.current_project.id, count)
+    end
+
+    {:noreply, assign(socket, :oracle_target_count, count)}
+  end
+
+  @impl true
+  def handle_event("decrement-oracles", _params, socket) do
+    count = max(socket.assigns.oracle_target_count - 1, 0)
+
+    if socket.assigns.current_project do
+      Dispatcher.set_oracle_count(socket.assigns.current_project.id, count)
+    end
+
+    {:noreply, assign(socket, :oracle_target_count, count)}
   end
 
   @impl true
@@ -1671,10 +1720,16 @@ defmodule ApothecaryWeb.DashboardLive do
   defp handle_oracle_hotkey("j", socket) do
     sorted = oracle_sorted_questions(socket)
     current_idx = oracle_selected_index(sorted, socket.assigns.selected_question_id)
-    max_idx = max(length(sorted) - 1, 0)
-    new_idx = min(current_idx + 1, max_idx)
-    new_id = if q = Enum.at(sorted, new_idx), do: q.id, else: nil
-    assign(socket, :selected_question_id, new_id)
+    max_idx = length(sorted) - 1
+
+    if current_idx >= max_idx do
+      # Past last question — focus the input
+      push_event(socket, "focus-oracle-input", %{})
+    else
+      new_idx = current_idx + 1
+      new_id = if q = Enum.at(sorted, new_idx), do: q.id, else: nil
+      assign(socket, :selected_question_id, new_id)
+    end
   end
 
   defp handle_oracle_hotkey("k", socket) do
@@ -2018,7 +2073,11 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("c", socket) do
-    push_event(socket, "focus-element", %{selector: "#primary-input"})
+    if socket.assigns.active_tab == :oracle do
+      push_event(socket, "focus-oracle-input", %{})
+    else
+      push_event(socket, "focus-element", %{selector: "#primary-input"})
+    end
   end
 
   defp handle_hotkey("/", socket) do
@@ -2054,46 +2113,18 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey(key, socket) when key in ["+", "="] do
-    case socket.assigns.current_project do
-      nil ->
-        socket
-
-      project ->
-        count = min(socket.assigns.target_count + 1, 10)
-
-        if socket.assigns.swarm_status == :running do
-          Dispatcher.set_agent_count(project.id, count)
-        end
-
-        socket = assign(socket, :target_count, count)
-
-        if socket.assigns.swarm_status != :running do
-          put_flash(socket, :info, "Brewer count set to #{count}")
-        else
-          socket
-        end
+    if socket.assigns.active_tab == :oracle do
+      handle_oracle_increment(socket)
+    else
+      handle_brewer_increment(socket)
     end
   end
 
   defp handle_hotkey("-", socket) do
-    case socket.assigns.current_project do
-      nil ->
-        socket
-
-      project ->
-        count = max(socket.assigns.target_count - 1, 1)
-
-        if socket.assigns.swarm_status == :running do
-          Dispatcher.set_agent_count(project.id, count)
-        end
-
-        socket = assign(socket, :target_count, count)
-
-        if socket.assigns.swarm_status != :running do
-          put_flash(socket, :info, "Brewer count set to #{count}")
-        else
-          socket
-        end
+    if socket.assigns.active_tab == :oracle do
+      handle_oracle_decrement(socket)
+    else
+      handle_brewer_decrement(socket)
     end
   end
 
@@ -2179,8 +2210,9 @@ defmodule ApothecaryWeb.DashboardLive do
             %{status: :running, ports: [_ | _]},
             socket.assigns.dev_servers[socket.assigns.selected_task_id]
           ) ->
-        %{ports: [%{port: p} | _]} = socket.assigns.dev_servers[socket.assigns.selected_task_id]
-        socket |> assign(:show_preview, true) |> assign(:preview_port, p)
+        %{ports: ports} = socket.assigns.dev_servers[socket.assigns.selected_task_id]
+        port = if length(ports) == 1, do: hd(ports).port, else: nil
+        socket |> assign(:show_preview, true) |> assign(:preview_port, port)
 
       # Open preview for main project dev server
       socket.assigns.current_project &&
@@ -2188,8 +2220,9 @@ defmodule ApothecaryWeb.DashboardLive do
             %{status: :running, ports: [_ | _]},
             socket.assigns.dev_servers[socket.assigns.current_project.id]
           ) ->
-        %{ports: [%{port: p} | _]} = socket.assigns.dev_servers[socket.assigns.current_project.id]
-        socket |> assign(:show_preview, true) |> assign(:preview_port, p)
+        %{ports: ports} = socket.assigns.dev_servers[socket.assigns.current_project.id]
+        port = if length(ports) == 1, do: hd(ports).port, else: nil
+        socket |> assign(:show_preview, true) |> assign(:preview_port, port)
 
       socket.assigns.current_project ->
         assign(socket, :show_preview_help, !socket.assigns.show_preview_help)
@@ -2200,14 +2233,20 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("Tab", socket) do
-    if socket.assigns.current_project do
-      socket
-      |> assign(:show_project_switcher, true)
-      |> assign(:switcher_selected, 0)
-      |> assign(:switcher_query, "")
-      |> push_event("focus-element", %{selector: "#project-switcher-search"})
-    else
-      socket
+    cond do
+      socket.assigns.active_tab == :oracle ->
+        # Cycle focus to oracle input
+        push_event(socket, "focus-oracle-input", %{})
+
+      socket.assigns.current_project ->
+        socket
+        |> assign(:show_project_switcher, true)
+        |> assign(:switcher_selected, 0)
+        |> assign(:switcher_query, "")
+        |> push_event("focus-element", %{selector: "#project-switcher-search"})
+
+      true ->
+        socket
     end
   end
 
@@ -2320,6 +2359,76 @@ defmodule ApothecaryWeb.DashboardLive do
   defp handle_hotkey("o", socket), do: assign(socket, :active_tab, :oracle)
 
   defp handle_hotkey(_key, socket), do: socket
+
+  # --- Brewer/Oracle count helpers ---
+
+  defp handle_brewer_increment(socket) do
+    case socket.assigns.current_project do
+      nil ->
+        socket
+
+      project ->
+        count = min(socket.assigns.target_count + 1, 10)
+
+        if socket.assigns.swarm_status == :running do
+          Dispatcher.set_agent_count(project.id, count)
+        end
+
+        socket = assign(socket, :target_count, count)
+
+        if socket.assigns.swarm_status != :running do
+          put_flash(socket, :info, "Brewer count set to #{count}")
+        else
+          socket
+        end
+    end
+  end
+
+  defp handle_brewer_decrement(socket) do
+    case socket.assigns.current_project do
+      nil ->
+        socket
+
+      project ->
+        count = max(socket.assigns.target_count - 1, 1)
+
+        if socket.assigns.swarm_status == :running do
+          Dispatcher.set_agent_count(project.id, count)
+        end
+
+        socket = assign(socket, :target_count, count)
+
+        if socket.assigns.swarm_status != :running do
+          put_flash(socket, :info, "Brewer count set to #{count}")
+        else
+          socket
+        end
+    end
+  end
+
+  defp handle_oracle_increment(socket) do
+    case socket.assigns.current_project do
+      nil ->
+        socket
+
+      project ->
+        count = min(socket.assigns.oracle_target_count + 1, 5)
+        Dispatcher.set_oracle_count(project.id, count)
+        assign(socket, :oracle_target_count, count)
+    end
+  end
+
+  defp handle_oracle_decrement(socket) do
+    case socket.assigns.current_project do
+      nil ->
+        socket
+
+      project ->
+        count = max(socket.assigns.oracle_target_count - 1, 0)
+        Dispatcher.set_oracle_count(project.id, count)
+        assign(socket, :oracle_target_count, count)
+    end
+  end
 
   # --- Diff overlay hotkeys ---
 
@@ -3192,14 +3301,15 @@ defmodule ApothecaryWeb.DashboardLive do
         %{
           status: dispatcher_status.status,
           target_count: dispatcher_status.target_count,
-          active_count: dispatcher_status.active_count
+          active_count: dispatcher_status.active_count,
+          oracle_target_count: dispatcher_status[:oracle_target_count] || 0
         }
 
       project ->
         projects = dispatcher_status[:projects] || %{}
 
         case projects[project.id] do
-          nil -> %{status: :paused, target_count: 0, active_count: 0}
+          nil -> %{status: :paused, oracle_status: :paused, target_count: 0, active_count: 0, oracle_target_count: 0}
           ps -> ps
         end
     end
@@ -3274,6 +3384,9 @@ defmodule ApothecaryWeb.DashboardLive do
                 questions={@questions}
                 agents={@agents}
                 selected_question_id={@selected_question_id}
+                oracle_target_count={@oracle_target_count}
+                editing_setting={@editing_setting}
+                oracle_status={@oracle_status}
               />
             <% @active_tab == :recipes -> %>
               <div class="h-full overflow-y-auto scroll-main">
@@ -3333,7 +3446,7 @@ defmodule ApothecaryWeb.DashboardLive do
                   phx-click="focus-detail-pane"
                 >
                   <%= cond do %>
-                    <% @show_preview && @preview_port -> %>
+                    <% @show_preview -> %>
                       <.preview_panel
                         port={@preview_port}
                         dev_servers={@dev_servers}
@@ -3457,6 +3570,7 @@ defmodule ApothecaryWeb.DashboardLive do
           project_count={length(@projects)}
           questions={@questions}
           agents={@agents}
+          oracle_target_count={@oracle_target_count}
         />
       </div>
 

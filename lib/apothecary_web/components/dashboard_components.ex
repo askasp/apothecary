@@ -501,17 +501,26 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%!-- Inline mode for settings bar --%>
       <%= cond do %>
         <% @dev_server && @dev_server.status == :running -> %>
-          <span style="color: var(--dim);">preview</span>
-          &nbsp;
-          <span
-            class="cursor-pointer"
-            style="color: var(--accent); text-decoration: none;"
-            phx-click="show-preview"
-            phx-value-port={@port}
-          >
-            <span style="font-weight: 600;">main</span>
-            &nbsp;:{@port}
-          </span>
+          <%= if length(@ports) > 1 do %>
+            <span
+              class="cursor-pointer"
+              style="color: var(--accent); text-decoration: none;"
+              phx-click="show-preview-picker"
+            >
+              preview
+            </span>
+          <% else %>
+            <span style="color: var(--dim);">preview</span>
+            &nbsp;
+            <span
+              class="cursor-pointer"
+              style="color: var(--accent); text-decoration: none;"
+              phx-click="show-preview"
+              phx-value-port={@port}
+            >
+              :{@port}
+            </span>
+          <% end %>
           &nbsp;
           <button phx-click={@stop_event} phx-value-id={@target_id} class="action-text">
             stop
@@ -1456,7 +1465,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   Full-panel preview with source switcher bar.
   Shows all available preview sources (main project + worktrees with running dev servers).
   """
-  attr :port, :integer, required: true
+  attr :port, :integer, default: nil
   attr :dev_servers, :map, default: %{}
   attr :current_project, :map, default: nil
   attr :show_logs, :boolean, default: false
@@ -1465,13 +1474,17 @@ defmodule ApothecaryWeb.DashboardComponents do
     # Build list of all available preview sources
     project_id = assigns.current_project && assigns.current_project.id
 
-    main_source =
+    # Build sources: expand each dev server's ports into separate entries
+    main_sources =
       case assigns.dev_servers[project_id] do
-        %{ports: [%{port: p} | _], status: s} when s in [:running, :starting, :error] ->
-          %{id: project_id, label: "main", port: p}
+        %{ports: ports, status: s} when s in [:running, :starting, :error] and is_list(ports) ->
+          Enum.map(ports, fn %{port: p, name: name} ->
+            label = if length(ports) > 1, do: "main:#{name}", else: "main"
+            %{id: project_id, label: label, port: p}
+          end)
 
         _ ->
-          nil
+          []
       end
 
     wt_sources =
@@ -1480,16 +1493,22 @@ defmodule ApothecaryWeb.DashboardComponents do
         id != project_id and
           match?(%{status: s, ports: [_ | _]} when s in [:running, :starting, :error], server)
       end)
-      |> Enum.map(fn {id, %{ports: [%{port: p} | _]}} ->
+      |> Enum.flat_map(fn {id, %{ports: ports}} ->
         short_id = id |> to_string() |> String.replace_leading("wt-", "") |> String.slice(0, 6)
-        %{id: id, label: short_id, port: p}
+
+        Enum.map(ports, fn %{port: p, name: name} ->
+          label = if length(ports) > 1, do: "#{short_id}:#{name}", else: short_id
+          %{id: id, label: label, port: p}
+        end)
       end)
       |> Enum.sort_by(& &1.label)
 
-    sources = Enum.reject([main_source | wt_sources], &is_nil/1)
+    sources = main_sources ++ wt_sources
 
     active_source =
-      Enum.find(sources, List.first(sources), fn s -> s.port == assigns.port end)
+      if assigns.port do
+        Enum.find(sources, List.first(sources), fn s -> s.port == assigns.port end)
+      end
 
     # Get output/error for the active server
     active_server =
@@ -1526,13 +1545,15 @@ defmodule ApothecaryWeb.DashboardComponents do
           </button>
           <span style="color: var(--border);">|</span>
           <span style="color: var(--dim);">preview</span>
-          <%= case @server_status do %>
-            <% :error -> %>
-              <span style="color: var(--error);">&#x25CF;</span>
-            <% :starting -> %>
-              <span style="color: var(--concocting);"><.braille_spinner id="preview-bar-spin" offset={0} /></span>
-            <% _ -> %>
-              <span style="color: var(--accent);">&#x25CF;</span>
+          <%= if @port do %>
+            <%= case @server_status do %>
+              <% :error -> %>
+                <span style="color: var(--error);">&#x25CF;</span>
+              <% :starting -> %>
+                <span style="color: var(--concocting);"><.braille_spinner id="preview-bar-spin" offset={0} /></span>
+              <% _ -> %>
+                <span style="color: var(--accent);">&#x25CF;</span>
+            <% end %>
           <% end %>
           <%!-- Source switcher --%>
           <%= for source <- @sources do %>
@@ -1554,23 +1575,25 @@ defmodule ApothecaryWeb.DashboardComponents do
           <% end %>
         </div>
         <div class="flex items-center gap-3">
-          <button
-            phx-click="toggle-preview-logs"
-            class="cursor-pointer"
-            style={"color: #{if @show_logs, do: "var(--text)", else: "var(--muted)"};"}
-          >
-            logs
-            <%= if @error do %>
-              <span style="color: var(--error);">!</span>
-            <% end %>
-          </button>
-          <a
-            href={"http://localhost:#{@port}"}
-            target="_blank"
-            style="color: var(--accent); text-decoration: none;"
-          >
-            open &#x2197;
-          </a>
+          <%= if @port do %>
+            <button
+              phx-click="toggle-preview-logs"
+              class="cursor-pointer"
+              style={"color: #{if @show_logs, do: "var(--text)", else: "var(--muted)"};"}
+            >
+              logs
+              <%= if @error do %>
+                <span style="color: var(--error);">!</span>
+              <% end %>
+            </button>
+            <a
+              href={"http://localhost:#{@port}"}
+              target="_blank"
+              style="color: var(--accent); text-decoration: none;"
+            >
+              open &#x2197;
+            </a>
+          <% end %>
           <button
             phx-click="close-preview"
             class="cursor-pointer"
@@ -1580,8 +1603,30 @@ defmodule ApothecaryWeb.DashboardComponents do
           </button>
         </div>
       </div>
-      <%!-- Content: logs, starting spinner, error, or iframe --%>
+      <%!-- Content: port picker, logs, starting spinner, error, or iframe --%>
       <%= cond do %>
+        <% is_nil(@port) -> %>
+          <%!-- Port picker: show all available ports with names --%>
+          <div class="flex-1 min-h-0 overflow-y-auto scroll-main px-4 py-4">
+            <div style="font-size: var(--font-size-sm); color: var(--dim); margin-bottom: 12px;">
+              select a preview to open
+            </div>
+            <div class="flex flex-col gap-2">
+              <%= for source <- @sources do %>
+                <button
+                  phx-click="show-preview"
+                  phx-value-port={source.port}
+                  class="cursor-pointer text-left px-3 py-2"
+                  style="border: 1px solid var(--border); border-radius: 4px; background: transparent; font-size: var(--font-size-sm);"
+                  onmouseover="this.style.borderColor='var(--accent)'"
+                  onmouseout="this.style.borderColor='var(--border)'"
+                >
+                  <span style="color: var(--text);">{source.label}</span>
+                  <span style="color: var(--muted);">:{source.port}</span>
+                </button>
+              <% end %>
+            </div>
+          </div>
         <% @show_logs or @server_status == :error -> %>
           <div class="flex-1 min-h-0 overflow-y-auto scroll-main">
             <%= if @error do %>
@@ -1675,6 +1720,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :project_count, :integer, default: 0
   attr :questions, :list, default: []
   attr :agents, :list, default: []
+  attr :oracle_target_count, :integer, default: 0
 
   def moonlight_status_bar(assigns) do
     running_count = length(assigns.worktrees_by_status["running"] || [])
@@ -1714,6 +1760,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> assign(:done_count, done_count)
       |> assign(:thinking_count, thinking_count)
       |> assign(:pending_question_count, pending_question_count)
+      |> assign(:question_count, length(assigns.questions))
 
     ~H"""
     <div class="status-bar flex items-center justify-between">
@@ -1737,23 +1784,20 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span style="color: var(--border);">&middot;</span>
             <span>enter select</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>n new</span>
+            <span>c/n input</span>
             <span style="color: var(--border);">&middot;</span>
             <span>d delete</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>+/- oracles</span>
             <span style="color: var(--border);">&middot;</span>
             <span>w/e/o tabs</span>
             <span style="color: var(--border);">&middot;</span>
             <span>? help</span>
           </div>
           <div class="flex items-center gap-2">
-            <%= if @thinking_count > 0 do %>
-              <span class="dot-pulse" style="color: var(--concocting);">
-                &#x25C9; {@thinking_count} active
-              </span>
-            <% end %>
-            <%= if @pending_question_count > 0 do %>
-              <span style="color: var(--muted);">&#x25CB;{@pending_question_count}</span>
-            <% end %>
+            <span style="color: var(--dim);">{@oracle_target_count} oracles</span>
+            <span style="color: var(--muted);">&middot;</span>
+            <span style="color: var(--dim);">{@question_count} questions</span>
           </div>
         <% @active_tab == :workbench && @selected_task_id && @selected_task -> %>
           <%!-- Workbench with selected task --%>
@@ -1803,7 +1847,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span style="color: var(--border);">&middot;</span>
             <span>w/e/o tabs</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>tab project</span>
+            <span>⇧tab project</span>
             <span style="color: var(--border);">&middot;</span>
             <span>? help</span>
           </div>
@@ -2117,7 +2161,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <.hk key="enter" desc="inspect worktree" />
             <.hk key="esc" desc="close / back" />
             <.hk key="/" desc="search" />
-            <.hk key="tab" desc="switch project" />
+            <.hk key="⇧tab" desc="switch project" />
           </div>
 
           <div>
@@ -2130,7 +2174,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           <div>
             <div style="color: var(--accent);" class="mb-1">actions</div>
             <.hk key="s" desc="start/stop brewing" />
-            <.hk key="+/-" desc="brewer count" />
+            <.hk key="+/-" desc="brewer/oracle count" />
             <.hk key="c" desc="focus input" />
             <.hk key="a" desc="add task" />
             <.hk key="d" desc="view diff" />
@@ -2174,6 +2218,9 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :questions, :list, required: true
   attr :agents, :list, default: []
   attr :selected_question_id, :string, default: nil
+  attr :oracle_target_count, :integer, default: 0
+  attr :editing_setting, :atom, default: nil
+  attr :oracle_status, :atom, default: :paused
 
   def oracle_view(assigns) do
     active_wt_ids =
@@ -2185,8 +2232,9 @@ defmodule ApothecaryWeb.DashboardComponents do
 
     sorted = Enum.sort_by(assigns.questions, fn q -> q.created_at || "" end, :desc)
 
-    thinking_count =
-      Enum.count(sorted, fn q ->
+    brewing? = assigns.oracle_status == :running
+    any_oracle_working? =
+      Enum.any?(sorted, fn q ->
         (q.notes == nil or q.notes == "") and MapSet.member?(active_wt_ids, q.id)
       end)
 
@@ -2201,7 +2249,8 @@ defmodule ApothecaryWeb.DashboardComponents do
       assigns
       |> assign(:sorted, sorted)
       |> assign(:active_wt_ids, active_wt_ids)
-      |> assign(:thinking_count, thinking_count)
+      |> assign(:brewing?, brewing?)
+      |> assign(:any_oracle_working?, any_oracle_working?)
       |> assign(:selected, selected)
 
     ~H"""
@@ -2211,25 +2260,59 @@ defmodule ApothecaryWeb.DashboardComponents do
         class="h-full flex flex-col flex-shrink-0"
         style="width: 36%; min-width: 280px; max-width: 420px; border-right: 1px solid var(--border);"
       >
-        <%!-- Header --%>
+        <%!-- Header — oracle pill (mirrors brewer pill style) --%>
         <div
-          class="px-3 py-2 flex items-center justify-between"
-          style="border-bottom: 1px solid var(--border);"
+          class="px-3 py-2 flex items-center"
+          style="border-bottom: 1px solid var(--border); font-size: var(--font-size-xs);"
         >
-          <div
-            class="flex items-center gap-2"
-            style="font-size: var(--font-size-xs); color: var(--dim);"
+          <span
+            class="inline-flex items-center gap-1"
+            style={"border: 1px solid #{if @brewing? && @oracle_target_count > 0, do: "var(--concocting)", else: "var(--border)"}; border-radius: 4px; padding: 2px 8px;"}
           >
-            <span>divinations</span>
-            <span style="color: var(--muted);">&middot;</span>
-            <span>{length(@sorted)} total</span>
-            <%= if @thinking_count > 0 do %>
-              <span style="color: var(--muted);">&middot;</span>
-              <span class="dot-pulse" style="color: var(--concocting);">
-                &#x25C9; {@thinking_count} thinking
-              </span>
-            <% end %>
-          </div>
+            <span style={"color: #{cond do
+              @brewing? && @any_oracle_working? -> "var(--concocting)"
+              @brewing? && @oracle_target_count > 0 -> "var(--text)"
+              true -> "var(--muted)"
+            end};"}>
+              <%= if @brewing? && @any_oracle_working? do %>
+                <.braille_spinner id="oracle-spinner" offset={0} />
+              <% else %>
+                &#x2847;
+              <% end %>
+            </span>
+            <span style={"color: #{if @brewing? && @oracle_target_count > 0, do: "var(--text)", else: "var(--muted)"}; font-weight: 600;"}>
+              {@oracle_target_count}
+            </span>
+            <span style={"color: #{if @brewing? && @oracle_target_count > 0, do: "var(--dim)", else: "var(--muted)"};"}>
+              oracles
+            </span>
+          </span>
+          <%!-- +/- controls --%>
+          <%= if @editing_setting == :oracles do %>
+            <span class="inline-flex items-center gap-1 ml-1">
+              <button phx-click="decrement-oracles" class="cursor-pointer" style="color: var(--accent);">
+                &minus;
+              </button>
+              <button phx-click="increment-oracles" class="cursor-pointer" style="color: var(--accent);">
+                +
+              </button>
+              <button phx-click="confirm-setting" class="cursor-pointer" style="color: var(--muted);">
+                &#x2713;
+              </button>
+            </span>
+          <% else %>
+            <button
+              phx-click="edit-setting"
+              phx-value-setting="oracles"
+              class="cursor-pointer ml-1"
+              style="color: var(--muted);"
+              title="Adjust oracle count (+/-)"
+            >
+              &#x25B4;&#x25BE;
+            </button>
+          <% end %>
+          <span style="color: var(--border); margin: 0 6px;">&middot;</span>
+          <span style="color: var(--dim);">{length(@sorted)} questions</span>
         </div>
 
         <%!-- Question list --%>
@@ -2253,7 +2336,7 @@ defmodule ApothecaryWeb.DashboardComponents do
                 end};"}>
                   <%= cond do %>
                     <% is_thinking -> %>
-                      <span class="dot-pulse">&#x25C9;</span>
+                      <.braille_spinner id={"oracle-q-#{q.id}"} offset={0} />
                     <% has_answer -> %>
                       &#x25CF;
                     <% true -> %>
@@ -2271,10 +2354,6 @@ defmodule ApothecaryWeb.DashboardComponents do
                 <span>{format_relative_time(q.created_at)}</span>
                 <span>&middot;</span>
                 <span>main</span>
-                <%= if is_thinking do %>
-                  <span>&middot;</span>
-                  <span style="color: var(--concocting);">thinking&hellip;</span>
-                <% end %>
               </div>
             </div>
           <% end %>
@@ -2369,7 +2448,7 @@ defmodule ApothecaryWeb.DashboardComponents do
                     class="flex items-center gap-2"
                     style="color: var(--concocting); font-size: var(--font-size-xs);"
                   >
-                    <span class="dot-pulse">&#x25C9;</span>
+                    <.braille_spinner id="oracle-detail-spinner" offset={0} />
                     <span>thinking&hellip;</span>
                   </div>
                 </div>

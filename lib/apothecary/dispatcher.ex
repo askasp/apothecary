@@ -39,6 +39,16 @@ defmodule Apothecary.Dispatcher do
     GenServer.call(__MODULE__, {:set_agent_count, project_id, count}, 60_000)
   end
 
+  @doc "Set the target oracle count for a specific project (scale up/down). Auto-starts/stops oracles."
+  def set_oracle_count(project_id, count) do
+    GenServer.call(__MODULE__, {:set_oracle_count, project_id, count}, 60_000)
+  end
+
+  @doc "Stop all oracles for a specific project."
+  def stop_oracles(project_id) do
+    GenServer.call(__MODULE__, {:stop_oracles, project_id}, 30_000)
+  end
+
   @doc "Report a brewer as idle and ready for the next worktree."
   def agent_idle(brewer_pid) do
     GenServer.cast(__MODULE__, {:agent_idle, brewer_pid})
@@ -103,7 +113,7 @@ defmodule Apothecary.Dispatcher do
         {:reply, :ok, state}
 
       pool ->
-        # Stop all brewers in this project's pool
+        # Stop only brewers — oracles have independent lifecycle
         Enum.each(pool.agent_pids, fn pid ->
           Apothecary.BrewerSupervisor.stop_brewer(pid)
         end)
@@ -111,12 +121,20 @@ defmodule Apothecary.Dispatcher do
         # Cancel any pending backoff timers
         Enum.each(pool.backoff_timers, fn {_slot, timer} -> Process.cancel_timer(timer) end)
 
-        # Clean up brewer_projects mappings
+        # Clean up brewer_projects mappings (keep oracle mappings)
         brewer_projects = Map.drop(state.brewer_projects, pool.agent_pids)
 
-        empty_pool = new_pool()
+        pool = %{pool |
+          status: :paused,
+          target_count: 0,
+          agent_pids: [],
+          idle_agents: [],
+          agents: Map.drop(pool.agents, pool.agent_pids),
+          failure_tracker: %{},
+          backoff_timers: %{}
+        }
         state = %{state | brewer_projects: brewer_projects}
-        state = put_pool(state, project_id, empty_pool)
+        state = put_pool(state, project_id, pool)
 
         broadcast(state)
         {:reply, :ok, state}
@@ -131,6 +149,49 @@ defmodule Apothecary.Dispatcher do
     state = scale_project_agents(state, project_id)
     broadcast(state)
     {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:set_oracle_count, project_id, count}, _from, state) do
+    pool = get_or_create_pool(state, project_id)
+    oracle_status = if count > 0, do: :running, else: :paused
+    pool = %{pool | oracle_target_count: count, oracle_status: oracle_status}
+    state = put_pool(state, project_id, pool)
+    state = scale_oracle_agents(state, project_id)
+    ensure_dispatch_scheduled(state)
+    broadcast(state)
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:stop_oracles, project_id}, _from, state) do
+    Logger.info("Stopping oracles for project #{project_id}")
+
+    case state.projects[project_id] do
+      nil ->
+        {:reply, :ok, state}
+
+      pool ->
+        Enum.each(pool.oracle_pids, fn pid ->
+          Apothecary.BrewerSupervisor.stop_brewer(pid)
+        end)
+
+        brewer_projects = Map.drop(state.brewer_projects, pool.oracle_pids)
+
+        pool = %{pool |
+          oracle_status: :paused,
+          oracle_target_count: 0,
+          oracle_pids: [],
+          oracle_idle: [],
+          agents: Map.drop(pool.agents, pool.oracle_pids)
+        }
+
+        state = %{state | brewer_projects: brewer_projects}
+        state = put_pool(state, project_id, pool)
+
+        broadcast(state)
+        {:reply, :ok, state}
+    end
   end
 
   @impl true
@@ -154,15 +215,25 @@ defmodule Apothecary.Dispatcher do
         pool = state.projects[project_id]
 
         if pool do
-          idle =
-            if pid in pool.idle_agents, do: pool.idle_agents, else: [pid | pool.idle_agents]
+          is_oracle = pid in pool.oracle_pids
+
+          pool =
+            if is_oracle do
+              oracle_idle =
+                if pid in pool.oracle_idle, do: pool.oracle_idle, else: [pid | pool.oracle_idle]
+              %{pool | oracle_idle: oracle_idle}
+            else
+              idle =
+                if pid in pool.idle_agents, do: pool.idle_agents, else: [pid | pool.idle_agents]
+              %{pool | idle_agents: idle}
+            end
 
           # Reset failure counter on successful idle (brewer completed work)
           brewer_state = pool.agents[pid]
           slot_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(pid)
           failure_tracker = Map.delete(pool.failure_tracker, slot_id)
 
-          pool = %{pool | idle_agents: idle, failure_tracker: failure_tracker}
+          pool = %{pool | failure_tracker: failure_tracker}
           state = put_pool(state, project_id, pool)
           try_dispatch(state)
         else
@@ -230,11 +301,23 @@ defmodule Apothecary.Dispatcher do
             "Brewer #{inspect(slot_id)} (#{inspect(pid)}) in project #{project_id} went down: #{inspect(reason)}"
           )
 
-          agent_pids = List.delete(pool.agent_pids, pid)
-          idle_agents = List.delete(pool.idle_agents, pid)
-          agents = Map.delete(pool.agents, pid)
+          is_oracle = pid in pool.oracle_pids
 
-          pool = %{pool | agent_pids: agent_pids, idle_agents: idle_agents, agents: agents}
+          pool =
+            if is_oracle do
+              %{pool |
+                oracle_pids: List.delete(pool.oracle_pids, pid),
+                oracle_idle: List.delete(pool.oracle_idle, pid),
+                agents: Map.delete(pool.agents, pid)
+              }
+            else
+              %{pool |
+                agent_pids: List.delete(pool.agent_pids, pid),
+                idle_agents: List.delete(pool.idle_agents, pid),
+                agents: Map.delete(pool.agents, pid)
+              }
+            end
+
           pool = record_pool_failure(pool, slot_id)
 
           brewer_projects = Map.delete(state.brewer_projects, pid)
@@ -257,7 +340,12 @@ defmodule Apothecary.Dispatcher do
             put_pool(state, project_id, pool)
           else
             state = put_pool(state, project_id, pool)
-            scale_project_agents(state, project_id)
+
+            if is_oracle do
+              scale_oracle_agents(state, project_id)
+            else
+              scale_project_agents(state, project_id)
+            end
           end
         else
           Map.update!(state, :brewer_projects, &Map.delete(&1, pid))
@@ -273,7 +361,7 @@ defmodule Apothecary.Dispatcher do
   @impl true
   def handle_info({:backoff_expired, project_id, slot_id}, state) do
     Logger.info(
-      "Backoff expired for brewer slot #{slot_id} in project #{project_id}, attempting respawn"
+      "Backoff expired for slot #{slot_id} in project #{project_id}, attempting respawn"
     )
 
     state =
@@ -284,7 +372,10 @@ defmodule Apothecary.Dispatcher do
         pool ->
           pool = %{pool | backoff_timers: Map.delete(pool.backoff_timers, slot_id)}
           state = put_pool(state, project_id, pool)
-          scale_project_agents(state, project_id)
+
+          state
+          |> scale_project_agents(project_id)
+          |> scale_oracle_agents(project_id)
       end
 
     broadcast(state)
@@ -301,7 +392,12 @@ defmodule Apothecary.Dispatcher do
       idle_agents: [],
       agents: %{},
       failure_tracker: %{},
-      backoff_timers: %{}
+      backoff_timers: %{},
+      # Oracle-specific pool (independent lifecycle)
+      oracle_status: :paused,
+      oracle_target_count: 0,
+      oracle_pids: [],
+      oracle_idle: []
     }
   end
 
@@ -322,7 +418,7 @@ defmodule Apothecary.Dispatcher do
   end
 
   defp maybe_schedule_dispatch(state) do
-    any_running? = Enum.any?(state.projects, fn {_id, pool} -> pool.status == :running end)
+    any_running? = Enum.any?(state.projects, fn {_id, pool} -> pool.status == :running or pool.oracle_status == :running end)
 
     if any_running? do
       schedule_dispatch()
@@ -391,6 +487,58 @@ defmodule Apothecary.Dispatcher do
     end
   end
 
+  defp scale_oracle_agents(state, project_id) do
+    pool = state.projects[project_id]
+    if is_nil(pool) or pool.oracle_status == :paused, do: state, else: do_scale_oracles(state, project_id, pool)
+  end
+
+  defp do_scale_oracles(state, project_id, pool) do
+    current = length(pool.oracle_pids)
+    target = pool.oracle_target_count
+
+    cond do
+      current < target ->
+        {new_pids, next_id} = start_n_brewers(state.next_brewer_id, target - current)
+
+        new_mappings = Map.new(new_pids, fn pid -> {pid, project_id} end)
+
+        pool = %{
+          pool
+          | oracle_pids: pool.oracle_pids ++ new_pids,
+            oracle_idle: pool.oracle_idle ++ new_pids
+        }
+
+        %{
+          state
+          | next_brewer_id: next_id,
+            brewer_projects: Map.merge(state.brewer_projects, new_mappings),
+            projects: Map.put(state.projects, project_id, pool)
+        }
+
+      current > target ->
+        {to_stop, to_keep} = Enum.split(pool.oracle_pids, current - target)
+        Enum.each(to_stop, &Apothecary.BrewerSupervisor.stop_brewer/1)
+
+        pool = %{
+          pool
+          | oracle_pids: to_keep,
+            oracle_idle: pool.oracle_idle -- to_stop,
+            agents: Map.drop(pool.agents, to_stop)
+        }
+
+        brewer_projects = Map.drop(state.brewer_projects, to_stop)
+
+        %{
+          state
+          | brewer_projects: brewer_projects,
+            projects: Map.put(state.projects, project_id, pool)
+        }
+
+      true ->
+        state
+    end
+  end
+
   defp start_n_brewers(start_id, count) do
     pids =
       for id <- start_id..(start_id + count - 1) do
@@ -413,7 +561,10 @@ defmodule Apothecary.Dispatcher do
 
   defp try_dispatch(state) do
     Enum.reduce(state.projects, state, fn {project_id, pool}, acc ->
-      if pool.status == :running and pool.idle_agents != [] do
+      has_idle_brewers = pool.status == :running and pool.idle_agents != []
+      has_idle_oracles = pool.oracle_status == :running and pool.oracle_idle != []
+
+      if has_idle_brewers or has_idle_oracles do
         try_dispatch_project(acc, project_id)
       else
         acc
@@ -435,7 +586,8 @@ defmodule Apothecary.Dispatcher do
 
   defp dispatch_first_available(_worktrees, state, project_id) do
     pool = state.projects[project_id]
-    if is_nil(pool) or pool.idle_agents == [], do: state, else: do_dispatch(state, project_id)
+    has_idle = not is_nil(pool) and (pool.idle_agents != [] or pool.oracle_idle != [])
+    if has_idle, do: do_dispatch(state, project_id), else: state
   end
 
   defp do_dispatch(state, project_id) do
@@ -446,9 +598,28 @@ defmodule Apothecary.Dispatcher do
         state
 
       [worktree | rest] ->
-        [brewer_pid | _] = pool.idle_agents
-        brewer_state = pool.agents[brewer_pid]
-        brewer_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(brewer_pid)
+        # Route questions to oracle agents, tasks to brewer agents
+        {agent_pid, is_oracle_agent} =
+          cond do
+            worktree.kind == "question" and pool.oracle_idle != [] ->
+              {hd(pool.oracle_idle), true}
+
+            worktree.kind != "question" and pool.idle_agents != [] ->
+              {hd(pool.idle_agents), false}
+
+            # Fallback: questions can use regular brewers too
+            worktree.kind == "question" and pool.idle_agents != [] ->
+              {hd(pool.idle_agents), false}
+
+            true ->
+              {nil, false}
+          end
+
+        if is_nil(agent_pid) do
+          dispatch_remaining(rest, state, project_id)
+        else
+        brewer_state = pool.agents[agent_pid]
+        brewer_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(agent_pid)
 
         # Atomically claim the worktree
         case Apothecary.Worktrees.claim_worktree(worktree.id, brewer_id) do
@@ -457,12 +628,16 @@ defmodule Apothecary.Dispatcher do
 
             if worktree.kind == "question" do
               # Questions run read-only against the project directory — no worktree needed
-              [_ | rest_idle] = pool.idle_agents
-              pool = %{pool | idle_agents: rest_idle}
+              pool =
+                if is_oracle_agent do
+                  %{pool | oracle_idle: List.delete(pool.oracle_idle, agent_pid)}
+                else
+                  %{pool | idle_agents: List.delete(pool.idle_agents, agent_pid)}
+                end
               state = put_pool(state, project_id, pool)
 
               Apothecary.Brewer.assign_worktree(
-                brewer_pid,
+                agent_pid,
                 claimed,
                 project_dir,
                 nil,
@@ -484,7 +659,7 @@ defmodule Apothecary.Dispatcher do
                   state = put_pool(state, project_id, pool)
 
                   Apothecary.Brewer.assign_worktree(
-                    brewer_pid,
+                    agent_pid,
                     claimed,
                     path,
                     branch,
@@ -506,7 +681,7 @@ defmodule Apothecary.Dispatcher do
           {:error, _} ->
             dispatch_remaining(rest, state, project_id)
         end
-    end
+    end end
   end
 
   defp dispatch_remaining([], state, _project_id), do: state
@@ -585,7 +760,10 @@ defmodule Apothecary.Dispatcher do
     total_idle =
       Enum.reduce(state.projects, 0, fn {_id, pool}, acc -> acc + length(pool.idle_agents) end)
 
-    any_running? = Enum.any?(state.projects, fn {_id, pool} -> pool.status == :running end)
+    any_running? = Enum.any?(state.projects, fn {_id, pool} -> pool.status == :running or pool.oracle_status == :running end)
+
+    total_oracle_target =
+      Enum.reduce(state.projects, 0, fn {_id, pool}, acc -> acc + pool.oracle_target_count end)
 
     %{
       # Aggregate status for backward compat
@@ -594,6 +772,7 @@ defmodule Apothecary.Dispatcher do
       active_count: total_active,
       idle_count: total_idle,
       agents: all_agents,
+      oracle_target_count: total_oracle_target,
       # Per-project breakdown
       projects:
         Map.new(state.projects, fn {project_id, pool} ->
@@ -615,7 +794,11 @@ defmodule Apothecary.Dispatcher do
       target_count: pool.target_count,
       active_count: length(pool.agent_pids),
       idle_count: length(pool.idle_agents),
-      agents: pool.agents
+      agents: pool.agents,
+      oracle_status: pool.oracle_status,
+      oracle_target_count: pool.oracle_target_count,
+      oracle_active_count: length(pool.oracle_pids),
+      oracle_idle_count: length(pool.oracle_idle)
     }
   end
 
