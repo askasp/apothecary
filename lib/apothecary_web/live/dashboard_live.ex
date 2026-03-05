@@ -826,6 +826,14 @@ defmodule ApothecaryWeb.DashboardLive do
     {:noreply, push_patch(socket, to: project_path(socket))}
   end
 
+  @impl true
+  def handle_event("add-task-to-worktree", %{"id" => wt_id}, socket) do
+    {:noreply,
+     socket
+     |> assign(:adding_task_to, wt_id)
+     |> push_event("focus-element", %{selector: "#task-input-#{wt_id}"})}
+  end
+
   # Inline task creation
   @impl true
   def handle_event("add-task-inline", %{"title" => title, "worktree_id" => wt_id}, socket) do
@@ -2112,8 +2120,18 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("r", socket) do
-    Worktrees.force_refresh()
-    socket
+    if socket.assigns.selected_task_id do
+      case Worktrees.unclaim(socket.assigns.selected_task_id) do
+        {:ok, _} ->
+          put_flash(socket, :info, "Task requeued")
+
+        {:error, reason} ->
+          put_flash(socket, :error, "Failed to requeue: #{inspect(reason)}")
+      end
+    else
+      Worktrees.force_refresh()
+      socket
+    end
   end
 
   defp handle_hotkey("s", socket) do
@@ -2302,13 +2320,6 @@ defmodule ApothecaryWeb.DashboardLive do
       socket.assigns.active_tab == :oracle ->
         # Cycle focus to oracle input
         push_event(socket, "focus-oracle-input", %{})
-
-      socket.assigns.current_project ->
-        socket
-        |> assign(:show_project_switcher, true)
-        |> assign(:switcher_selected, 0)
-        |> assign(:switcher_query, "")
-        |> push_event("focus-element", %{selector: "#project-switcher-search"})
 
       true ->
         socket
