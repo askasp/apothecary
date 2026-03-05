@@ -261,10 +261,12 @@ defmodule Apothecary.DevServer do
         server = state.servers[wt_id]
 
         if server do
+          error_msg = diagnose_error(code, server.output, server.base_port)
+
           server = %{
             server
             | status: :error,
-              error: "Process exited with code #{code}",
+              error: error_msg,
               port: nil
           }
 
@@ -496,6 +498,34 @@ defmodule Apothecary.DevServer do
 
   defp release_port_mapping(state, port) do
     %{state | port_to_wt: Map.delete(state.port_to_wt, port)}
+  end
+
+  # --- Private: Error Diagnosis ---
+
+  defp diagnose_error(code, output, base_port) do
+    output_text = Enum.join(output, "\n")
+
+    cond do
+      port_conflict?(output_text) ->
+        "Port conflict (port #{base_port} already in use). Exit code #{code}"
+
+      String.contains?(output_text, "ENOENT") ->
+        "Command not found. Exit code #{code}"
+
+      String.contains?(output_text, "permission denied") ->
+        "Permission denied. Exit code #{code}"
+
+      true ->
+        "Process exited with code #{code}"
+    end
+  end
+
+  defp port_conflict?(output) do
+    String.contains?(output, "EADDRINUSE") or
+      String.contains?(output, "address already in use") or
+      String.contains?(output, "port is already allocated") or
+      String.contains?(output, "Address already in use") or
+      String.contains?(output, "bind EADDRINUSE")
   end
 
   # --- Private: Helpers ---
