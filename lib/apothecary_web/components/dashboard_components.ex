@@ -1119,13 +1119,67 @@ defmodule ApothecaryWeb.DashboardComponents do
                 name="title"
                 id={"task-input-#{wt.id}"}
                 autofocus
-                phx-blur="task-input-blur"
                 placeholder="new task..."
                 class="task-inline-input"
                 phx-focus="input-focus"
+                phx-hook=".TaskInput"
               />
             </form>
           </div>
+          <script :type={Phoenix.LiveView.ColocatedHook} name=".TaskInput">
+            export default {
+              mounted() {
+                const pushImage = (file) => {
+                  const reader = new FileReader()
+                  reader.onload = (evt) => {
+                    const base64 = evt.target.result.split(",")[1]
+                    this.pushEvent("paste-image-task", {
+                      data: base64,
+                      mime: file.type || "image/png",
+                      name: file.name || "clipboard.png",
+                      worktree_id: this.el.closest("form").querySelector("[name=worktree_id]").value
+                    })
+                  }
+                  reader.readAsDataURL(file)
+                }
+
+                this.el.addEventListener("paste", (e) => {
+                  const items = e.clipboardData && e.clipboardData.items
+                  if (!items) return
+                  for (let i = 0; i < items.length; i++) {
+                    if (items[i].type.indexOf("image") !== -1) {
+                      e.preventDefault()
+                      pushImage(items[i].getAsFile())
+                      return
+                    }
+                  }
+                })
+
+                this.el.addEventListener("dragover", (e) => {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = "copy"
+                })
+
+                this.el.addEventListener("drop", (e) => {
+                  e.preventDefault()
+                  const files = e.dataTransfer && e.dataTransfer.files
+                  if (!files) return
+                  for (let i = 0; i < files.length; i++) {
+                    if (files[i].type.indexOf("image") !== -1) {
+                      pushImage(files[i])
+                      return
+                    }
+                  }
+                })
+
+                this.handleEvent("task-image-pasted", ({ path }) => {
+                  const current = this.el.value
+                  this.el.value = current + (current ? " " : "") + path
+                  this.el.focus()
+                })
+              }
+            }
+          </script>
           <%!-- Connector line between entries (not after last) --%>
           <div :if={!last?} class="tree-char pl-1" style="font-size: var(--font-size-sm);">│</div>
         <% end %>
@@ -1322,7 +1376,10 @@ defmodule ApothecaryWeb.DashboardComponents do
             &mdash; review decisions
           </span>
         </summary>
-        <div class="px-3 pb-2" style="color: var(--fg); border-top: 1px solid color-mix(in srgb, var(--concocting) 20%, transparent);">
+        <div
+          class="px-3 pb-2"
+          style="color: var(--fg); border-top: 1px solid color-mix(in srgb, var(--concocting) 20%, transparent);"
+        >
           <div :for={task <- merge_fix_tasks} class="mt-2">
             <div :if={task.notes && task.notes != ""}>
               <pre
@@ -1385,7 +1442,8 @@ defmodule ApothecaryWeb.DashboardComponents do
                 phx-click="toggle-child-status"
                 phx-value-id={child.id}
                 class="cursor-pointer"
-                style={"color: #{if child.status in ["done", "closed"], do: "var(--accent)", else: "var(--concocting)"};"}>
+                style={"color: #{if child.status in ["done", "closed"], do: "var(--accent)", else: "var(--concocting)"};"}
+              >
                 {if child.status in ["done", "closed"], do: "✓", else: "◌"}
               </span>
               <span style={"color: #{if child.status in ["done", "closed"], do: "var(--dim)", else: "var(--text)"};"}>
