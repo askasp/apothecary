@@ -464,12 +464,16 @@ defmodule Apothecary.Dispatcher do
         }
 
       current > target ->
-        {to_stop, to_keep} = Enum.split(pool.agent_pids, current - target)
+        n_to_stop = current - target
+        # Prefer stopping idle agents first so busy agents keep working
+        idle_set = MapSet.new(pool.idle_agents)
+        {idle, busy} = Enum.split_with(pool.agent_pids, &MapSet.member?(idle_set, &1))
+        to_stop = Enum.take(idle, n_to_stop) ++ Enum.take(busy, n_to_stop - min(length(idle), n_to_stop))
         Enum.each(to_stop, &Apothecary.BrewerSupervisor.stop_brewer/1)
 
         pool = %{
           pool
-          | agent_pids: to_keep,
+          | agent_pids: pool.agent_pids -- to_stop,
             idle_agents: pool.idle_agents -- to_stop,
             agents: Map.drop(pool.agents, to_stop)
         }
@@ -516,12 +520,16 @@ defmodule Apothecary.Dispatcher do
         }
 
       current > target ->
-        {to_stop, to_keep} = Enum.split(pool.oracle_pids, current - target)
+        n_to_stop = current - target
+        # Prefer stopping idle oracles first so busy ones keep working
+        idle_set = MapSet.new(pool.oracle_idle)
+        {idle, busy} = Enum.split_with(pool.oracle_pids, &MapSet.member?(idle_set, &1))
+        to_stop = Enum.take(idle, n_to_stop) ++ Enum.take(busy, n_to_stop - min(length(idle), n_to_stop))
         Enum.each(to_stop, &Apothecary.BrewerSupervisor.stop_brewer/1)
 
         pool = %{
           pool
-          | oracle_pids: to_keep,
+          | oracle_pids: pool.oracle_pids -- to_stop,
             oracle_idle: pool.oracle_idle -- to_stop,
             agents: Map.drop(pool.agents, to_stop)
         }
