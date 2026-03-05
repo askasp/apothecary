@@ -29,7 +29,13 @@ let Hooks = {
   ...colocatedHooks,
   DashboardKeys: {
     mounted() {
-      this.el.focus()
+      // Don't steal focus from autofocused inputs (e.g. project path input on landing page)
+      const autofocused = this.el.querySelector("[autofocus]")
+      if (autofocused) {
+        autofocused.focus()
+      } else {
+        this.el.focus()
+      }
 
       // Theme: apply from localStorage on mount, sync changes
       this._applyTheme = (theme) => {

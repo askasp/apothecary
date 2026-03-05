@@ -1604,7 +1604,8 @@ defmodule ApothecaryWeb.DashboardLive do
      |> push_event("set-input-value", %{
        selector: ~s(input[name="path"]),
        value: path_with_slash
-     })}
+     })
+     |> push_event("focus-element", %{selector: "#project-path-input"})}
   end
 
   @impl true
@@ -2113,9 +2114,13 @@ defmodule ApothecaryWeb.DashboardLive do
   defp handle_hotkey("Enter", socket) do
     cond do
       is_nil(socket.assigns.current_project) ->
-        case Enum.at(socket.assigns.projects, socket.assigns.selected_card) do
-          nil -> socket
-          project -> push_navigate(socket, to: ~p"/projects/#{project.id}")
+        if socket.assigns.selected_card >= 0 do
+          case Enum.at(socket.assigns.projects, socket.assigns.selected_card) do
+            nil -> socket
+            project -> push_navigate(socket, to: ~p"/projects/#{project.id}")
+          end
+        else
+          socket
         end
 
       socket.assigns.selected_card == -1 ->
@@ -2131,9 +2136,13 @@ defmodule ApothecaryWeb.DashboardLive do
 
   defp handle_hotkey("l", socket) do
     if is_nil(socket.assigns.current_project) do
-      case Enum.at(socket.assigns.projects, socket.assigns.selected_card) do
-        nil -> socket
-        project -> push_navigate(socket, to: ~p"/projects/#{project.id}")
+      if socket.assigns.selected_card >= 0 do
+        case Enum.at(socket.assigns.projects, socket.assigns.selected_card) do
+          nil -> socket
+          project -> push_navigate(socket, to: ~p"/projects/#{project.id}")
+        end
+      else
+        socket
       end
     else
       # Move focus to detail pane (if a task is selected)

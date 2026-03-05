@@ -229,6 +229,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             name="path"
             id="project-path-input"
             value="~/"
+            autofocus
             autocomplete="off"
             phx-debounce="150"
             phx-focus="input-focus"
