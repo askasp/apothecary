@@ -60,6 +60,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:selected_task, nil)
       |> assign(:children, [])
       |> assign(:editing_field, nil)
+      |> assign(:editing_child_id, nil)
       |> assign(:working_agent, nil)
       |> assign(:agent_output, [])
       |> assign(:diff_view, nil)
@@ -1222,6 +1223,47 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("edit-child", %{"id" => id}, socket) do
+    {:noreply, assign(socket, :editing_child_id, id)}
+  end
+
+  @impl true
+  def handle_event("cancel-child-edit", _params, socket) do
+    {:noreply, assign(socket, :editing_child_id, nil)}
+  end
+
+  @impl true
+  def handle_event("save-child-edit", %{"task_id" => id, "title" => title}, socket) do
+    title = String.trim(title)
+
+    if title != "" do
+      Worktrees.update_task(id, %{title: title})
+    end
+
+    {:noreply, assign(socket, :editing_child_id, nil)}
+  end
+
+  @impl true
+  def handle_event("delete-child", %{"id" => id}, socket) do
+    Worktrees.delete_task(id)
+    {:noreply, assign(socket, :editing_child_id, nil)}
+  end
+
+  @impl true
+  def handle_event("toggle-child-status", %{"id" => id}, socket) do
+    case Worktrees.get_task(id) do
+      {:ok, task} ->
+        new_status = if task.status in ["done", "closed"], do: "open", else: "done"
+        Worktrees.update_task(id, %{status: new_status})
+
+      _ ->
+        :ok
+    end
+
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_event("add-dep", %{"dep_id" => dep_id}, socket) do
     dep_id = String.trim(dep_id)
 
@@ -1917,6 +1959,9 @@ defmodule ApothecaryWeb.DashboardLive do
 
       socket.assigns.editing_field ->
         assign(socket, :editing_field, nil)
+
+      socket.assigns.editing_child_id ->
+        assign(socket, :editing_child_id, nil)
 
       socket.assigns.show_preview ->
         socket |> assign(:show_preview, false) |> assign(:preview_port, nil)
@@ -2810,6 +2855,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:selected_task, nil)
     |> assign(:children, [])
     |> assign(:editing_field, nil)
+    |> assign(:editing_child_id, nil)
     |> assign(:working_agent, nil)
     |> assign(:agent_output, [])
     |> assign(:show_preview, false)
@@ -2846,6 +2892,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:selected_task, task)
     |> assign(:children, children)
     |> assign(:editing_field, nil)
+    |> assign(:editing_child_id, nil)
     |> assign(:working_agent, nil)
     |> assign(:agent_output, [])
     |> assign(:show_preview, false)
@@ -3459,6 +3506,7 @@ defmodule ApothecaryWeb.DashboardLive do
                         task={@selected_task}
                         children={@children}
                         editing_field={@editing_field}
+                        editing_child_id={@editing_child_id}
                         working_agent={@working_agent}
                         agent_output={@agent_output}
                         dev_server={@dev_servers[@selected_task_id]}

@@ -183,7 +183,10 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
         <%!-- Tab navigation --%>
         <%= if @current_project do %>
-          <div class="flex items-center gap-3" style="border-left: 1px solid var(--border); padding-left: 12px;">
+          <div
+            class="flex items-center gap-3"
+            style="border-left: 1px solid var(--border); padding-left: 12px;"
+          >
             <button
               :for={{tab, label} <- [workbench: "workbench", oracle: "oracle", recipes: "recurring"]}
               phx-click="switch-tab"
@@ -529,8 +532,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           <span style="color: var(--dim);">preview</span>
           &nbsp;
           <span style="color: var(--concocting);">
-            <.braille_spinner id="preview-start-spinner" offset={0} />
-            starting...
+            <.braille_spinner id="preview-start-spinner" offset={0} /> starting...
           </span>
         <% @dev_server && @dev_server.status == :error -> %>
           <span style="color: var(--dim);">preview</span>
@@ -1169,6 +1171,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :has_preview_config, :boolean, default: false
   attr :pending_action, :any, default: nil
   attr :loading_action, :atom, default: nil
+  attr :editing_child_id, :string, default: nil
 
   def worktree_detail(assigns) do
     pr_url = Map.get(assigns.task, :pr_url)
@@ -1196,266 +1199,324 @@ defmodule ApothecaryWeb.DashboardComponents do
 
     ~H"""
     <div class="px-4 py-4 scroll-main overflow-y-auto flex-1">
-        <%!-- 1. Title + Status --%>
-        <div class="mb-5">
-          <div class="flex items-start justify-between">
-            <div class="flex-1 min-w-0">
-              <%= if @editing_field == :title do %>
-                <.form for={%{}} phx-submit="save-edit" class="mb-2">
-                  <input type="hidden" name="field" value="title" />
-                  <input
-                    type="text"
-                    name="value"
-                    value={@task.title}
-                    autofocus
-                    phx-focus="input-focus"
-                    phx-blur="input-blur"
-                    class="moonlight-input w-full"
-                    style="font-size: var(--font-size-title); font-weight: 600;"
-                  />
-                  <div class="flex items-center gap-2 mt-1">
-                    <button type="submit" class="action-pill">save</button>
-                    <button type="button" phx-click="cancel-edit" class="action-text">cancel</button>
-                  </div>
-                </.form>
-              <% else %>
-                <div
-                  phx-click="start-edit"
-                  phx-value-field="title"
-                  class="cursor-pointer"
-                  style="font-size: var(--font-size-title); font-weight: 600; color: var(--text);"
-                >
-                  {@task.title}
+      <%!-- 1. Title + Status --%>
+      <div class="mb-5">
+        <div class="flex items-start justify-between">
+          <div class="flex-1 min-w-0">
+            <%= if @editing_field == :title do %>
+              <.form for={%{}} phx-submit="save-edit" class="mb-2">
+                <input type="hidden" name="field" value="title" />
+                <input
+                  type="text"
+                  name="value"
+                  value={@task.title}
+                  autofocus
+                  phx-focus="input-focus"
+                  phx-blur="input-blur"
+                  class="moonlight-input w-full"
+                  style="font-size: var(--font-size-title); font-weight: 600;"
+                />
+                <div class="flex items-center gap-2 mt-1">
+                  <button type="submit" class="action-pill">save</button>
+                  <button type="button" phx-click="cancel-edit" class="action-text">cancel</button>
                 </div>
-              <% end %>
-              <div
-                class="flex items-center gap-2 mt-1"
-                style="font-size: var(--font-size-xs); color: var(--muted);"
-              >
-                <span>{@task.id}</span>
-                <span :if={@brewer_label} style="color: var(--dim);">&middot; {@brewer_label}</span>
-                <span
-                  :if={@working_agent && !@working_agent.sandboxed}
-                  style="color: var(--error); font-weight: 500;"
-                >
-                  &middot; unsandboxed
-                </span>
-                <span :if={@time_ago}>&middot; {@time_ago}</span>
-              </div>
-            </div>
-            <button
-              phx-click="deselect-task"
-              class="cursor-pointer flex-shrink-0"
-              style="color: var(--muted); font-size: var(--font-size-xs);"
-            >
-              esc
-            </button>
-          </div>
-        </div>
-
-        <%!-- 2. Actions --%>
-        <div class="flex items-center gap-3 mb-5" style="font-size: var(--font-size-sm);">
-          <%= if @loading? do %>
-            <div class="flex items-center gap-2">
-              <.spinner class="w-3 h-3" />
-              <span style="color: var(--dim);">{loading_label(@loading_action)}</span>
-            </div>
-          <% else %>
-            <%= if @pending_action do %>
-              <span style="color: var(--concocting);">
-                {cond do
-                  match?({:local_merge, _, _}, @pending_action) -> "merge locally (no PR)?"
-                  match?({:direct_merge, _, _}, @pending_action) -> "merge directly?"
-                  true -> "merge this PR?"
-                end}
-              </span>
-              <button phx-click="confirm-merge" class="action-pill">confirm</button>
-              <button phx-click="cancel-merge" class="action-text">cancel</button>
+              </.form>
             <% else %>
-              <%= if @task.status in ["brew_done", "done", "closed"] and is_nil(@pr_url) do %>
-                <span class="action-pill" phx-click="promote-to-assaying">c create-pr</span>
-                <span class="action-pill" phx-click="local-merge">g git-merge</span>
-              <% end %>
-              <span :if={@pr_url} class="action-pill" phx-click="merge-pr">m merge</span>
-              <span
-                :if={@task.status not in ["done", "closed", "merged"]}
-                class="action-outlined"
-                phx-click="requeue-task"
+              <div
+                phx-click="start-edit"
+                phx-value-field="title"
+                class="cursor-pointer"
+                style="font-size: var(--font-size-title); font-weight: 600; color: var(--text);"
               >
-                r requeue
-              </span>
-              <span
-                :if={@task.status not in ["done", "closed", "merged"]}
-                class="action-outlined"
-                phx-click="close-task"
-              >
-                x close
-              </span>
+                {@task.title}
+              </div>
             <% end %>
-          <% end %>
-        </div>
-
-        <%!-- Merge conflict auto-fix warning --%>
-        <% merge_fix_tasks =
-          Enum.filter(@children, fn c ->
-            String.contains?(c.title || "", "merge conflict")
-          end)
-        %>
-        <div
-          :if={merge_fix_tasks != []}
-          class="mb-4 px-3 py-2 rounded"
-          style="background: color-mix(in srgb, var(--concocting) 12%, transparent); border: 1px solid color-mix(in srgb, var(--concocting) 30%, transparent); font-size: var(--font-size-sm);"
-        >
-          <span style="color: var(--concocting); font-weight: 600;">&#x26A0; merge conflicts auto-fixed</span>
-          <span style="color: var(--dim);">
-            &mdash; review the conflict resolution before merging
-          </span>
-        </div>
-
-        <%!-- 3. TASKS --%>
-        <div class="mb-5">
-          <div class="section-header mb-2">TASKS</div>
-          <%= if @children == [] do %>
-            <div style="color: var(--muted); font-size: var(--font-size-sm);">none</div>
-          <% else %>
             <div
-              :for={child <- @children}
-              class="flex items-center gap-2 py-1"
-              style="font-size: var(--font-size-sm);"
+              class="flex items-center gap-2 mt-1"
+              style="font-size: var(--font-size-xs); color: var(--muted);"
             >
-              <span style={"color: #{if child.status in ["done", "closed"], do: "var(--accent)", else: "var(--concocting)"};"}>
+              <span>{@task.id}</span>
+              <span :if={@brewer_label} style="color: var(--dim);">&middot; {@brewer_label}</span>
+              <span
+                :if={@working_agent && !@working_agent.sandboxed}
+                style="color: var(--error); font-weight: 500;"
+              >
+                &middot; unsandboxed
+              </span>
+              <span :if={@time_ago}>&middot; {@time_ago}</span>
+            </div>
+          </div>
+          <button
+            phx-click="deselect-task"
+            class="cursor-pointer flex-shrink-0"
+            style="color: var(--muted); font-size: var(--font-size-xs);"
+          >
+            esc
+          </button>
+        </div>
+      </div>
+
+      <%!-- 2. Actions --%>
+      <div class="flex items-center gap-3 mb-5" style="font-size: var(--font-size-sm);">
+        <%= if @loading? do %>
+          <div class="flex items-center gap-2">
+            <.spinner class="w-3 h-3" />
+            <span style="color: var(--dim);">{loading_label(@loading_action)}</span>
+          </div>
+        <% else %>
+          <%= if @pending_action do %>
+            <span style="color: var(--concocting);">
+              {cond do
+                match?({:local_merge, _, _}, @pending_action) -> "merge locally (no PR)?"
+                match?({:direct_merge, _, _}, @pending_action) -> "merge directly?"
+                true -> "merge this PR?"
+              end}
+            </span>
+            <button phx-click="confirm-merge" class="action-pill">confirm</button>
+            <button phx-click="cancel-merge" class="action-text">cancel</button>
+          <% else %>
+            <%= if @task.status in ["brew_done", "done", "closed"] and is_nil(@pr_url) do %>
+              <span class="action-pill" phx-click="promote-to-assaying">c create-pr</span>
+              <span class="action-pill" phx-click="local-merge">g git-merge</span>
+            <% end %>
+            <span :if={@pr_url} class="action-pill" phx-click="merge-pr">m merge</span>
+            <span
+              :if={@task.status not in ["done", "closed", "merged"]}
+              class="action-outlined"
+              phx-click="requeue-task"
+            >
+              r requeue
+            </span>
+            <span
+              :if={@task.status not in ["done", "closed", "merged"]}
+              class="action-outlined"
+              phx-click="close-task"
+            >
+              x close
+            </span>
+          <% end %>
+        <% end %>
+      </div>
+
+      <%!-- Merge conflict auto-fix warning --%>
+      <% merge_fix_tasks =
+        Enum.filter(@children, fn c ->
+          String.contains?(c.title || "", "merge conflict")
+        end) %>
+      <div
+        :if={merge_fix_tasks != []}
+        class="mb-4 px-3 py-2 rounded"
+        style="background: color-mix(in srgb, var(--concocting) 12%, transparent); border: 1px solid color-mix(in srgb, var(--concocting) 30%, transparent); font-size: var(--font-size-sm);"
+      >
+        <span style="color: var(--concocting); font-weight: 600;">
+          &#x26A0; merge conflicts auto-fixed
+        </span>
+        <span style="color: var(--dim);">
+          &mdash; review the conflict resolution before merging
+        </span>
+      </div>
+
+      <%!-- 3. TASKS --%>
+      <div class="mb-5">
+        <div class="section-header mb-2">TASKS</div>
+        <%= if @children == [] do %>
+          <div style="color: var(--muted); font-size: var(--font-size-sm);">none</div>
+        <% else %>
+          <div
+            :for={child <- @children}
+            class="flex items-center gap-2 py-1 group/child"
+            style="font-size: var(--font-size-sm);"
+          >
+            <%= if @editing_child_id == child.id do %>
+              <.form
+                for={%{}}
+                phx-submit="save-child-edit"
+                class="flex items-center gap-2 flex-1"
+              >
+                <input type="hidden" name="task_id" value={child.id} />
+                <input
+                  type="text"
+                  name="title"
+                  value={child.title}
+                  autofocus
+                  phx-focus="input-focus"
+                  phx-blur="input-blur"
+                  class="moonlight-input flex-1"
+                  style="font-size: var(--font-size-sm);"
+                />
+                <button type="submit" class="action-pill" style="font-size: var(--font-size-xxs);">
+                  save
+                </button>
+                <button
+                  type="button"
+                  phx-click="cancel-child-edit"
+                  class="action-text"
+                  style="font-size: var(--font-size-xxs);"
+                >
+                  cancel
+                </button>
+              </.form>
+            <% else %>
+              <span
+                phx-click="toggle-child-status"
+                phx-value-id={child.id}
+                class="cursor-pointer"
+                style={"color: #{if child.status in ["done", "closed"], do: "var(--accent)", else: "var(--concocting)"};"}>
                 {if child.status in ["done", "closed"], do: "✓", else: "◌"}
               </span>
               <span style={"color: #{if child.status in ["done", "closed"], do: "var(--dim)", else: "var(--text)"};"}>
                 {child.title}
               </span>
-              <span class="ml-auto" style="color: var(--muted); font-size: var(--font-size-xxs);">
-                {child.id}
+              <span
+                class="ml-auto flex items-center gap-2"
+                style="font-size: var(--font-size-xxs);"
+              >
+                <span
+                  phx-click="edit-child"
+                  phx-value-id={child.id}
+                  class="cursor-pointer opacity-0 group-hover/child:opacity-100 transition-opacity"
+                  style="color: var(--muted);"
+                >
+                  edit
+                </span>
+                <span
+                  phx-click="delete-child"
+                  phx-value-id={child.id}
+                  class="cursor-pointer opacity-0 group-hover/child:opacity-100 transition-opacity"
+                  style="color: var(--error);"
+                  data-confirm="Delete this task?"
+                >
+                  del
+                </span>
+                <span style="color: var(--muted);">
+                  {child.id}
+                </span>
               </span>
-            </div>
-          <% end %>
-          <div class="mt-1">
-            <span class="action-text" style="color: var(--accent); font-size: var(--font-size-sm);">
-              + add task
-            </span>
-          </div>
-        </div>
-
-        <%!-- 4. GIT --%>
-        <div :if={@last_commit || @git_changes} class="mb-5">
-          <div class="section-header mb-2">GIT</div>
-          <div :if={@last_commit} style="font-size: var(--font-size-sm);" class="mb-2">
-            <span style="color: var(--text); font-weight: 600;">
-              {String.slice(@last_commit.hash || "", 0..6)}
-            </span>
-            <span style="color: var(--dim);">&nbsp;{@last_commit.message}</span>
-          </div>
-          <div :if={@git_changes} style="font-size: var(--font-size-xs);">
-            <div :for={file <- @git_changes.files || []} class="flex items-center gap-2 py-0.5">
-              <span style="color: var(--muted);">{file.path}</span>
-              <span :if={file.additions > 0} style="color: var(--accent); font-weight: 600;">
-                +{file.additions}
-              </span>
-              <span :if={file.deletions > 0} style="color: var(--error); font-weight: 600;">
-                -{file.deletions}
-              </span>
-            </div>
-            <% file_count = length(@git_changes.files || []) %>
-            <% total_add = Enum.sum(Enum.map(@git_changes.files || [], & &1.additions)) %>
-            <% total_del = Enum.sum(Enum.map(@git_changes.files || [], & &1.deletions)) %>
-            <div class="mt-1" style="color: var(--muted); font-size: var(--font-size-xs);">
-              {file_count} {if file_count == 1, do: "file", else: "files"} &middot; +{total_add} -{total_del}
-            </div>
-          </div>
-          <div class="mt-2">
-            <span class="action-text" phx-click="view-diff" phx-value-id={@task.id}>d view diff</span>
-          </div>
-        </div>
-
-        <%!-- 5. PREVIEW --%>
-        <.preview_controls
-          dev_server={@dev_server}
-          has_config={@has_preview_config}
-          target_id={@task.id}
-          inline={false}
-        />
-
-        <%!-- 6. OUTPUT --%>
-        <div :if={@agent_output != []} class="mb-5">
-          <div class="section-header mb-2">
-            OUTPUT &middot; {length(@agent_output)} lines
-          </div>
-          <.agent_output_panel output={@agent_output} />
-        </div>
-
-        <%!-- 7. PR link --%>
-        <div :if={@pr_url} class="mb-5">
-          <div class="section-header mb-2">PULL REQUEST</div>
-          <a
-            href={@pr_url}
-            target="_blank"
-            style="color: var(--accent); font-size: var(--font-size-sm); text-decoration: none;"
-          >
-            {@pr_url}
-          </a>
-        </div>
-
-        <%!-- 8. Description --%>
-        <div :if={@task.description && @task.description != ""} class="mb-5">
-          <div class="section-header mb-2">DESCRIPTION</div>
-          <%= if @editing_field == :description do %>
-            <.form for={%{}} phx-submit="save-edit">
-              <input type="hidden" name="field" value="description" />
-              <textarea
-                name="value"
-                rows="4"
-                autofocus
-                phx-focus="input-focus"
-                phx-blur="input-blur"
-                class="moonlight-input w-full"
-              >{@task.description}</textarea>
-              <div class="flex items-center gap-2 mt-1">
-                <button type="submit" class="action-pill">save</button>
-                <button type="button" phx-click="cancel-edit" class="action-text">cancel</button>
-              </div>
-            </.form>
-          <% else %>
-            <div
-              phx-click="start-edit"
-              phx-value-field="description"
-              class="cursor-pointer"
-              style="color: var(--dim); font-size: var(--font-size-sm); white-space: pre-wrap;"
-            >
-              {@task.description}
-            </div>
-          <% end %>
-        </div>
-
-        <%!-- Notes --%>
-        <div :if={@task.notes && @task.notes != ""} class="mb-5">
-          <div class="section-header mb-2">NOTES</div>
-          <div
-            id="task-notes-content"
-            style="color: var(--dim); font-size: var(--font-size-xs); white-space: pre-wrap;"
-          >
-            {@task.notes}
-          </div>
-          <.copy_button target="#task-notes-content" />
-        </div>
-
-        <%!-- 9. MCP SERVERS --%>
-        <div class="mb-5">
-          <div class="section-header mb-2">MCP SERVERS</div>
-          <div style="font-size: var(--font-size-sm);">
-            <%= if @task.mcp_servers && map_size(@task.mcp_servers) > 0 do %>
-              <span style="color: var(--dim);">{map_size(@task.mcp_servers)} configured</span>
-            <% else %>
-              <span style="color: var(--dim);">inherited from project</span>
             <% end %>
-            <span style="color: var(--accent); font-weight: 600;">&nbsp;+ add</span>
           </div>
+        <% end %>
+        <div class="mt-1">
+          <span class="action-text" style="color: var(--accent); font-size: var(--font-size-sm);">
+            + add task
+          </span>
         </div>
       </div>
+
+      <%!-- 4. GIT --%>
+      <div :if={@last_commit || @git_changes} class="mb-5">
+        <div class="section-header mb-2">GIT</div>
+        <div :if={@last_commit} style="font-size: var(--font-size-sm);" class="mb-2">
+          <span style="color: var(--text); font-weight: 600;">
+            {String.slice(@last_commit.hash || "", 0..6)}
+          </span>
+          <span style="color: var(--dim);">&nbsp;{@last_commit.message}</span>
+        </div>
+        <div :if={@git_changes} style="font-size: var(--font-size-xs);">
+          <div :for={file <- @git_changes.files || []} class="flex items-center gap-2 py-0.5">
+            <span style="color: var(--muted);">{file.path}</span>
+            <span :if={file.additions > 0} style="color: var(--accent); font-weight: 600;">
+              +{file.additions}
+            </span>
+            <span :if={file.deletions > 0} style="color: var(--error); font-weight: 600;">
+              -{file.deletions}
+            </span>
+          </div>
+          <% file_count = length(@git_changes.files || []) %>
+          <% total_add = Enum.sum(Enum.map(@git_changes.files || [], & &1.additions)) %>
+          <% total_del = Enum.sum(Enum.map(@git_changes.files || [], & &1.deletions)) %>
+          <div class="mt-1" style="color: var(--muted); font-size: var(--font-size-xs);">
+            {file_count} {if file_count == 1, do: "file", else: "files"} &middot; +{total_add} -{total_del}
+          </div>
+        </div>
+        <div class="mt-2">
+          <span class="action-text" phx-click="view-diff" phx-value-id={@task.id}>d view diff</span>
+        </div>
+      </div>
+
+      <%!-- 5. PREVIEW --%>
+      <.preview_controls
+        dev_server={@dev_server}
+        has_config={@has_preview_config}
+        target_id={@task.id}
+        inline={false}
+      />
+
+      <%!-- 6. OUTPUT --%>
+      <div :if={@agent_output != []} class="mb-5">
+        <div class="section-header mb-2">
+          OUTPUT &middot; {length(@agent_output)} lines
+        </div>
+        <.agent_output_panel output={@agent_output} />
+      </div>
+
+      <%!-- 7. PR link --%>
+      <div :if={@pr_url} class="mb-5">
+        <div class="section-header mb-2">PULL REQUEST</div>
+        <a
+          href={@pr_url}
+          target="_blank"
+          style="color: var(--accent); font-size: var(--font-size-sm); text-decoration: none;"
+        >
+          {@pr_url}
+        </a>
+      </div>
+
+      <%!-- 8. Description --%>
+      <div :if={@task.description && @task.description != ""} class="mb-5">
+        <div class="section-header mb-2">DESCRIPTION</div>
+        <%= if @editing_field == :description do %>
+          <.form for={%{}} phx-submit="save-edit">
+            <input type="hidden" name="field" value="description" />
+            <textarea
+              name="value"
+              rows="4"
+              autofocus
+              phx-focus="input-focus"
+              phx-blur="input-blur"
+              class="moonlight-input w-full"
+            >{@task.description}</textarea>
+            <div class="flex items-center gap-2 mt-1">
+              <button type="submit" class="action-pill">save</button>
+              <button type="button" phx-click="cancel-edit" class="action-text">cancel</button>
+            </div>
+          </.form>
+        <% else %>
+          <div
+            phx-click="start-edit"
+            phx-value-field="description"
+            class="cursor-pointer"
+            style="color: var(--dim); font-size: var(--font-size-sm); white-space: pre-wrap;"
+          >
+            {@task.description}
+          </div>
+        <% end %>
+      </div>
+
+      <%!-- Notes --%>
+      <div :if={@task.notes && @task.notes != ""} class="mb-5">
+        <div class="section-header mb-2">NOTES</div>
+        <div
+          id="task-notes-content"
+          style="color: var(--dim); font-size: var(--font-size-xs); white-space: pre-wrap;"
+        >
+          {@task.notes}
+        </div>
+        <.copy_button target="#task-notes-content" />
+      </div>
+
+      <%!-- 9. MCP SERVERS --%>
+      <div class="mb-5">
+        <div class="section-header mb-2">MCP SERVERS</div>
+        <div style="font-size: var(--font-size-sm);">
+          <%= if @task.mcp_servers && map_size(@task.mcp_servers) > 0 do %>
+            <span style="color: var(--dim);">{map_size(@task.mcp_servers)} configured</span>
+          <% else %>
+            <span style="color: var(--dim);">inherited from project</span>
+          <% end %>
+          <span style="color: var(--accent); font-weight: 600;">&nbsp;+ add</span>
+        </div>
+      </div>
+    </div>
     """
   end
 
@@ -1550,7 +1611,9 @@ defmodule ApothecaryWeb.DashboardComponents do
               <% :error -> %>
                 <span style="color: var(--error);">&#x25CF;</span>
               <% :starting -> %>
-                <span style="color: var(--concocting);"><.braille_spinner id="preview-bar-spin" offset={0} /></span>
+                <span style="color: var(--concocting);">
+                  <.braille_spinner id="preview-bar-spin" offset={0} />
+                </span>
               <% _ -> %>
                 <span style="color: var(--accent);">&#x25CF;</span>
             <% end %>
@@ -2233,6 +2296,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     sorted = Enum.sort_by(assigns.questions, fn q -> q.created_at || "" end, :desc)
 
     brewing? = assigns.oracle_status == :running
+
     any_oracle_working? =
       Enum.any?(sorted, fn q ->
         (q.notes == nil or q.notes == "") and MapSet.member?(active_wt_ids, q.id)
@@ -2290,10 +2354,18 @@ defmodule ApothecaryWeb.DashboardComponents do
           <%!-- +/- controls --%>
           <%= if @editing_setting == :oracles do %>
             <span class="inline-flex items-center gap-1 ml-1">
-              <button phx-click="decrement-oracles" class="cursor-pointer" style="color: var(--accent);">
+              <button
+                phx-click="decrement-oracles"
+                class="cursor-pointer"
+                style="color: var(--accent);"
+              >
                 &minus;
               </button>
-              <button phx-click="increment-oracles" class="cursor-pointer" style="color: var(--accent);">
+              <button
+                phx-click="increment-oracles"
+                class="cursor-pointer"
+                style="color: var(--accent);"
+              >
                 +
               </button>
               <button phx-click="confirm-setting" class="cursor-pointer" style="color: var(--muted);">
