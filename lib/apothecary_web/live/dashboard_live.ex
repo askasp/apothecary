@@ -988,7 +988,7 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
-  def handle_event("close", _params, socket) do
+  def handle_event("close-task", _params, socket) do
     case Worktrees.close(socket.assigns.selected_task_id) do
       {:ok, _} ->
         {:noreply, put_flash(socket, :info, "Task closed")}
