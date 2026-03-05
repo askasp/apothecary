@@ -492,56 +492,75 @@ defmodule Apothecary.Brewer do
       {:ok, _} ->
         Logger.info("Pushed branch for worktree #{worktree_id}")
 
-        cond do
-          existing_pr_url ->
-            # Revision cycle — PR already exists, just push and go back to pr_open
-            Apothecary.Worktrees.add_note(
-              worktree_id,
-              "Revision pushed to existing PR: #{existing_pr_url}"
-            )
+        # Check if there are remaining open tasks — if so, stay dispatchable
+        # instead of moving to brew_done (which would briefly flash in reviewing
+        # before being re-claimed by the dispatcher)
+        has_remaining_tasks =
+          Apothecary.Worktrees.list_tasks(worktree_id: worktree_id, status: "open")
+          |> Enum.any?()
 
-            Apothecary.Worktrees.update_worktree(worktree_id, %{
-              status: "pr_open",
-              assigned_brewer_id: nil
-            })
+        if has_remaining_tasks do
+          Apothecary.Worktrees.add_note(
+            worktree_id,
+            "Branch pushed with completed work. Remaining tasks will be picked up next."
+          )
 
-          Apothecary.Git.auto_pr?() ->
-            # Auto PR: create PR and set to pr_open
-            pr_result = create_pr_with_retry(worktree_id, worktree_path, project_dir)
+          Apothecary.Worktrees.update_worktree(worktree_id, %{
+            status: "open",
+            assigned_brewer_id: nil
+          })
+        else
+          cond do
+            existing_pr_url ->
+              # Revision cycle — PR already exists, just push and go back to pr_open
+              Apothecary.Worktrees.add_note(
+                worktree_id,
+                "Revision pushed to existing PR: #{existing_pr_url}"
+              )
 
-            case pr_result do
-              {:ok, _pr_url} ->
-                Apothecary.Worktrees.update_worktree(worktree_id, %{
-                  status: "pr_open",
-                  assigned_brewer_id: nil
-                })
+              Apothecary.Worktrees.update_worktree(worktree_id, %{
+                status: "pr_open",
+                assigned_brewer_id: nil
+              })
 
-              {:error, reason} ->
-                branch = agent.branch || "(unknown)"
+            Apothecary.Git.auto_pr?() ->
+              # Auto PR: create PR and set to pr_open
+              pr_result = create_pr_with_retry(worktree_id, worktree_path, project_dir)
 
-                Apothecary.Worktrees.add_note(
-                  worktree_id,
-                  "PR creation failed: #{inspect(reason)}. " <>
-                    "Branch '#{branch}' was pushed — create PR manually from dashboard."
-                )
+              case pr_result do
+                {:ok, _pr_url} ->
+                  Apothecary.Worktrees.update_worktree(worktree_id, %{
+                    status: "pr_open",
+                    assigned_brewer_id: nil
+                  })
 
-                Apothecary.Worktrees.update_worktree(worktree_id, %{
-                  status: "brew_done",
-                  assigned_brewer_id: nil
-                })
-            end
+                {:error, reason} ->
+                  branch = agent.branch || "(unknown)"
 
-          true ->
-            # Manual: branch pushed, waiting for user to create PR from dashboard
-            Apothecary.Worktrees.add_note(
-              worktree_id,
-              "Branch pushed. Create PR from the dashboard when ready."
-            )
+                  Apothecary.Worktrees.add_note(
+                    worktree_id,
+                    "PR creation failed: #{inspect(reason)}. " <>
+                      "Branch '#{branch}' was pushed — create PR manually from dashboard."
+                  )
 
-            Apothecary.Worktrees.update_worktree(worktree_id, %{
-              status: "brew_done",
-              assigned_brewer_id: nil
-            })
+                  Apothecary.Worktrees.update_worktree(worktree_id, %{
+                    status: "brew_done",
+                    assigned_brewer_id: nil
+                  })
+              end
+
+            true ->
+              # Manual: branch pushed, waiting for user to create PR from dashboard
+              Apothecary.Worktrees.add_note(
+                worktree_id,
+                "Branch pushed. Create PR from the dashboard when ready."
+              )
+
+              Apothecary.Worktrees.update_worktree(worktree_id, %{
+                status: "brew_done",
+                assigned_brewer_id: nil
+              })
+          end
         end
 
       {:error, reason} ->
