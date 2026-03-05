@@ -72,9 +72,13 @@ let Hooks = {
           }
         }
 
+        // Allow Ctrl+N/P through when file autocomplete dropdown is visible
         if (e.metaKey || e.ctrlKey) {
-          e.stopPropagation()
-          return
+          const fileDropdownVisible = document.querySelector("#file-autocomplete-dropdown:not(.hidden)")
+          if (!(fileDropdownVisible && e.ctrlKey && (e.key === "n" || e.key === "p"))) {
+            e.stopPropagation()
+            return
+          }
         }
         const tag = e.target.tagName
         const isInput = tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable
@@ -83,7 +87,10 @@ let Hooks = {
           e.target.blur()
           this.el.focus()
         } else if (isInput && e.key !== "Enter" && e.key !== "Tab") {
-          e.stopPropagation()
+          // Don't block Ctrl+N/P when file autocomplete is active
+          const fileDropdownVisible = e.ctrlKey && (e.key === "n" || e.key === "p") &&
+            document.querySelector("#file-autocomplete-dropdown:not(.hidden)")
+          if (!fileDropdownVisible) e.stopPropagation()
         }
       }, true)
 
@@ -152,19 +159,19 @@ let Hooks = {
         }
 
         if (this.mentionActive && this.results.length > 0) {
-          if (e.key === "ArrowDown") {
+          if (e.key === "ArrowDown" || e.key === "Tab" || (e.ctrlKey && e.key === "n")) {
             e.preventDefault()
             this.selectedIndex = (this.selectedIndex + 1) % this.results.length
             this.renderDropdown()
             return
           }
-          if (e.key === "ArrowUp") {
+          if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) {
             e.preventDefault()
             this.selectedIndex = (this.selectedIndex - 1 + this.results.length) % this.results.length
             this.renderDropdown()
             return
           }
-          if (e.key === "Tab" || e.key === "Enter") {
+          if (e.key === "Enter") {
             e.preventDefault()
             this.selectFile(this.results[this.selectedIndex])
             return
@@ -349,12 +356,19 @@ let Hooks = {
     }
   },
   ChatKeys: {
+    _isDropdownVisible() {
+      return document.querySelector("#file-autocomplete-dropdown:not(.hidden)") ||
+        document.querySelector(".chat-path-dropdown:not(:empty)")
+    },
     mounted() {
       this.el.focus()
       window.addEventListener("keydown", (e) => {
+        // Allow Ctrl+N/P through when file/path autocomplete dropdown is visible
         if (e.metaKey || e.ctrlKey) {
-          e.stopPropagation()
-          return
+          if (!(this._isDropdownVisible() && e.ctrlKey && (e.key === "n" || e.key === "p"))) {
+            e.stopPropagation()
+            return
+          }
         }
         const tag = e.target.tagName
         const isInput = tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable
@@ -362,7 +376,8 @@ let Hooks = {
           e.target.blur()
           this.el.focus()
         } else if (isInput && e.key !== "Enter" && e.key !== "Tab") {
-          e.stopPropagation()
+          const dropdownActive = e.ctrlKey && (e.key === "n" || e.key === "p") && this._isDropdownVisible()
+          if (!dropdownActive) e.stopPropagation()
         }
       }, true)
     },
@@ -431,9 +446,10 @@ let Hooks = {
         this.pathActive = dropdown && dropdown.children.length > 0
 
         if (this.pathActive) {
-          if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Tab") {
+          if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Tab" || (e.ctrlKey && (e.key === "n" || e.key === "p"))) {
             e.preventDefault()
-            this.pushEvent("path-key", { key: e.key })
+            const mappedKey = (e.ctrlKey && e.key === "n") ? "ArrowDown" : (e.ctrlKey && e.key === "p") ? "ArrowUp" : e.key
+            this.pushEvent("path-key", { key: mappedKey })
             return
           }
           if (e.key === "Escape") {
