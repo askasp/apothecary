@@ -458,10 +458,24 @@ defmodule ApothecaryWeb.DashboardLive do
   # Catch-all for async task results (e.g. Task.async replies) to prevent crashes
   @impl true
   def handle_info({:async_action_result, {:ok, message}}, socket) do
-    {:noreply,
-     socket
-     |> assign(:loading_action, nil)
-     |> put_flash(:info, message)}
+    was_merge = socket.assigns.loading_action in [:merging, :direct_merging, :local_merging]
+
+    socket =
+      socket
+      |> assign(:loading_action, nil)
+      |> put_flash(:info, message)
+
+    # Deselect worktree after merge so new input creates a fresh worktree
+    socket =
+      if was_merge do
+        socket
+        |> assign(:selected_task_id, nil)
+        |> assign(:selected_task, nil)
+      else
+        socket
+      end
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -746,7 +760,11 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @impl true
   def handle_event("close-preview", _params, socket) do
-    {:noreply, socket |> assign(:show_preview, false) |> assign(:preview_port, nil) |> assign(:show_preview_logs, false)}
+    {:noreply,
+     socket
+     |> assign(:show_preview, false)
+     |> assign(:preview_port, nil)
+     |> assign(:show_preview_logs, false)}
   end
 
   @impl true
@@ -1302,6 +1320,9 @@ defmodule ApothecaryWeb.DashboardLive do
 
       socket.assigns.working_agent ->
         send_to_agent(text, socket)
+
+      selected_worktree_closed?(socket) ->
+        create_from_input(text, socket)
 
       true ->
         create_child_from_input(text, socket)
@@ -2871,6 +2892,11 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
+  defp selected_worktree_closed?(socket) do
+    task = socket.assigns.selected_task
+    task != nil and task.status in ["merged", "done", "cancelled"]
+  end
+
   defp refresh_selected_task(socket) do
     id = socket.assigns.selected_task_id
 
@@ -3309,8 +3335,17 @@ defmodule ApothecaryWeb.DashboardLive do
         projects = dispatcher_status[:projects] || %{}
 
         case projects[project.id] do
-          nil -> %{status: :paused, oracle_status: :paused, target_count: 0, active_count: 0, oracle_target_count: 0}
-          ps -> ps
+          nil ->
+            %{
+              status: :paused,
+              oracle_status: :paused,
+              target_count: 0,
+              active_count: 0,
+              oracle_target_count: 0
+            }
+
+          ps ->
+            ps
         end
     end
   end
@@ -3466,91 +3501,92 @@ defmodule ApothecaryWeb.DashboardLive do
                         loading_action={@loading_action}
                       />
                     <% true -> %>
-                    <% running = @worktrees_by_status["running"] || []
-                    pr = @worktrees_by_status["pr"] || []
+                      <% running = @worktrees_by_status["running"] || []
+                      pr = @worktrees_by_status["pr"] || []
 
-                    ready_blocked =
-                      (@worktrees_by_status["ready"] || []) ++ (@worktrees_by_status["blocked"] || [])
+                      ready_blocked =
+                        (@worktrees_by_status["ready"] || []) ++
+                          (@worktrees_by_status["blocked"] || [])
 
-                    all_entries =
-                      running ++ pr ++ ready_blocked ++ (@worktrees_by_status["done"] || [])
+                      all_entries =
+                        running ++ pr ++ ready_blocked ++ (@worktrees_by_status["done"] || [])
 
-                    all_tasks = Enum.flat_map(all_entries, fn e -> e.tasks end)
-                    done_tasks = Enum.count(all_tasks, fn t -> t.status in ["done", "closed"] end)
-                    total_tasks = length(all_tasks) %>
-                    <div
-                      class="h-full flex items-center justify-center"
-                      style="color: var(--muted); font-size: var(--font-size-sm);"
-                    >
-                      <div class="text-center">
-                        <%!-- Diamond icons --%>
-                        <div
-                          class="flex items-center justify-center gap-2 mb-4"
-                          style="font-size: 20px; color: var(--dim);"
-                        >
-                          <span>&#x25C7;</span>
-                          <span style="color: var(--muted);">&#x2500;</span>
-                          <span>&#x25C7;</span>
-                        </div>
-
-                        <div class="mb-4" style="color: var(--dim);">
-                          select a worktree to inspect
-                        </div>
-
-                        <div class="mb-1" style="font-size: var(--font-size-xs);">
-                          <span style="font-weight: 600;">j/k</span>
-                          navigate <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
-                          <span style="font-weight: 600;">enter</span>
-                          inspect
-                        </div>
-                        <div class="mb-1" style="font-size: var(--font-size-xs);">
-                          <span style="font-weight: 600;">a</span>
-                          add task <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
-                          <span style="font-weight: 600;">x</span>
-                          delete
-                        </div>
-                        <div class="mb-4" style="font-size: var(--font-size-xs);">
-                          <span style="font-weight: 600;">s</span> stop brewing
-                        </div>
-
-                        <div
-                          style="border-top: 1px solid var(--border); margin: 0 auto; max-width: 280px;"
-                          class="pt-4"
-                        >
+                      all_tasks = Enum.flat_map(all_entries, fn e -> e.tasks end)
+                      done_tasks = Enum.count(all_tasks, fn t -> t.status in ["done", "closed"] end)
+                      total_tasks = length(all_tasks) %>
+                      <div
+                        class="h-full flex items-center justify-center"
+                        style="color: var(--muted); font-size: var(--font-size-sm);"
+                      >
+                        <div class="text-center">
+                          <%!-- Diamond icons --%>
                           <div
-                            class="flex items-center justify-center gap-6 mb-2"
-                            style="font-size: var(--font-size-xs);"
+                            class="flex items-center justify-center gap-2 mb-4"
+                            style="font-size: 20px; color: var(--dim);"
                           >
-                            <div>
-                              <span style="color: var(--concocting);">&#x25CF;</span>
-                              <span style="color: var(--dim); font-weight: 600;">
-                                {length(running)}
-                              </span>
-                              <div style="color: var(--muted);">brewing</div>
-                            </div>
-                            <div>
-                              <span style="color: var(--assaying);">&#x25CE;</span>
-                              <span style="color: var(--dim); font-weight: 600;">{length(pr)}</span>
-                              <div style="color: var(--muted);">reviewing</div>
-                            </div>
-                            <div>
-                              <span style="color: var(--muted);">&#x25CB;</span>
-                              <span style="color: var(--dim); font-weight: 600;">
-                                {length(ready_blocked)}
-                              </span>
-                              <div style="color: var(--muted);">stocked</div>
-                            </div>
+                            <span>&#x25C7;</span>
+                            <span style="color: var(--muted);">&#x2500;</span>
+                            <span>&#x25C7;</span>
                           </div>
+
+                          <div class="mb-4" style="color: var(--dim);">
+                            select a worktree to inspect
+                          </div>
+
+                          <div class="mb-1" style="font-size: var(--font-size-xs);">
+                            <span style="font-weight: 600;">j/k</span>
+                            navigate <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+                            <span style="font-weight: 600;">enter</span>
+                            inspect
+                          </div>
+                          <div class="mb-1" style="font-size: var(--font-size-xs);">
+                            <span style="font-weight: 600;">a</span>
+                            add task <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+                            <span style="font-weight: 600;">x</span>
+                            delete
+                          </div>
+                          <div class="mb-4" style="font-size: var(--font-size-xs);">
+                            <span style="font-weight: 600;">s</span> stop brewing
+                          </div>
+
                           <div
-                            :if={total_tasks > 0}
-                            class="mt-2"
-                            style="color: var(--dim); font-size: var(--font-size-xs);"
+                            style="border-top: 1px solid var(--border); margin: 0 auto; max-width: 280px;"
+                            class="pt-4"
                           >
-                            {done_tasks}/{total_tasks} tasks complete
+                            <div
+                              class="flex items-center justify-center gap-6 mb-2"
+                              style="font-size: var(--font-size-xs);"
+                            >
+                              <div>
+                                <span style="color: var(--concocting);">&#x25CF;</span>
+                                <span style="color: var(--dim); font-weight: 600;">
+                                  {length(running)}
+                                </span>
+                                <div style="color: var(--muted);">brewing</div>
+                              </div>
+                              <div>
+                                <span style="color: var(--assaying);">&#x25CE;</span>
+                                <span style="color: var(--dim); font-weight: 600;">{length(pr)}</span>
+                                <div style="color: var(--muted);">reviewing</div>
+                              </div>
+                              <div>
+                                <span style="color: var(--muted);">&#x25CB;</span>
+                                <span style="color: var(--dim); font-weight: 600;">
+                                  {length(ready_blocked)}
+                                </span>
+                                <div style="color: var(--muted);">stocked</div>
+                              </div>
+                            </div>
+                            <div
+                              :if={total_tasks > 0}
+                              class="mt-2"
+                              style="color: var(--dim); font-size: var(--font-size-xs);"
+                            >
+                              {done_tasks}/{total_tasks} tasks complete
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
                   <% end %>
                 </div>
               </div>
