@@ -878,14 +878,6 @@ defmodule ApothecaryWeb.DashboardLive do
     {:noreply, assign(socket, :adding_task_to, nil)}
   end
 
-  @impl true
-  def handle_event("task-input-blur", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:adding_task_to, nil)
-     |> assign(:input_focused, false)}
-  end
-
   # Search tree
   @impl true
   def handle_event("search-tree", %{"query" => query}, socket) do
@@ -1383,6 +1375,36 @@ defmodule ApothecaryWeb.DashboardLive do
       {:ok, binary} ->
         File.write!(path, binary)
         {:noreply, push_event(socket, "image-pasted", %{path: path})}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, "Failed to decode pasted image")}
+    end
+  end
+
+  # Handle pasted images in task input — save to temp file and append path
+  @impl true
+  def handle_event(
+        "paste-image-task",
+        %{"data" => data, "mime" => mime, "name" => name, "worktree_id" => _wt_id},
+        socket
+      ) do
+    ext =
+      case mime do
+        "image/png" -> ".png"
+        "image/jpeg" -> ".jpg"
+        "image/gif" -> ".gif"
+        "image/webp" -> ".webp"
+        _ -> Path.extname(name)
+      end
+
+    filename = "paste-#{System.unique_integer([:positive])}#{ext}"
+    tmp_dir = System.tmp_dir!()
+    path = Path.join(tmp_dir, filename)
+
+    case Base.decode64(data) do
+      {:ok, binary} ->
+        File.write!(path, binary)
+        {:noreply, push_event(socket, "task-image-pasted", %{path: path})}
 
       :error ->
         {:noreply, put_flash(socket, :error, "Failed to decode pasted image")}
