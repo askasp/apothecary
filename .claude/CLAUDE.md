@@ -26,7 +26,7 @@ Tasks are managed by the Apothecary orchestrator via MCP tools.
 
 ### Auto-Decomposition
 - **Small task:** just do it directly, use `complete_task` when done.
-- **Complex task:** use `create_task` to break into steps, work through each.
+- **Complex task:** First use `list_tasks` to read ALL existing tasks — skip duplicates the user may have added manually. Then use `create_task` to break into steps, work through each.
 
 ### Session Completion
 - Commit all changes and mark tasks done via `complete_task`

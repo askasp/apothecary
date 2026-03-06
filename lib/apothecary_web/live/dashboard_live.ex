@@ -859,21 +859,17 @@ defmodule ApothecaryWeb.DashboardLive do
     {:noreply,
      socket
      |> assign(:adding_task_to, wt_id)
-     |> push_event("focus-element", %{selector: "#task-input-#{wt_id}"})}
+     |> push_event("focus-element", %{selector: "#primary-input"})}
   end
 
-  # Inline task creation
+  # Legacy inline task creation (now handled by submit-input in task-add mode)
   @impl true
   def handle_event("add-task-inline", %{"title" => title, "worktree_id" => wt_id}, socket) do
     title = String.trim(title)
 
-    socket =
-      if title != "" do
-        Worktrees.create_task(%{title: title, worktree_id: wt_id, priority: 3})
-        socket
-      else
-        socket
-      end
+    if title != "" do
+      Worktrees.create_task(%{title: title, worktree_id: wt_id, priority: 3})
+    end
 
     {:noreply, assign(socket, :adding_task_to, nil)}
   end
@@ -1411,6 +1407,16 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
+  # Clear task-add mode (backspace on empty input)
+  @impl true
+  def handle_event("clear-task-input-mode", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:adding_task_to, nil)
+     |> assign(:selected_card, -1)
+     |> push_event("focus-element", %{selector: "#primary-input"})}
+  end
+
   # Context-sensitive primary input submit
   @impl true
   def handle_event("submit-input", %{"text" => text}, socket) do
@@ -1422,6 +1428,18 @@ defmodule ApothecaryWeb.DashboardLive do
 
       socket.assigns.working_agent ->
         send_to_agent(text, socket)
+
+      # Task-add mode: create task in focused worktree
+      socket.assigns.adding_task_to ->
+        wt_id = socket.assigns.adding_task_to
+
+        case Worktrees.create_task(%{title: text, worktree_id: wt_id, priority: 3}) do
+          {:ok, item} when not is_nil(item) ->
+            {:noreply, put_flash(socket, :info, "Task added: #{item.title}")}
+
+          _ ->
+            {:noreply, put_flash(socket, :error, "Failed to add task")}
+        end
 
       true ->
         create_from_input(text, socket)
@@ -2066,6 +2084,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
         socket
         |> assign(:selected_card, idx)
+        |> assign(:adding_task_to, worktree_id_at(socket.assigns.card_ids, idx))
         |> push_event("scroll-to-selected", %{})
     end
   end
@@ -2079,13 +2098,16 @@ defmodule ApothecaryWeb.DashboardLive do
         push_event(socket, "scroll-detail", %{direction: "up"})
 
       socket.assigns.selected_card == 0 ->
-        assign(socket, :selected_card, -1)
+        socket
+        |> assign(:selected_card, -1)
+        |> assign(:adding_task_to, nil)
 
       true ->
         idx = max(socket.assigns.selected_card - 1, 0)
 
         socket
         |> assign(:selected_card, idx)
+        |> assign(:adding_task_to, worktree_id_at(socket.assigns.card_ids, idx))
         |> push_event("scroll-to-selected", %{})
     end
   end
@@ -2259,15 +2281,14 @@ defmodule ApothecaryWeb.DashboardLive do
 
     case Enum.at(card_ids, selected) do
       nil ->
-        # No card selected — edit brewers
         assign(socket, :editing_setting, :brewers)
 
       card_id ->
         if String.starts_with?(to_string(card_id), "wt-") do
           # Focus primary input pre-filled with worktree ref for adding task
           socket
-          |> push_event("set-input-value", %{selector: "#primary-input", value: "##{card_id} "})
-          |> push_event("focus-primary-input", %{})
+          |> assign(:adding_task_to, card_id)
+          |> push_event("focus-element", %{selector: "#primary-input"})
         else
           assign(socket, :editing_setting, :brewers)
         end
@@ -2930,7 +2951,10 @@ defmodule ApothecaryWeb.DashboardLive do
              project_id: project_id
            }) do
         {:ok, item} when not is_nil(item) ->
-          {:noreply, put_flash(socket, :info, "Worktree created: #{item.id}")}
+          {:noreply,
+           socket
+           |> assign(:adding_task_to, item.id)
+           |> put_flash(:info, "Worktree created: #{item.id} — add tasks below")}
 
         {:ok, nil} ->
           {:noreply, put_flash(socket, :error, "Failed to create worktree")}
@@ -2995,6 +3019,8 @@ defmodule ApothecaryWeb.DashboardLive do
         false
       end
 
+    wt_id = if String.starts_with?(to_string(id), "wt-"), do: id, else: nil
+
     socket
     |> assign(:selected_task_id, id)
     |> assign(:selected_task, task)
@@ -3006,6 +3032,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:show_preview, false)
     |> assign(:preview_port, nil)
     |> assign(:has_preview_config, has_preview)
+    |> assign(:adding_task_to, wt_id)
     |> assign(:page_title, "Task #{id}")
     |> sync_selected_card(id)
     |> find_working_agent()
@@ -3130,6 +3157,13 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   # --- Helpers ---
+
+  defp worktree_id_at(card_ids, idx) do
+    case Enum.at(card_ids, idx) do
+      nil -> nil
+      id -> if String.starts_with?(to_string(id), "wt-"), do: id, else: nil
+    end
+  end
 
   @doc false
   def parse_smart_input(input) do
@@ -3579,6 +3613,7 @@ defmodule ApothecaryWeb.DashboardLive do
                   <.worktree_input
                     input_focused={@input_focused}
                     input_highlighted={@selected_card == -1}
+                    adding_task_to={@adding_task_to}
                   />
 
                   <.worktree_tree
