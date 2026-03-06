@@ -538,12 +538,17 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
-  # Cmd+K (macOS) toggles project switcher
-  def handle_event("hotkey", %{"metaKey" => true, "key" => "k"}, socket) do
-    handle_event("hotkey", %{"ctrlKey" => true, "key" => "k"}, socket)
+  # Cmd+K/P (macOS) toggles project switcher
+  def handle_event("hotkey", %{"metaKey" => true, "key" => key}, socket) when key in ["k", "p"] do
+    handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
   end
 
   def handle_event("hotkey", %{"metaKey" => true}, socket), do: {:noreply, socket}
+
+  # Ctrl+P toggles project switcher (same as Ctrl+K)
+  def handle_event("hotkey", %{"ctrlKey" => true, "key" => "p"}, %{assigns: %{show_project_switcher: false}} = socket) do
+    handle_event("hotkey", %{"ctrlKey" => true, "key" => "k"}, socket)
+  end
 
   def handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
       when key in ["n", "p"] do
@@ -1139,7 +1144,10 @@ defmodule ApothecaryWeb.DashboardLive do
   def handle_event("requeue", _params, socket) do
     case Worktrees.unclaim(socket.assigns.selected_task_id) do
       {:ok, _} ->
-        {:noreply, put_flash(socket, :info, "Task requeued")}
+        {:noreply,
+         socket
+         |> select_task(nil)
+         |> put_flash(:info, "Task requeued")}
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed to requeue: #{inspect(reason)}")}
@@ -2204,7 +2212,9 @@ defmodule ApothecaryWeb.DashboardLive do
     if socket.assigns.selected_task_id do
       case Worktrees.unclaim(socket.assigns.selected_task_id) do
         {:ok, _} ->
-          put_flash(socket, :info, "Task requeued")
+          socket
+          |> select_task(nil)
+          |> put_flash(:info, "Task requeued")
 
         {:error, reason} ->
           put_flash(socket, :error, "Failed to requeue: #{inspect(reason)}")

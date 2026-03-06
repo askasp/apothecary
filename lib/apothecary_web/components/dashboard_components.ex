@@ -2289,7 +2289,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <.hk key="enter" desc="inspect worktree" />
             <.hk key="esc" desc="close / back" />
             <.hk key="/" desc="search" />
-            <.hk key="⌘k" desc="switch project" />
+            <.hk key="⌘k / ⌘p" desc="switch project" />
           </div>
 
           <div>
