@@ -1426,10 +1426,7 @@ defmodule ApothecaryWeb.DashboardLive do
       text == "" ->
         {:noreply, socket}
 
-      socket.assigns.working_agent ->
-        send_to_agent(text, socket)
-
-      # Task-add mode: create task in focused worktree
+      # Task-add mode: create task in focused worktree (check before working_agent)
       socket.assigns.adding_task_to ->
         wt_id = socket.assigns.adding_task_to
 
@@ -1440,6 +1437,9 @@ defmodule ApothecaryWeb.DashboardLive do
           _ ->
             {:noreply, put_flash(socket, :error, "Failed to add task")}
         end
+
+      socket.assigns.working_agent ->
+        send_to_agent(text, socket)
 
       true ->
         create_from_input(text, socket)
