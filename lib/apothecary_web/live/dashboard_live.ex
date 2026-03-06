@@ -1651,7 +1651,8 @@ defmodule ApothecaryWeb.DashboardLive do
      |> push_event("set-input-value", %{
        selector: ~s(input[name="path"]),
        value: path_with_slash
-     })}
+     })
+     |> push_event("focus-element", %{selector: "#project-path-input"})}
   end
 
   @impl true
@@ -2164,9 +2165,13 @@ defmodule ApothecaryWeb.DashboardLive do
   defp handle_hotkey("Enter", socket) do
     cond do
       is_nil(socket.assigns.current_project) ->
-        case Enum.at(socket.assigns.projects, socket.assigns.selected_card) do
-          nil -> socket
-          project -> push_navigate(socket, to: ~p"/projects/#{project.id}")
+        if socket.assigns.selected_card >= 0 do
+          case Enum.at(socket.assigns.projects, socket.assigns.selected_card) do
+            nil -> socket
+            project -> push_navigate(socket, to: ~p"/projects/#{project.id}")
+          end
+        else
+          socket
         end
 
       socket.assigns.selected_card == -1 ->
@@ -2182,9 +2187,13 @@ defmodule ApothecaryWeb.DashboardLive do
 
   defp handle_hotkey("l", socket) do
     if is_nil(socket.assigns.current_project) do
-      case Enum.at(socket.assigns.projects, socket.assigns.selected_card) do
-        nil -> socket
-        project -> push_navigate(socket, to: ~p"/projects/#{project.id}")
+      if socket.assigns.selected_card >= 0 do
+        case Enum.at(socket.assigns.projects, socket.assigns.selected_card) do
+          nil -> socket
+          project -> push_navigate(socket, to: ~p"/projects/#{project.id}")
+        end
+      else
+        socket
       end
     else
       # Move focus to detail pane (if a task is selected)
@@ -2260,7 +2269,26 @@ defmodule ApothecaryWeb.DashboardLive do
     if socket.assigns.active_tab == :oracle do
       push_event(socket, "focus-oracle-input", %{})
     else
-      push_event(socket, "focus-element", %{selector: "#primary-input"})
+      card_ids = socket.assigns.card_ids
+      selected = socket.assigns.selected_card
+
+      case Enum.at(card_ids, selected) do
+        card_id when is_binary(card_id) and selected >= 0 ->
+          if String.starts_with?(card_id, "wt-") do
+            # Focus primary input pre-filled with question prefix for this worktree
+            socket
+            |> push_event("set-input-value", %{
+              selector: "#primary-input",
+              value: "? ##{card_id} "
+            })
+            |> push_event("focus-primary-input", %{})
+          else
+            push_event(socket, "focus-primary-input", %{})
+          end
+
+        _ ->
+          push_event(socket, "focus-primary-input", %{})
+      end
     end
   end
 
@@ -2286,6 +2314,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
       card_id ->
         if String.starts_with?(to_string(card_id), "wt-") do
+          # Focus primary input pre-filled with worktree ref for adding task
           socket
           |> assign(:adding_task_to, card_id)
           |> push_event("focus-element", %{selector: "#primary-input"})
@@ -2868,26 +2897,39 @@ defmodule ApothecaryWeb.DashboardLive do
       String.starts_with?(text, "#") ->
         create_worktree_from_branch(text, socket)
 
-      # Question prefix: "? question text"
+      # Question prefix: "? question text" or "? #wt-xxx question text"
       String.starts_with?(text, "?") ->
         question_text = text |> String.trim_leading("?") |> String.trim()
-        create_question(question_text, socket)
+
+        # Extract optional worktree reference: "? #wt-abc123 question"
+        {question_text, worktree_ref} =
+          case Regex.run(~r/^#(wt-[a-z0-9]+)\s*(.*)$/s, question_text) do
+            [_, wt_id, rest] -> {String.trim(rest), wt_id}
+            _ -> {question_text, nil}
+          end
+
+        create_question(question_text, socket, worktree_ref)
 
       true ->
         create_task_from_input(text, socket)
     end
   end
 
-  defp create_question(text, socket) do
+  defp create_question(text, socket, worktree_ref \\ nil) do
     project_id =
       if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
 
-    case Worktrees.create_worktree(%{
-           title: text,
-           kind: "question",
-           priority: 2,
-           project_id: project_id
-         }) do
+    attrs = %{
+      title: text,
+      kind: "question",
+      priority: 2,
+      project_id: project_id
+    }
+
+    attrs =
+      if worktree_ref, do: Map.put(attrs, :parent_worktree_id, worktree_ref), else: attrs
+
+    case Worktrees.create_worktree(attrs) do
       {:ok, item} when not is_nil(item) ->
         {:noreply,
          socket

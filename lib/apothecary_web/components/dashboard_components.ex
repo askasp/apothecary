@@ -229,6 +229,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             name="path"
             id="project-path-input"
             value="~/"
+            autofocus
             autocomplete="off"
             phx-debounce="150"
             phx-focus="input-focus"
@@ -836,7 +837,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             class="moonlight-input w-full resize-none"
             style={"min-height: 96px; max-height: 200px;#{if @input_highlighted && !@input_focused, do: " border-color: var(--dim);", else: ""}"}
             placeholder={
-              if @input_highlighted && !@input_focused, do: "Press Enter or c to type...", else: ""
+              if @input_highlighted && !@input_focused, do: "Press Enter to type, a to add task, c to ask...", else: ""
             }
           ></textarea>
           <div

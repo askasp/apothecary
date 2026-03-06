@@ -29,7 +29,13 @@ let Hooks = {
   ...colocatedHooks,
   DashboardKeys: {
     mounted() {
-      this.el.focus()
+      // Don't steal focus from autofocused inputs (e.g. project path input on landing page)
+      const autofocused = this.el.querySelector("[autofocus]")
+      if (autofocused) {
+        autofocused.focus()
+      } else {
+        this.el.focus()
+      }
 
       // Theme: apply from localStorage on mount, sync changes
       this._applyTheme = (theme) => {
@@ -141,7 +147,12 @@ let Hooks = {
       })
       this.handleEvent("focus-primary-input", () => {
         const el = document.getElementById("primary-input")
-        if (el) el.focus()
+        if (el) {
+          el.focus()
+          // Place cursor at end of any pre-filled text
+          const len = el.value.length
+          el.setSelectionRange(len, len)
+        }
       })
     },
     updated() {
