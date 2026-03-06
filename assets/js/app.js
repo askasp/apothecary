@@ -153,6 +153,34 @@ let Hooks = {
       if (theme) this._applyTheme(theme)
     }
   },
+  TaskAddInput: {
+    mounted() {
+      this.el.addEventListener("keydown", (e) => {
+        // Escape is handled by DashboardKeys capture handler + hotkey handler
+        if (e.key === "Backspace" && this.el.value === "") {
+          e.preventDefault()
+          e.stopPropagation()
+          this.pushEvent("clear-task-input-mode", {})
+          return
+        }
+        if (e.key === "Enter") {
+          e.preventDefault()
+          e.stopPropagation()
+          const text = this.el.value.trim()
+          if (text) {
+            this.pushEvent("submit-input", { text })
+            this.el.value = ""
+          }
+        }
+      })
+    },
+    updated() {
+      // Re-focus after server re-render (rapid entry)
+      if (this.el.dataset.wtId) {
+        this.el.focus()
+      }
+    }
+  },
   TextareaSubmit: {
     mounted() {
       this.mentionActive = false

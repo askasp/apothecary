@@ -788,68 +788,102 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   attr :input_focused, :boolean, default: false
   attr :input_highlighted, :boolean, default: false
+  attr :adding_task_to, :string, default: nil
 
   def worktree_input(assigns) do
     ~H"""
     <div class="px-3 py-2">
-      <div class="relative rounded-lg transition-all duration-150">
-        <textarea
-          id="primary-input"
-          rows="4"
-          phx-hook="TextareaSubmit"
-          phx-focus="input-focus"
-          phx-blur="input-blur"
-          autocomplete="off"
-          class="moonlight-input w-full resize-none"
-          style={"min-height: 96px; max-height: 200px;#{if @input_highlighted && !@input_focused, do: " border-color: var(--dim);", else: ""}"}
-          placeholder={
-            if @input_highlighted && !@input_focused, do: "Press Enter or c to type...", else: ""
-          }
-        ></textarea>
+      <%= if @adding_task_to do %>
+        <%!-- Task-add mode: single-line input with worktree prefix --%>
         <div
-          id="file-autocomplete-dropdown"
-          phx-update="ignore"
-          class="hidden fixed max-h-48 overflow-y-auto"
-          style="background: var(--surface); border: 1px solid var(--border); z-index: 9999;"
+          class="relative rounded-lg transition-all duration-150"
+          style="border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); background: color-mix(in srgb, var(--accent) 5%, var(--surface));"
         >
+          <div class="flex items-center gap-2 px-3 py-2">
+            <span
+              style="color: var(--dim); font-size: var(--font-size-xs); white-space: nowrap; user-select: none;"
+            >
+              <kbd style="color: var(--muted); font-size: var(--font-size-xxs); padding: 1px 4px; border: 1px solid var(--border); border-radius: 3px;">a</kbd>
+              add task to
+            </span>
+            <span style="color: var(--accent); font-weight: 600; font-size: var(--font-size-sm); white-space: nowrap;">
+              {@adding_task_to}
+            </span>
+            <input
+              id="primary-input"
+              type="text"
+              phx-hook="TaskAddInput"
+              phx-focus="input-focus"
+              phx-blur="input-blur"
+              autocomplete="off"
+              class="flex-1 bg-transparent outline-none"
+              style="color: var(--text); font-size: var(--font-size-sm); border: none; min-width: 0;"
+              placeholder=""
+              data-wt-id={@adding_task_to}
+            />
+          </div>
         </div>
-        <button
-          id="primary-input-send"
-          phx-hook=".TextareaSend"
-          type="button"
-          class="absolute right-2 bottom-2 cursor-pointer p-1"
-          style="color: var(--muted);"
-          title="Send (Enter)"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            class="w-4 h-4"
-          >
-            <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" />
-          </svg>
-        </button>
-        <script :type={Phoenix.LiveView.ColocatedHook} name=".TextareaSend">
-          export default {
-            mounted() {
-              this.el.addEventListener("click", () => {
-                const textarea = document.getElementById("primary-input")
-                if (textarea) {
-                  const text = textarea.value.trim()
-                  if (text) {
-                    this.pushEvent("submit-input", { text })
-                    textarea.value = ""
-                  }
-                }
-              })
+      <% else %>
+        <%!-- Normal mode: textarea for worktree creation --%>
+        <div class="relative rounded-lg transition-all duration-150">
+          <textarea
+            id="primary-input"
+            rows="4"
+            phx-hook="TextareaSubmit"
+            phx-focus="input-focus"
+            phx-blur="input-blur"
+            autocomplete="off"
+            class="moonlight-input w-full resize-none"
+            style={"min-height: 96px; max-height: 200px;#{if @input_highlighted && !@input_focused, do: " border-color: var(--dim);", else: ""}"}
+            placeholder={
+              if @input_highlighted && !@input_focused, do: "Press Enter or c to type...", else: ""
             }
-          }
-        </script>
-      </div>
-      <div class="mt-1" style="color: var(--muted); font-size: var(--font-size-xs);">
-        describe a worktree, or ? to ask
-      </div>
+          ></textarea>
+          <div
+            id="file-autocomplete-dropdown"
+            phx-update="ignore"
+            class="hidden fixed max-h-48 overflow-y-auto"
+            style="background: var(--surface); border: 1px solid var(--border); z-index: 9999;"
+          >
+          </div>
+          <button
+            id="primary-input-send"
+            phx-hook=".TextareaSend"
+            type="button"
+            class="absolute right-2 bottom-2 cursor-pointer p-1"
+            style="color: var(--muted);"
+            title="Send (Enter)"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              class="w-4 h-4"
+            >
+              <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" />
+            </svg>
+          </button>
+          <script :type={Phoenix.LiveView.ColocatedHook} name=".TextareaSend">
+            export default {
+              mounted() {
+                this.el.addEventListener("click", () => {
+                  const textarea = document.getElementById("primary-input")
+                  if (textarea) {
+                    const text = textarea.value.trim()
+                    if (text) {
+                      this.pushEvent("submit-input", { text })
+                      textarea.value = ""
+                    }
+                  }
+                })
+              }
+            }
+          </script>
+        </div>
+        <div class="mt-1" style="color: var(--muted); font-size: var(--font-size-xs);">
+          describe a worktree, or ? to ask
+        </div>
+      <% end %>
     </div>
     """
   end
@@ -1111,75 +1145,18 @@ defmodule ApothecaryWeb.DashboardComponents do
               <% end %>
             </div>
           <% end %>
-          <%!-- Inline task input --%>
-          <div :if={@adding_task_to == wt.id} class="pl-8 py-1">
-            <form phx-submit="add-task-inline">
-              <input type="hidden" name="worktree_id" value={wt.id} />
-              <input
-                name="title"
-                id={"task-input-#{wt.id}"}
-                autofocus
-                placeholder="new task..."
-                class="task-inline-input"
-                phx-focus="input-focus"
-                phx-hook=".TaskInput"
-              />
-            </form>
+          <%!-- Inline task add indicator --%>
+          <div
+            :if={@adding_task_to == wt.id}
+            class="pl-8 py-0.5"
+            style="font-size: var(--font-size-xs);"
+          >
+            <div class="flex items-baseline gap-1 px-1">
+              <span class="tree-char">└╴</span>
+              <span style="color: var(--accent);">○</span>
+              <span style="color: var(--dim); font-style: italic;">adding...</span>
+            </div>
           </div>
-          <script :type={Phoenix.LiveView.ColocatedHook} name=".TaskInput">
-            export default {
-              mounted() {
-                const pushImage = (file) => {
-                  const reader = new FileReader()
-                  reader.onload = (evt) => {
-                    const base64 = evt.target.result.split(",")[1]
-                    this.pushEvent("paste-image-task", {
-                      data: base64,
-                      mime: file.type || "image/png",
-                      name: file.name || "clipboard.png",
-                      worktree_id: this.el.closest("form").querySelector("[name=worktree_id]").value
-                    })
-                  }
-                  reader.readAsDataURL(file)
-                }
-
-                this.el.addEventListener("paste", (e) => {
-                  const items = e.clipboardData && e.clipboardData.items
-                  if (!items) return
-                  for (let i = 0; i < items.length; i++) {
-                    if (items[i].type.indexOf("image") !== -1) {
-                      e.preventDefault()
-                      pushImage(items[i].getAsFile())
-                      return
-                    }
-                  }
-                })
-
-                this.el.addEventListener("dragover", (e) => {
-                  e.preventDefault()
-                  e.dataTransfer.dropEffect = "copy"
-                })
-
-                this.el.addEventListener("drop", (e) => {
-                  e.preventDefault()
-                  const files = e.dataTransfer && e.dataTransfer.files
-                  if (!files) return
-                  for (let i = 0; i < files.length; i++) {
-                    if (files[i].type.indexOf("image") !== -1) {
-                      pushImage(files[i])
-                      return
-                    }
-                  }
-                })
-
-                this.handleEvent("task-image-pasted", ({ path }) => {
-                  const current = this.el.value
-                  this.el.value = current + (current ? " " : "") + path
-                  this.el.focus()
-                })
-              }
-            }
-          </script>
           <%!-- Connector line between entries (not after last) --%>
           <div :if={!last?} class="tree-char pl-1" style="font-size: var(--font-size-sm);">│</div>
         <% end %>

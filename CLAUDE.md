@@ -35,9 +35,10 @@ When you receive a large task, assess its complexity:
 
 - **If the task is small and self-contained:** just do it directly.
 - **If the task is complex (touches multiple files/systems):**
-  1. Use `create_task` for each logical step
-  2. Use `add_dependency` to wire ordering if needed
-  3. Work through tasks in order, using `complete_task` as you go
+  1. **First use `list_tasks` to read ALL existing tasks** for the worktree — the user may have manually added tasks that overlap with what you plan to create. Skip creating duplicates.
+  2. Use `create_task` for each logical step that doesn't already exist
+  3. Use `add_dependency` to wire ordering if needed
+  4. Work through tasks in order, using `complete_task` as you go
 
 ### Context Survival ("Land the Plane")
 Your session may be interrupted at any time (crash, timeout, OOM). Notes and git history are how the next brewer rebuilds context.
