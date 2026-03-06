@@ -2079,7 +2079,6 @@ defmodule ApothecaryWeb.DashboardLive do
 
         socket
         |> assign(:selected_card, idx)
-        |> assign(:adding_task_to, worktree_id_at(socket.assigns.card_ids, idx))
         |> push_event("scroll-to-selected", %{})
     end
   end
@@ -2102,7 +2101,6 @@ defmodule ApothecaryWeb.DashboardLive do
 
         socket
         |> assign(:selected_card, idx)
-        |> assign(:adding_task_to, worktree_id_at(socket.assigns.card_ids, idx))
         |> push_event("scroll-to-selected", %{})
     end
   end
