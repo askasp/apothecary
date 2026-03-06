@@ -198,6 +198,7 @@ let Hooks = {
       this.mentionStart = -1
       this.selectedIndex = 0
       this.results = []
+      this.attachedImages = [] // {path, url} pairs
 
       this.dropdown = document.getElementById("file-autocomplete-dropdown")
 
@@ -235,11 +236,7 @@ let Hooks = {
 
         if (e.key === "Enter" && !e.shiftKey && !this.mentionActive) {
           e.preventDefault()
-          const text = this.el.value.trim()
-          if (text) {
-            this.pushEvent("submit-input", { text })
-            this.el.value = ""
-          }
+          this.submitWithImages()
         }
       })
 
@@ -295,15 +292,15 @@ let Hooks = {
         }
       })
 
-      this.handleEvent("image-pasted", ({ path }) => {
-        const cursor = this.el.selectionStart
-        const before = this.el.value.substring(0, cursor)
-        const after = this.el.value.substring(cursor)
-        const ref = path + " "
-        this.el.value = before + ref + after
-        this.el.selectionStart = cursor + ref.length
-        this.el.selectionEnd = cursor + ref.length
+      this.handleEvent("image-pasted", ({ path, url }) => {
+        this.attachedImages.push({ path, url })
+        this.renderImagePreviews()
         this.el.focus()
+      })
+
+      // Allow send button to trigger submit with images
+      this.el.addEventListener("submit-with-images", () => {
+        this.submitWithImages()
       })
 
       // Close on click outside
@@ -311,6 +308,61 @@ let Hooks = {
         if (!this.el.contains(e.target) && this.dropdown && !this.dropdown.contains(e.target)) {
           this.closeMention()
         }
+      })
+    },
+
+    submitWithImages() {
+      let text = this.el.value.trim()
+      if (!text && this.attachedImages.length === 0) return
+
+      // Append server-side image paths to the text for Claude
+      if (this.attachedImages.length > 0) {
+        const paths = this.attachedImages.map(img => img.path).join(" ")
+        text = text ? text + " " + paths : paths
+      }
+
+      this.pushEvent("submit-input", { text })
+      this.el.value = ""
+      this.attachedImages = []
+      this.renderImagePreviews()
+    },
+
+    removeImage(index) {
+      this.attachedImages.splice(index, 1)
+      this.renderImagePreviews()
+      this.el.focus()
+    },
+
+    renderImagePreviews() {
+      let container = document.getElementById("image-previews")
+      if (!container) {
+        container = document.createElement("div")
+        container.id = "image-previews"
+        container.style.cssText = "display: flex; gap: 8px; flex-wrap: wrap; padding: 6px 0;"
+        this.el.parentElement.insertBefore(container, this.el)
+      }
+
+      if (this.attachedImages.length === 0) {
+        container.innerHTML = ""
+        container.style.display = "none"
+        return
+      }
+
+      container.style.display = "flex"
+      container.innerHTML = this.attachedImages.map((img, i) => `
+        <div style="position: relative; display: inline-block;">
+          <img src="${img.url}" style="height: 64px; max-width: 120px; border-radius: 6px; border: 1px solid var(--border); object-fit: cover;" />
+          <button type="button" data-remove-index="${i}"
+            style="position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); color: var(--muted); font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1;"
+            title="Remove image">&times;</button>
+        </div>
+      `).join("")
+
+      container.querySelectorAll("[data-remove-index]").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.preventDefault()
+          this.removeImage(parseInt(btn.dataset.removeIndex))
+        })
       })
     },
 

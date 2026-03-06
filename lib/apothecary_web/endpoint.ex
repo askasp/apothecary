@@ -15,6 +15,12 @@ defmodule ApothecaryWeb.Endpoint do
     websocket: [connect_info: [session: @session_options]],
     longpoll: [connect_info: [session: @session_options]]
 
+  # Serve uploaded images (pasted into chat) from runtime uploads dir
+  plug Plug.Static,
+    at: "/uploads",
+    from: {:apothecary, "uploads"},
+    gzip: false
+
   # Serve at "/" the static files from "priv/static" directory.
   #
   # When code reloading is disabled (e.g., in production),

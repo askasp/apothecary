@@ -801,10 +801,10 @@ defmodule ApothecaryWeb.DashboardComponents do
           style="border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); background: color-mix(in srgb, var(--accent) 5%, var(--surface));"
         >
           <div class="flex items-center gap-2 px-3 py-2">
-            <span
-              style="color: var(--dim); font-size: var(--font-size-xs); white-space: nowrap; user-select: none;"
-            >
-              <kbd style="color: var(--muted); font-size: var(--font-size-xxs); padding: 1px 4px; border: 1px solid var(--border); border-radius: 3px;">a</kbd>
+            <span style="color: var(--dim); font-size: var(--font-size-xs); white-space: nowrap; user-select: none;">
+              <kbd style="color: var(--muted); font-size: var(--font-size-xxs); padding: 1px 4px; border: 1px solid var(--border); border-radius: 3px;">
+                a
+              </kbd>
               add task to
             </span>
             <span style="color: var(--accent); font-weight: 600; font-size: var(--font-size-sm); white-space: nowrap;">
@@ -870,11 +870,7 @@ defmodule ApothecaryWeb.DashboardComponents do
                 this.el.addEventListener("click", () => {
                   const textarea = document.getElementById("primary-input")
                   if (textarea) {
-                    const text = textarea.value.trim()
-                    if (text) {
-                      this.pushEvent("submit-input", { text })
-                      textarea.value = ""
-                    }
+                    textarea.dispatchEvent(new CustomEvent("submit-with-images"))
                   }
                 })
               }

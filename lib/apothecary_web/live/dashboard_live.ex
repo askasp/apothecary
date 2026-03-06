@@ -1355,56 +1355,28 @@ defmodule ApothecaryWeb.DashboardLive do
     {:noreply, socket}
   end
 
-  # Handle pasted images — save to temp file and insert path into textarea
+  # Handle pasted images — save to uploads dir and return both path + preview URL
   @impl true
   def handle_event("paste-image", %{"data" => data, "mime" => mime, "name" => name}, socket) do
-    ext =
-      case mime do
-        "image/png" -> ".png"
-        "image/jpeg" -> ".jpg"
-        "image/gif" -> ".gif"
-        "image/webp" -> ".webp"
-        _ -> Path.extname(name)
-      end
-
-    filename = "paste-#{System.unique_integer([:positive])}#{ext}"
-    tmp_dir = System.tmp_dir!()
-    path = Path.join(tmp_dir, filename)
-
-    case Base.decode64(data) do
-      {:ok, binary} ->
-        File.write!(path, binary)
-        {:noreply, push_event(socket, "image-pasted", %{path: path})}
+    case save_pasted_image(data, mime, name) do
+      {:ok, path, url} ->
+        {:noreply, push_event(socket, "image-pasted", %{path: path, url: url})}
 
       :error ->
         {:noreply, put_flash(socket, :error, "Failed to decode pasted image")}
     end
   end
 
-  # Handle pasted images in task input — save to temp file and append path
+  # Handle pasted images in task input
   @impl true
   def handle_event(
         "paste-image-task",
         %{"data" => data, "mime" => mime, "name" => name, "worktree_id" => _wt_id},
         socket
       ) do
-    ext =
-      case mime do
-        "image/png" -> ".png"
-        "image/jpeg" -> ".jpg"
-        "image/gif" -> ".gif"
-        "image/webp" -> ".webp"
-        _ -> Path.extname(name)
-      end
-
-    filename = "paste-#{System.unique_integer([:positive])}#{ext}"
-    tmp_dir = System.tmp_dir!()
-    path = Path.join(tmp_dir, filename)
-
-    case Base.decode64(data) do
-      {:ok, binary} ->
-        File.write!(path, binary)
-        {:noreply, push_event(socket, "task-image-pasted", %{path: path})}
+    case save_pasted_image(data, mime, name) do
+      {:ok, path, url} ->
+        {:noreply, push_event(socket, "task-image-pasted", %{path: path, url: url})}
 
       :error ->
         {:noreply, put_flash(socket, :error, "Failed to decode pasted image")}
@@ -3679,7 +3651,11 @@ defmodule ApothecaryWeb.DashboardLive do
                         has_preview_config={@has_preview_config}
                         pending_action={@pending_action}
                         loading_action={@loading_action}
-                        worktree_questions={Enum.filter(@questions, fn q -> q.parent_worktree_id == @selected_task_id end)}
+                        worktree_questions={
+                          Enum.filter(@questions, fn q ->
+                            q.parent_worktree_id == @selected_task_id
+                          end)
+                        }
                         agents={@agents}
                       />
                     <% true -> %>
@@ -3808,5 +3784,31 @@ defmodule ApothecaryWeb.DashboardLive do
       />
     </Layouts.app>
     """
+  end
+
+  defp save_pasted_image(data, mime, name) do
+    ext =
+      case mime do
+        "image/png" -> ".png"
+        "image/jpeg" -> ".jpg"
+        "image/gif" -> ".gif"
+        "image/webp" -> ".webp"
+        _ -> Path.extname(name)
+      end
+
+    filename = "paste-#{System.unique_integer([:positive])}#{ext}"
+    uploads_dir = Path.join(:code.priv_dir(:apothecary), "uploads")
+    File.mkdir_p!(uploads_dir)
+    path = Path.join(uploads_dir, filename)
+
+    case Base.decode64(data) do
+      {:ok, binary} ->
+        File.write!(path, binary)
+        url = "/uploads/#{filename}"
+        {:ok, path, url}
+
+      :error ->
+        :error
+    end
   end
 end
