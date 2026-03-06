@@ -627,7 +627,9 @@ defmodule Apothecary.Dispatcher do
             project_dir = resolve_project_dir(worktree)
 
             if worktree.kind == "question" do
-              # Questions run read-only against the project directory — no worktree needed
+              # Questions run read-only — use parent worktree path if scoped
+              question_path = resolve_question_path(claimed, project_dir)
+
               pool =
                 if is_oracle_agent do
                   %{pool | oracle_idle: List.delete(pool.oracle_idle, agent_pid)}
@@ -639,7 +641,7 @@ defmodule Apothecary.Dispatcher do
               Apothecary.Brewer.assign_worktree(
                 agent_pid,
                 claimed,
-                project_dir,
+                question_path,
                 nil,
                 project_dir
               )
@@ -703,6 +705,22 @@ defmodule Apothecary.Dispatcher do
 
   defp ensure_git_worktree(worktree, project_dir) do
     Apothecary.WorktreeManager.checkout(project_dir, worktree.id)
+  end
+
+  defp resolve_question_path(worktree, project_dir) do
+    case worktree.parent_worktree_id do
+      nil ->
+        project_dir
+
+      parent_id ->
+        case Apothecary.Worktrees.get_worktree(parent_id) do
+          {:ok, %{git_path: path}} when not is_nil(path) and path != "" ->
+            if File.dir?(path), do: path, else: project_dir
+
+          _ ->
+            project_dir
+        end
+    end
   end
 
   defp resolve_project_dir(%{project_id: project_id}) when not is_nil(project_id) do

@@ -774,13 +774,15 @@ defmodule Apothecary.Brewer do
     project_digest =
       if project_dir, do: Apothecary.ProjectDigest.generate(project_dir), else: ""
 
+    worktree_context = build_worktree_question_context(worktree, project_dir)
+
     """
     You are a codebase expert answering a question about the project in: #{project_dir}
 
     ## Question
     #{worktree.title}
     #{if worktree.description && worktree.description != worktree.title, do: "\n#{worktree.description}", else: ""}
-
+    #{worktree_context}
     ## Project Structure
     #{project_digest}
 
@@ -791,6 +793,81 @@ defmodule Apothecary.Brewer do
     - Answer the question thoroughly by reading relevant source files.
     - Be concise but complete. Use code references (file:line) where helpful.
     """
+  end
+
+  defp build_worktree_question_context(worktree, project_dir) do
+    parent_id = worktree.parent_worktree_id
+
+    if is_nil(parent_id) do
+      ""
+    else
+      case Apothecary.Worktrees.get_worktree(parent_id) do
+        {:ok, parent} ->
+          sections = [
+            "## Worktree Context",
+            "This question is about worktree **#{parent.id}**: #{parent.title}",
+            "Branch: #{parent.git_branch || "unknown"}",
+            "Status: #{parent.status || "unknown"}"
+          ]
+
+          # Add tasks
+          tasks = Apothecary.Worktrees.list_tasks(worktree_id: parent_id)
+
+          sections =
+            if tasks != [] do
+              task_lines =
+                Enum.map(tasks, fn t ->
+                  marker = if t.status in ["done", "closed"], do: "[x]", else: "[ ]"
+                  "  #{marker} #{t.title} (#{t.status})"
+                end)
+
+              sections ++ ["", "### Tasks"] ++ task_lines
+            else
+              sections
+            end
+
+          # Add diff stat
+          sections =
+            if parent.git_path && project_dir do
+              case Apothecary.Git.worktree_diff_stat(project_dir, parent.git_path) do
+                {:ok, stat} when stat != "" ->
+                  sections ++ ["", "### Changes (diff stat)", stat]
+
+                _ ->
+                  sections
+              end
+            else
+              sections
+            end
+
+          # Add commit log
+          sections =
+            if parent.git_path && project_dir do
+              case Apothecary.Git.worktree_log(project_dir, parent.git_path, 10) do
+                {:ok, log} when log != "" ->
+                  sections ++ ["", "### Recent Commits", log]
+
+                _ ->
+                  sections
+              end
+            else
+              sections
+            end
+
+          # Add notes
+          sections =
+            if parent.notes && parent.notes != "" do
+              sections ++ ["", "### Brewer Notes", parent.notes]
+            else
+              sections
+            end
+
+          Enum.join(sections, "\n") <> "\n\n"
+
+        {:error, _} ->
+          ""
+      end
+    end
   end
 
   defp build_prompt(worktree, tasks, worktree_path) do

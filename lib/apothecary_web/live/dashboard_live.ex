@@ -1494,6 +1494,25 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
+  # --- Worktree oracle event handlers ---
+
+  @impl true
+  def handle_event("worktree-ask", %{"text" => text, "worktree_id" => worktree_id}, socket) do
+    text = String.trim(text)
+
+    if text == "" do
+      {:noreply, socket}
+    else
+      create_question(text, socket, worktree_id)
+    end
+  end
+
+  @impl true
+  def handle_event("delete-worktree-question", %{"id" => id}, socket) do
+    Worktrees.close(id)
+    {:noreply, socket}
+  end
+
   # --- Project event handlers ---
 
   @impl true
@@ -3656,6 +3675,8 @@ defmodule ApothecaryWeb.DashboardLive do
                         has_preview_config={@has_preview_config}
                         pending_action={@pending_action}
                         loading_action={@loading_action}
+                        worktree_questions={Enum.filter(@questions, fn q -> q.parent_worktree_id == @selected_task_id end)}
+                        agents={@agents}
                       />
                     <% true -> %>
                       <% running = @worktrees_by_status["running"] || []
