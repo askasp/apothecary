@@ -1203,6 +1203,8 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :pending_action, :any, default: nil
   attr :loading_action, :atom, default: nil
   attr :editing_child_id, :string, default: nil
+  attr :worktree_questions, :list, default: []
+  attr :agents, :list, default: []
 
   def worktree_detail(assigns) do
     pr_url = Map.get(assigns.task, :pr_url)
@@ -1568,7 +1570,14 @@ defmodule ApothecaryWeb.DashboardComponents do
         <.copy_button target="#task-notes-content" />
       </div>
 
-      <%!-- 9. MCP SERVERS --%>
+      <%!-- 9. ASK ABOUT THIS WORKTREE --%>
+      <.worktree_oracle
+        worktree_id={@task.id}
+        questions={@worktree_questions}
+        agents={@agents}
+      />
+
+      <%!-- 10. MCP SERVERS --%>
       <div class="mb-5">
         <div class="section-header mb-2">MCP SERVERS</div>
         <div style="font-size: var(--font-size-sm);">
@@ -1581,6 +1590,163 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </div>
     </div>
+    """
+  end
+
+  # ── Worktree Oracle (inline question panel) ─
+
+  attr :worktree_id, :string, required: true
+  attr :questions, :list, default: []
+  attr :agents, :list, default: []
+
+  defp worktree_oracle(assigns) do
+    active_wt_ids =
+      assigns.agents
+      |> Enum.flat_map(fn a ->
+        if a.current_worktree, do: [to_string(a.current_worktree.id)], else: []
+      end)
+      |> MapSet.new()
+
+    sorted = Enum.sort_by(assigns.questions, fn q -> q.created_at || "" end, :desc)
+
+    assigns =
+      assigns
+      |> assign(:sorted, sorted)
+      |> assign(:active_wt_ids, active_wt_ids)
+
+    ~H"""
+    <div class="mb-5">
+      <div class="section-header mb-2">ASK</div>
+      <%!-- Question list --%>
+      <%= for q <- @sorted do %>
+        <% is_thinking =
+          (q.notes == nil or q.notes == "") and MapSet.member?(@active_wt_ids, q.id) %>
+        <% has_answer = q.notes != nil and q.notes != "" %>
+        <div class="mb-3" style="font-size: var(--font-size-sm);">
+          <div class="flex items-start gap-2">
+            <span style={"color: #{cond do
+              is_thinking -> "var(--concocting)"
+              has_answer -> "var(--accent)"
+              true -> "var(--muted)"
+            end}; flex-shrink: 0; margin-top: 2px;"}>
+              <%= cond do %>
+                <% is_thinking -> %>
+                  <.braille_spinner id={"wt-q-#{q.id}"} offset={0} />
+                <% has_answer -> %>
+                  &#x25CF;
+                <% true -> %>
+                  &#x25CB;
+              <% end %>
+            </span>
+            <div class="flex-1 min-w-0">
+              <div style="color: var(--text); font-weight: 500;">
+                {String.slice(q.title, 0, 80)}{if String.length(q.title) > 80, do: "..."}
+              </div>
+              <%= if has_answer do %>
+                <div
+                  class="mt-1 oracle-body"
+                  style="color: var(--dim); font-size: var(--font-size-xs); line-height: 1.5;"
+                >
+                  {format_oracle_response(q.notes)}
+                </div>
+              <% else %>
+                <%= if is_thinking do %>
+                  <div
+                    class="mt-1 flex items-center gap-1"
+                    style="color: var(--concocting); font-size: var(--font-size-xs);"
+                  >
+                    thinking&hellip;
+                  </div>
+                <% else %>
+                  <div class="mt-1" style="color: var(--muted); font-size: var(--font-size-xs);">
+                    queued
+                  </div>
+                <% end %>
+              <% end %>
+            </div>
+            <span
+              phx-click="delete-worktree-question"
+              phx-value-id={q.id}
+              class="cursor-pointer opacity-0 group-hover:opacity-100 flex-shrink-0"
+              style="color: var(--error); font-size: var(--font-size-xxs);"
+              data-confirm="Delete this question?"
+            >
+              del
+            </span>
+          </div>
+        </div>
+      <% end %>
+      <%!-- Input --%>
+      <div class="relative mt-2">
+        <textarea
+          id={"worktree-ask-#{@worktree_id}"}
+          rows="1"
+          phx-hook=".WorktreeAsk"
+          data-worktree-id={@worktree_id}
+          autocomplete="off"
+          class="moonlight-input w-full resize-none"
+          style="min-height: 32px; max-height: 80px; font-size: var(--font-size-sm); padding: 8px 32px 8px 10px;"
+          placeholder="ask about this worktree..."
+        ></textarea>
+        <button
+          id={"worktree-ask-send-#{@worktree_id}"}
+          phx-hook=".WorktreeAskSend"
+          data-worktree-id={@worktree_id}
+          type="button"
+          class="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer p-1"
+          style="color: var(--muted);"
+          title="Send (Enter)"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            class="w-3 h-3"
+          >
+            <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" />
+          </svg>
+        </button>
+      </div>
+      <div class="mt-1" style="color: var(--muted); font-size: var(--font-size-xxs);">
+        ask about this worktree's changes
+      </div>
+    </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".WorktreeAsk">
+      export default {
+        mounted() {
+          this.el.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault()
+              const text = this.el.value.trim()
+              if (text) {
+                this.pushEvent("worktree-ask", {
+                  text,
+                  worktree_id: this.el.dataset.worktreeId
+                })
+                this.el.value = ""
+              }
+            }
+          })
+        }
+      }
+    </script>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".WorktreeAskSend">
+      export default {
+        mounted() {
+          this.el.addEventListener("click", () => {
+            const worktreeId = this.el.dataset.worktreeId
+            const textarea = document.getElementById("worktree-ask-" + worktreeId)
+            if (textarea) {
+              const text = textarea.value.trim()
+              if (text) {
+                this.pushEvent("worktree-ask", { text, worktree_id: worktreeId })
+                textarea.value = ""
+              }
+            }
+          })
+        }
+      }
+    </script>
     """
   end
 
