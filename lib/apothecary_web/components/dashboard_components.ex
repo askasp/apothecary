@@ -1090,10 +1090,20 @@ defmodule ApothecaryWeb.DashboardComponents do
         adding_task_to={@adding_task_to}
       />
 
+      <%!-- Idle brewers --%>
+      <%= for agent <- @agents do %>
+        <%= if agent.status in [:idle, :starting] do %>
+          <div class="px-3 py-0.5" style="font-size: var(--font-size-sm); color: var(--muted); opacity: 0.5;">
+            <.braille_spinner id={"idle-#{agent.id}"} offset={agent.id} type={:bubbles} />
+            brewer {agent.id} <span style="font-style: italic;">idle</span>
+          </div>
+        <% end %>
+      <% end %>
+
       <%!-- Bottled group (collapsed by default) --%>
       <%= if @bottled != [] do %>
         <div
-          class="cursor-pointer py-1"
+          class="cursor-pointer py-1 px-1"
           phx-click="toggle-done-collapse"
           style="font-size: var(--font-size-sm);"
         >
@@ -1128,7 +1138,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
-  # Tree group component
+  # Tree group component — compact card list for branch panel
   attr :label, :any, default: nil
   attr :count, :integer, default: 0
   attr :color, :string, required: true
@@ -1146,119 +1156,70 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp tree_group(assigns) do
     ~H"""
     <div style={"opacity: #{@opacity};"}>
-      <div
-        :if={@label}
-        class="pt-1.5 pb-0.5"
-        style={"color: #{@color}; font-size: var(--font-size-sm);"}
-      >
-        {@label} ({@count})
-        <.braille_spinner :if={@animated_header_dot} id="tree-brewing-spinner" offset={0} />
-      </div>
       <div style="font-size: var(--font-size-sm);">
-        <%= for {entry, idx} <- Enum.with_index(@entries) do %>
-          <% last? = idx == length(@entries) - 1
-          wt = entry.worktree
+        <%= for {entry, _idx} <- Enum.with_index(@entries) do %>
+          <% wt = entry.worktree
           selected? = selected_entry?(@card_ids, @selected_card, wt.id)
+          card_num = card_number(@card_ids, wt.id)
           tasks = entry.tasks
           done_count = Enum.count(tasks, &(&1.status in ["done", "closed"]))
           total_count = length(tasks) %>
-          <%!-- Leading connector from group label --%>
-          <div :if={@label && idx == 0} class="tree-char pl-1" style="font-size: var(--font-size-sm);">
-            │
-          </div>
           <div
-            style={"#{if selected?, do: "border-left: 2px solid var(--accent); background: var(--surface); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);", else: "border-left: 2px solid transparent;"}"}
-            class="cursor-pointer"
+            class={"branch-card #{if selected?, do: "branch-card--selected"}"}
             phx-click="select-task"
             phx-value-id={wt.id}
             data-card-id={wt.id}
             data-selected={if(selected?, do: "true")}
           >
-            <%!-- Title line with progress on right --%>
-            <div class="flex items-center gap-1.5 py-1 px-2">
+            <div class="flex items-center gap-1.5">
+              <%!-- Status dot --%>
               <%= if @animated_header_dot do %>
                 <span style={"color: #{@color}; flex-shrink: 0;"}>
-                  <.braille_spinner id={"wt-spin-#{wt.id}"} offset={idx * 3} />
+                  <.braille_spinner id={"wt-spin-#{wt.id}"} offset={card_num * 3} />
                 </span>
               <% else %>
                 <span class={@dot_class} style={"color: #{@color}; flex-shrink: 0;"}>{@dot}</span>
               <% end %>
-              <span
-                class="truncate"
-                style={"color: #{@title_color}; font-weight: 500;"}
-              >
+              <%!-- Card number --%>
+              <span style="color: var(--muted); font-size: var(--font-size-xs); min-width: 12px;">
+                {card_num}
+              </span>
+              <%!-- Title --%>
+              <span class="truncate" style={"color: #{@title_color}; font-weight: 500;"}>
                 {wt.title || wt.id}
               </span>
-              <span
-                class="ml-auto flex items-center gap-1.5 flex-shrink-0"
-                style="font-size: var(--font-size-xs); color: var(--muted);"
-              >
+              <%!-- Right side: progress ratio + blocks + arrow --%>
+              <span class="ml-auto flex items-center gap-1.5 flex-shrink-0" style="font-size: var(--font-size-xs); color: var(--muted);">
                 <span :if={total_count > 0}>{done_count}/{total_count}</span>
                 <span :if={total_count > 0} class="branch-progress">
-                  <%= for i <- 0..(total_count - 1) do %>
+                  <%= for i <- 0..min(total_count - 1, 15) do %>
                     <span
                       class="branch-progress-block"
                       style={"background: #{if i < done_count, do: @color, else: "var(--border)"}; opacity: #{if i < done_count, do: "1", else: "0.4"};"}
                     />
                   <% end %>
                 </span>
+                <span :if={selected?} style="color: var(--accent);">&#x2197;</span>
               </span>
             </div>
           </div>
-          <%!-- Inline tasks sub-tree --%>
-          <%= if tasks != [] do %>
-            <div class="pl-8" style="font-size: var(--font-size-xs);">
-              <%= for {task, tidx} <- Enum.with_index(tasks) do %>
-                <% tlast? = tidx == length(tasks) - 1
-                {ing_dot, ing_dot_color, ing_dot_class} = task_dot(task.status)
-                ing_text_color = task_text_color(task.status) %>
-                <div class="flex items-baseline gap-1 py-px px-1">
-                  <span class="tree-char">{if tlast?, do: "└─", else: "├─"}</span>
-                  <%= if task.status == "in_progress" do %>
-                    <span style={"color: #{ing_dot_color};"}>
-                      <.braille_spinner id={"ing-spin-#{task.id}"} offset={tidx * 3} />
-                    </span>
-                  <% else %>
-                    <span class={ing_dot_class} style={"color: #{ing_dot_color};"}>{ing_dot}</span>
-                  <% end %>
-                  <span style={"color: #{ing_text_color};"}>{task.title}</span>
-                </div>
-              <% end %>
-            </div>
-          <% end %>
-          <%!-- Inline task add indicator --%>
-          <div
-            :if={@adding_task_to == wt.id}
-            class="pl-8 py-0.5"
-            style="font-size: var(--font-size-xs);"
-          >
-            <div class="flex items-baseline gap-1 px-1">
-              <span class="tree-char">└╴</span>
-              <span style="color: var(--accent);">○</span>
-              <span style="color: var(--dim); font-style: italic;">adding...</span>
-            </div>
-          </div>
-          <%!-- Connector line between entries (not after last) --%>
-          <div :if={!last?} class="tree-char pl-1" style="font-size: var(--font-size-sm);">│</div>
         <% end %>
       </div>
     </div>
     """
   end
 
-  defp task_dot(status) when status in ["done", "closed"], do: {"●", "var(--accent)", ""}
-  defp task_dot("in_progress"), do: {"∷", "var(--concocting)", "task-dot-active"}
-  defp task_dot("blocked"), do: {"○", "var(--error)", ""}
-  defp task_dot(_), do: {"○", "var(--muted)", ""}
-
-  defp task_text_color(status) when status in ["done", "closed"], do: "var(--dim)"
-  defp task_text_color("in_progress"), do: "var(--text)"
-  defp task_text_color(_), do: "var(--muted)"
-
   defp selected_entry?(card_ids, selected_card, wt_id) do
     case Enum.at(card_ids, selected_card) do
       ^wt_id -> true
       _ -> false
+    end
+  end
+
+  defp card_number(card_ids, wt_id) do
+    case Enum.find_index(card_ids, &(&1 == wt_id)) do
+      nil -> 0
+      idx -> idx + 1
     end
   end
 
@@ -1299,10 +1260,31 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> assign(:last_commit, last_commit)
       |> assign(:loading?, assigns.loading_action != nil)
 
+    # Compute task progress
+    done_children = Enum.count(assigns.children, fn c -> c.status in ["done", "closed"] end)
+    total_children = length(assigns.children)
+
+    # Git branch name
+    git_branch = Map.get(assigns.task, :git_branch, nil)
+
+    # Dev server port
+    dev_port =
+      case assigns.dev_server do
+        %{ports: [%{port: p} | _], status: :running} -> p
+        _ -> nil
+      end
+
+    assigns =
+      assigns
+      |> assign(:done_children, done_children)
+      |> assign(:total_children, total_children)
+      |> assign(:git_branch, git_branch)
+      |> assign(:dev_port, dev_port)
+
     ~H"""
     <div class="px-4 py-4 scroll-main overflow-y-auto flex-1">
       <%!-- 1. Title + Status --%>
-      <div class="mb-5">
+      <div class="mb-3">
         <div class="flex items-start justify-between">
           <div class="flex-1 min-w-0">
             <%= if @editing_field == :title do %>
@@ -1324,28 +1306,52 @@ defmodule ApothecaryWeb.DashboardComponents do
                 </div>
               </.form>
             <% else %>
-              <div
-                phx-click="start-edit"
-                phx-value-field="title"
-                class="cursor-pointer"
-                style="font-size: var(--font-size-title); font-weight: 600; color: var(--text);"
-              >
-                {@task.title}
+              <div class="flex items-center gap-2">
+                <span style={"color: #{@status_color};"}>
+                  <%= if @status_group == "brewing" do %>
+                    <.braille_spinner id="detail-title-spin" offset={0} />
+                  <% else %>
+                    {@status_dot}
+                  <% end %>
+                </span>
+                <span
+                  phx-click="start-edit"
+                  phx-value-field="title"
+                  class="cursor-pointer"
+                  style="font-size: var(--font-size-title); font-weight: 600; color: var(--text);"
+                >
+                  {@task.title}
+                </span>
               </div>
             <% end %>
+            <%!-- Metadata line --%>
             <div
-              class="flex items-center gap-2 mt-1"
+              class="flex items-center gap-1 mt-1 flex-wrap"
               style="font-size: var(--font-size-xs); color: var(--muted);"
             >
               <span>{@task.id}</span>
-              <span :if={@brewer_label} style="color: var(--dim);">&middot; {@brewer_label}</span>
+              <span :if={@git_branch}>
+                &middot; <span style="color: var(--dim);">{@git_branch}</span>
+              </span>
+              <span :if={@brewer_label}>
+                &middot; <span style="color: var(--dim);">{@brewer_label}</span>
+              </span>
+              <span :if={@time_ago}>&middot; {@time_ago}</span>
+              <span
+                :if={@dev_port}
+                class="cursor-pointer"
+                style="color: var(--accent);"
+                phx-click="show-preview"
+                phx-value-port={@dev_port}
+              >
+                &middot; :{@dev_port} &#x2197;
+              </span>
               <span
                 :if={@working_agent && !@working_agent.sandboxed}
                 style="color: var(--error); font-weight: 500;"
               >
                 &middot; unsandboxed
               </span>
-              <span :if={@time_ago}>&middot; {@time_ago}</span>
             </div>
           </div>
           <button
@@ -1358,8 +1364,26 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </div>
 
-      <%!-- 2. Actions --%>
-      <div class="flex items-center gap-3 mb-5" style="font-size: var(--font-size-sm);">
+      <%!-- 2. Progress bar --%>
+      <div :if={@total_children > 0} class="mb-3">
+        <div class="flex items-center gap-2 mb-1">
+          <div class="flex-1 rounded-full overflow-hidden" style="height: 4px; background: var(--border);">
+            <div
+              style={"width: #{if @total_children > 0, do: round(@done_children / @total_children * 100), else: 0}%; height: 100%; background: var(--accent); border-radius: 9999px; transition: width 0.3s ease;"}
+            />
+          </div>
+          <span style="font-size: var(--font-size-xs); color: var(--muted); flex-shrink: 0;">
+            {@done_children}/{@total_children}
+          </span>
+        </div>
+        <div :if={@done_children > 0} style="font-size: var(--font-size-xs); color: var(--dim);">
+          <span style="color: var(--accent);">&#x25CF;</span>
+          {@done_children} done {String.duplicate("✓", @done_children)}
+        </div>
+      </div>
+
+      <%!-- 3. Actions --%>
+      <div class="flex items-center gap-3 mb-4" style="font-size: var(--font-size-sm);">
         <%= if @loading? do %>
           <div class="flex items-center gap-2">
             <.spinner class="w-3 h-3" />
