@@ -147,7 +147,12 @@ let Hooks = {
       })
       this.handleEvent("focus-primary-input", () => {
         const el = document.getElementById("primary-input")
-        if (el) el.focus()
+        if (el) {
+          el.focus()
+          // Place cursor at end of any pre-filled text
+          const len = el.value.length
+          el.setSelectionRange(len, len)
+        }
       })
     },
     updated() {
