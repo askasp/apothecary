@@ -882,18 +882,20 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @impl true
   def handle_event("search-select", %{"query" => query}, socket) do
-    socket =
-      socket
-      |> assign(:search_mode, false)
-      |> assign(:search_query, "")
+    query = String.trim(query)
 
-    # Jump to first match if any
-    query_lower = String.downcase(query)
+    if query == "" do
+      {:noreply,
+       socket
+       |> assign(:search_query, "")
+       |> assign(:input_focused, false)
+       |> push_event("blur-input", %{})}
+    else
+      query_lower = String.downcase(query)
 
-    match_idx =
-      if query_lower != "" do
+      # Try to find a matching worktree first
+      match_idx =
         Enum.find_index(socket.assigns.card_ids, fn card_id ->
-          # Find entry title matching the query
           entry = find_entry_by_id(socket.assigns.worktrees_by_status, card_id)
 
           entry &&
@@ -902,17 +904,27 @@ defmodule ApothecaryWeb.DashboardLive do
               query_lower
             )
         end)
-      end
 
-    socket = if match_idx, do: assign(socket, :selected_card, match_idx), else: socket
-    {:noreply, socket}
+      if match_idx do
+        # Found a match — select it
+        {:noreply,
+         socket
+         |> assign(:search_query, "")
+         |> assign(:selected_card, match_idx)
+         |> assign(:input_focused, false)
+         |> push_event("blur-input", %{})}
+      else
+        # No match — create a new worktree
+        socket = assign(socket, :search_query, "")
+        create_from_input(query, socket)
+      end
+    end
   end
 
   @impl true
   def handle_event("search-blur", _params, socket) do
     {:noreply,
      socket
-     |> assign(:search_mode, false)
      |> assign(:search_query, "")
      |> assign(:input_focused, false)}
   end
