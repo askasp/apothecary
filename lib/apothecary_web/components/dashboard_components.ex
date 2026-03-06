@@ -889,6 +889,58 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
+  # ── Chat Input (bottom of left panel) ─────────────────
+
+  attr :input_focused, :boolean, default: false
+  attr :selected_card_id, :string, default: nil
+  attr :adding_task_to, :string, default: nil
+
+  def chat_input(assigns) do
+    ~H"""
+    <div
+      style="border-top: 1px solid var(--border); background: var(--bg);"
+      class="px-3 py-2 flex-shrink-0"
+    >
+      <div class="flex items-center gap-2">
+        <span
+          :if={@selected_card_id}
+          style="background: color-mix(in srgb, var(--concocting) 20%, var(--surface)); color: var(--concocting); font-size: var(--font-size-xxs); padding: 2px 6px; border-radius: 4px; font-weight: 600; white-space: nowrap;"
+        >
+          wt:{String.slice(@selected_card_id || "", 0..5)}
+        </span>
+        <input
+          id="primary-input"
+          type="text"
+          phx-hook="ChatBottomInput"
+          phx-focus="input-focus"
+          phx-blur="input-blur"
+          autocomplete="off"
+          class="chat-bottom-input"
+          placeholder={
+            if @selected_card_id,
+              do: "task to queue · ?question to ask",
+              else: "describe a worktree · ?question to ask"
+          }
+          data-wt-id={@selected_card_id}
+          data-refocus={if @adding_task_to, do: "true", else: "false"}
+        />
+        <span style="color: var(--muted); font-size: var(--font-size-xs);">/</span>
+      </div>
+      <div class="mt-0.5" style="font-size: var(--font-size-xxs); color: var(--muted);">
+        <span :if={!@selected_card_id}>type to queue task · ?text to ask without task</span>
+        <span :if={@selected_card_id}>↵text to ask without task</span>
+      </div>
+      <div
+        id="file-autocomplete-dropdown"
+        phx-update="ignore"
+        class="hidden fixed max-h-48 overflow-y-auto"
+        style="background: var(--surface); border: 1px solid var(--border); z-index: 9999;"
+      >
+      </div>
+    </div>
+    """
+  end
+
   # ── Worktree Tree ──────────────────────────────────────
 
   attr :worktrees_by_status, :map, required: true
@@ -938,23 +990,56 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> assign(:queued, queued)
       |> assign(:bottled, bottled)
 
+    total_count = length(brewing) + length(assaying) + length(queued) + length(bottled)
+
+    # Count idle agents
+    idle_count =
+      Enum.count(assigns.agents, fn a -> a.status in [:idle, :starting] end)
+
+    assigns =
+      assigns
+      |> assign(:total_count, total_count)
+      |> assign(:idle_count, idle_count)
+
     ~H"""
     <div class="px-3 py-1">
-      <%!-- Search input --%>
-      <div :if={@search_mode} class="mb-3 flex items-center gap-2">
-        <span style="color: var(--muted);">/</span>
-        <form phx-submit="search-select" phx-change="search-tree" class="flex-1">
-          <input
-            name="query"
-            id="tree-search-input"
-            autofocus
-            placeholder="search..."
-            class="search-input"
-            value={@search_query}
-            phx-focus="input-focus"
-            phx-blur="search-blur"
-          />
+      <%!-- Search / create bar --%>
+      <div class="mb-2 mt-1">
+        <form phx-submit="search-select" phx-change="search-tree" class="relative">
+          <div class="flex items-center gap-2" style="background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;">
+            <span style="color: var(--muted); font-size: var(--font-size-sm);">&#x2315;</span>
+            <input
+              name="query"
+              id="tree-search-input"
+              placeholder="search branch or create new..."
+              class="flex-1 bg-transparent outline-none"
+              style="color: var(--text); font-size: var(--font-size-sm); border: none; min-width: 0;"
+              value={@search_query}
+              phx-focus="input-focus"
+              phx-blur="search-blur"
+            />
+            <span style="color: var(--muted); font-size: var(--font-size-xxs);">enter</span>
+          </div>
         </form>
+      </div>
+
+      <%!-- Summary line --%>
+      <div
+        class="flex items-center gap-1 mb-2 px-1"
+        style="font-size: var(--font-size-xs);"
+      >
+        <span :if={@brewing != []} style="color: var(--concocting); font-weight: 600;">
+          {length(@brewing)} brewing
+        </span>
+        <span :if={@assaying != []} style="color: var(--assaying); font-weight: 600;">
+          {length(@assaying)} reviewing
+        </span>
+        <span style="color: var(--muted);">
+          {@total_count} total
+        </span>
+        <span :if={@idle_count > 0} style="color: var(--muted);">
+          {@idle_count} idle
+        </span>
       </div>
 
       <%!-- Brewing group --%>
@@ -1076,8 +1161,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           selected? = selected_entry?(@card_ids, @selected_card, wt.id)
           tasks = entry.tasks
           done_count = Enum.count(tasks, &(&1.status in ["done", "closed"]))
-          total_count = length(tasks)
-          port = entry_port(entry.dev_server) %>
+          total_count = length(tasks) %>
           <%!-- Leading connector from group label --%>
           <div :if={@label && idx == 0} class="tree-char pl-1" style="font-size: var(--font-size-sm);">
             │
@@ -1090,38 +1174,34 @@ defmodule ApothecaryWeb.DashboardComponents do
             data-card-id={wt.id}
             data-selected={if(selected?, do: "true")}
           >
-            <%!-- Tree line + dot + title --%>
-            <div class="flex items-baseline gap-1.5 py-0.5 px-1">
-              <span class="tree-char">{if last?, do: "└─", else: "├─"}</span>
+            <%!-- Title line with progress on right --%>
+            <div class="flex items-center gap-1.5 py-1 px-2">
               <%= if @animated_header_dot do %>
-                <span style={"color: #{@color};"}>
+                <span style={"color: #{@color}; flex-shrink: 0;"}>
                   <.braille_spinner id={"wt-spin-#{wt.id}"} offset={idx * 3} />
                 </span>
               <% else %>
-                <span class={@dot_class} style={"color: #{@color};"}>{@dot}</span>
+                <span class={@dot_class} style={"color: #{@color}; flex-shrink: 0;"}>{@dot}</span>
               <% end %>
-              <span style={"color: #{@title_color}; font-weight: 500;"}>{wt.title || wt.id}</span>
               <span
-                :if={selected?}
-                style="color: var(--accent); margin-left: auto; padding-right: 4px;"
+                class="truncate"
+                style={"color: #{@title_color}; font-weight: 500;"}
               >
-                ◂
+                {wt.title || wt.id}
               </span>
-            </div>
-            <%!-- Metadata line --%>
-            <div
-              class="flex items-center gap-1 pl-8 pb-0.5"
-              style="color: var(--muted); font-size: var(--font-size-xs);"
-            >
-              <span>{wt.id}</span>
-              <span :if={total_count > 0}>
-                &middot; {done_count}/{total_count} {progress_bar(done_count, total_count)}
-              </span>
-              <span :if={port}>
-                &middot; :{port}
-              </span>
-              <span :if={@status_label}>
-                &middot; {@status_label}
+              <span
+                class="ml-auto flex items-center gap-1.5 flex-shrink-0"
+                style="font-size: var(--font-size-xs); color: var(--muted);"
+              >
+                <span :if={total_count > 0}>{done_count}/{total_count}</span>
+                <span :if={total_count > 0} class="branch-progress">
+                  <%= for i <- 0..(total_count - 1) do %>
+                    <span
+                      class="branch-progress-block"
+                      style={"background: #{if i < done_count, do: @color, else: "var(--border)"}; opacity: #{if i < done_count, do: "1", else: "0.4"};"}
+                    />
+                  <% end %>
+                </span>
               </span>
             </div>
           </div>
@@ -1166,13 +1246,6 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
-  defp progress_bar(done, total) when total > 0 do
-    filled = round(done / total * 6)
-    String.duplicate("▓", filled) <> String.duplicate("░", 6 - filled)
-  end
-
-  defp progress_bar(_, _), do: ""
-
   defp task_dot(status) when status in ["done", "closed"], do: {"●", "var(--accent)", ""}
   defp task_dot("in_progress"), do: {"∷", "var(--concocting)", "task-dot-active"}
   defp task_dot("blocked"), do: {"○", "var(--error)", ""}
@@ -1188,9 +1261,6 @@ defmodule ApothecaryWeb.DashboardComponents do
       _ -> false
     end
   end
-
-  defp entry_port(%{status: :running, ports: [%{port: p} | _]}), do: p
-  defp entry_port(_), do: nil
 
   # ── Worktree Detail ────────────────────────────────────
 
@@ -1930,25 +2000,27 @@ defmodule ApothecaryWeb.DashboardComponents do
         <% @active_tab == :workbench && @selected_task_id && @selected_task -> %>
           <%!-- Workbench with selected task --%>
           <div class="flex items-center gap-2">
-            <span>h/l pane</span>
+            <span>/ chat</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>j/k scroll</span>
+            <span>j/k nav</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>q back</span>
+            <span>J/K reorder</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>s stop</span>
             <span style="color: var(--border);">&middot;</span>
             <span>d diff</span>
             <span style="color: var(--border);">&middot;</span>
             <span>p preview</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>r requeue</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>m merge</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>x close</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>? help</span>
+            <span>?question</span>
           </div>
           <div class="flex items-center gap-2">
+            <.braille_spinner
+              :if={@running_count > 0}
+              id="statusbar-bubbles-detail"
+              offset={0}
+              type={:bubbles}
+            />
             <span style="color: var(--concocting);">&#x25CF;{@running_count}</span>
             <span style="color: var(--assaying);">&#x25CE;{@pr_count}</span>
             <span style="color: var(--muted);">&#x25CB;{@queued_count}</span>
@@ -1957,27 +2029,15 @@ defmodule ApothecaryWeb.DashboardComponents do
         <% true -> %>
           <%!-- Workbench / default status bar --%>
           <div class="flex items-center gap-2">
+            <span>/ chat</span>
+            <span style="color: var(--border);">&middot;</span>
             <span>j/k nav</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>l detail</span>
+            <span>J/K reorder</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>a add</span>
+            <span>s stop</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>s brew</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>d diff</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>+/- brewers</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>/ search</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>P pull main</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>w/e/o tabs</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>⌃tab project</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>? help</span>
+            <span>?question</span>
           </div>
           <div class="flex items-center gap-2">
             <.braille_spinner
@@ -2282,29 +2342,28 @@ defmodule ApothecaryWeb.DashboardComponents do
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4" style="font-size: var(--font-size-sm);">
           <div>
             <div style="color: var(--accent);" class="mb-1">navigation</div>
-            <.hk key="j/k" desc="next/prev worktree" />
-            <.hk key="h/l" desc="switch panes" />
-            <.hk key="g/G" desc="first/last worktree" />
+            <.hk key="j/k" desc="next/prev branch" />
+            <.hk key="h/l" desc="focus detail/branches" />
+            <.hk key="w" desc="focus branches panel" />
+            <.hk key="g/G" desc="first/last branch" />
             <.hk key="1-4" desc="jump to lane" />
-            <.hk key="enter" desc="inspect worktree" />
+            <.hk key="enter" desc="focus branch" />
             <.hk key="esc" desc="close / back" />
-            <.hk key="/" desc="search" />
             <.hk key="⌘k" desc="switch project" />
           </div>
 
           <div>
-            <div style="color: var(--accent);" class="mb-1">tabs</div>
-            <.hk key="w" desc="workbench" />
-            <.hk key="e" desc="recurring" />
-            <.hk key="o" desc="oracle" />
+            <div style="color: var(--accent);" class="mb-1">input</div>
+            <.hk key="c / /" desc="focus chat input" />
+            <.hk key="a" desc="add task to branch" />
+            <.hk key="?text" desc="ask question" />
           </div>
 
           <div>
             <div style="color: var(--accent);" class="mb-1">actions</div>
             <.hk key="s" desc="start/stop brewing" />
             <.hk key="+/-" desc="brewer/oracle count" />
-            <.hk key="c" desc="focus input" />
-            <.hk key="a" desc="add task" />
+            <.hk key="J/K" desc="reorder priority" />
             <.hk key="d" desc="view diff" />
             <.hk key="t" desc="open terminal" />
             <.hk key="p" desc="open preview" />
@@ -2316,15 +2375,15 @@ defmodule ApothecaryWeb.DashboardComponents do
             <div style="color: var(--accent);" class="mb-1">global</div>
             <.hk key="R" desc="requeue orphans" />
             <.hk key="D" desc="delete worktree" />
+            <.hk key="e" desc="recurring tasks" />
+            <.hk key="o" desc="oracle view" />
           </div>
 
           <div :if={@has_selected_task}>
             <div style="color: var(--accent);" class="mb-1">detail view</div>
-            <.hk key="c" desc="create PR" />
             <.hk key="m" desc="merge" />
             <.hk key="r" desc="requeue" />
             <.hk key="x" desc="close worktree" />
-            <.hk key="&#x2191;/&#x2193;" desc="change priority" />
           </div>
         </div>
       </div>

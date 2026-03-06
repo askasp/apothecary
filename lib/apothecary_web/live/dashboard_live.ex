@@ -1441,6 +1441,18 @@ defmodule ApothecaryWeb.DashboardLive do
             {:noreply, put_flash(socket, :error, "Failed to add task")}
         end
 
+      # Chat input with a focused worktree: add task to it (or ? for question)
+      socket.assigns.selected_task_id && not String.starts_with?(text, "?") ->
+        wt_id = socket.assigns.selected_task_id
+
+        case Worktrees.create_task(%{title: text, worktree_id: wt_id, priority: 3}) do
+          {:ok, item} when not is_nil(item) ->
+            {:noreply, put_flash(socket, :info, "Task queued: #{item.title}")}
+
+          _ ->
+            {:noreply, put_flash(socket, :error, "Failed to queue task")}
+        end
+
       true ->
         create_from_input(text, socket)
     end
@@ -2167,24 +2179,17 @@ defmodule ApothecaryWeb.DashboardLive do
         socket
       end
     else
-      # Move focus to detail pane (if a task is selected)
-      if socket.assigns.selected_task_id do
-        assign(socket, :focused_pane, :detail)
-      else
-        # No detail open — open the selected card
-        case Enum.at(socket.assigns.card_ids, socket.assigns.selected_card) do
-          nil -> socket
-          id -> push_patch(socket, to: project_path(socket) <> "?task=#{id}")
-        end
-      end
+      # Move focus to right panel (branch list)
+      assign(socket, :focused_pane, :tree)
     end
   end
 
   defp handle_hotkey("h", socket) do
-    if socket.assigns.focused_pane == :detail do
-      assign(socket, :focused_pane, :tree)
-    else
+    if is_nil(socket.assigns.current_project) do
       socket
+    else
+      # Move focus to left panel (detail)
+      assign(socket, :focused_pane, :detail)
     end
   end
 
@@ -2237,30 +2242,10 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("c", socket) do
-    if socket.assigns.active_tab == :oracle do
-      push_event(socket, "focus-oracle-input", %{})
-    else
-      card_ids = socket.assigns.card_ids
-      selected = socket.assigns.selected_card
-
-      case Enum.at(card_ids, selected) do
-        card_id when is_binary(card_id) and selected >= 0 ->
-          if String.starts_with?(card_id, "wt-") do
-            # Focus primary input pre-filled with question prefix for this worktree
-            socket
-            |> push_event("set-input-value", %{
-              selector: "#primary-input",
-              value: "? ##{card_id} "
-            })
-            |> push_event("focus-primary-input", %{})
-          else
-            push_event(socket, "focus-primary-input", %{})
-          end
-
-        _ ->
-          push_event(socket, "focus-primary-input", %{})
-      end
-    end
+    # Focus chat input at the bottom
+    socket
+    |> assign(:focused_pane, :detail)
+    |> push_event("focus-primary-input", %{})
   end
 
   defp handle_hotkey("/", socket) do
@@ -2268,31 +2253,18 @@ defmodule ApothecaryWeb.DashboardLive do
       # Landing page: focus the path input
       push_event(socket, "focus-element", %{selector: "#project-path-input"})
     else
+      # Focus chat input (same as 'c')
       socket
-      |> assign(:search_mode, true)
-      |> assign(:search_query, "")
-      |> push_event("focus-element", %{selector: "#tree-search-input"})
+      |> assign(:focused_pane, :detail)
+      |> push_event("focus-primary-input", %{})
     end
   end
 
   defp handle_hotkey("a", socket) do
-    card_ids = socket.assigns.card_ids
-    selected = socket.assigns.selected_card
-
-    case Enum.at(card_ids, selected) do
-      nil ->
-        assign(socket, :editing_setting, :brewers)
-
-      card_id ->
-        if String.starts_with?(to_string(card_id), "wt-") do
-          # Focus primary input pre-filled with worktree ref for adding task
-          socket
-          |> assign(:adding_task_to, card_id)
-          |> push_event("focus-element", %{selector: "#primary-input"})
-        else
-          assign(socket, :editing_setting, :brewers)
-        end
-    end
+    # Focus chat input to add task to focused worktree
+    socket
+    |> assign(:focused_pane, :detail)
+    |> push_event("focus-primary-input", %{})
   end
 
   defp handle_hotkey(key, socket) when key in ["+", "="] do
@@ -2535,9 +2507,27 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   # Tab switching: w=workbench, e=recipes, o=oracle
-  defp handle_hotkey("w", socket), do: assign(socket, :active_tab, :workbench)
+  defp handle_hotkey("w", socket), do: assign(socket, :focused_pane, :tree)
   defp handle_hotkey("e", socket), do: assign(socket, :active_tab, :recipes)
   defp handle_hotkey("o", socket), do: assign(socket, :active_tab, :oracle)
+
+  defp handle_hotkey("J", socket) do
+    # Reorder: move selected worktree down in priority
+    if socket.assigns.selected_task_id do
+      handle_event("change-priority", %{"dir" => "down"}, socket) |> elem(1)
+    else
+      socket
+    end
+  end
+
+  defp handle_hotkey("K", socket) do
+    # Reorder: move selected worktree up in priority
+    if socket.assigns.selected_task_id do
+      handle_event("change-priority", %{"dir" => "up"}, socket) |> elem(1)
+    else
+      socket
+    end
+  end
 
   defp handle_hotkey(_key, socket), do: socket
 
@@ -3590,61 +3580,17 @@ defmodule ApothecaryWeb.DashboardLive do
                 </div>
               </div>
             <% @active_tab == :workbench -> %>
-              <%!-- Split panel: tree left, detail right --%>
+              <%!-- Split panel: focused branch left, branch list right --%>
               <div class="flex h-full">
-                <%!-- Left panel: settings + input + tree --%>
-                <div
-                  class="h-full overflow-y-auto scroll-main flex-shrink-0"
-                  style={"width: 44%; min-width: 320px; max-width: 520px; border-right: 1px solid var(--border); #{if @focused_pane == :tree, do: "border-top: 2px solid var(--accent);", else: "border-top: 2px solid transparent;"}"}
-                  phx-click="focus-tree-pane"
-                >
-                  <.settings_line
-                    target_count={@target_count}
-                    auto_pr={@auto_pr}
-                    swarm_status={@swarm_status}
-                    agents={@agents}
-                    dev_server={@dev_servers[@current_project && @current_project.id]}
-                    has_preview_config={@has_project_preview_config}
-                    project_id={@current_project && @current_project.id}
-                    editing_setting={@editing_setting}
-                    show_preview_help={@show_preview_help}
-                  />
-
-                  <.worktree_input
-                    input_focused={@input_focused}
-                    input_highlighted={@selected_card == -1}
-                    adding_task_to={@adding_task_to}
-                  />
-
-                  <.worktree_tree
-                    worktrees_by_status={@worktrees_by_status}
-                    agents={@agents}
-                    dev_servers={@dev_servers}
-                    selected_card={@selected_card}
-                    card_ids={@card_ids}
-                    collapsed_done={@collapsed_done}
-                    adding_task_to={@adding_task_to}
-                    search_mode={@search_mode}
-                    search_query={@search_query}
-                  />
-                </div>
-
-                <%!-- Right panel: detail or placeholder --%>
+                <%!-- Left panel: focused branch detail + chat input --%>
                 <div
                   id="detail-pane"
-                  class="flex-1 h-full overflow-y-auto scroll-main"
+                  class="flex-1 flex flex-col h-full min-w-0"
                   style={"#{if @focused_pane == :detail, do: "border-top: 2px solid var(--accent);", else: "border-top: 2px solid transparent;"}"}
                   phx-click="focus-detail-pane"
                 >
-                  <%= cond do %>
-                    <% @show_preview -> %>
-                      <.preview_panel
-                        port={@preview_port}
-                        dev_servers={@dev_servers}
-                        current_project={@current_project}
-                        show_logs={@show_preview_logs}
-                      />
-                    <% @selected_task && @selected_task_id -> %>
+                  <div class="flex-1 overflow-y-auto scroll-main">
+                    <%= if @selected_task && @selected_task_id do %>
                       <.worktree_detail
                         task={@selected_task}
                         children={@children}
@@ -3657,26 +3603,12 @@ defmodule ApothecaryWeb.DashboardLive do
                         pending_action={@pending_action}
                         loading_action={@loading_action}
                       />
-                    <% true -> %>
-                      <% running = @worktrees_by_status["running"] || []
-                      pr = @worktrees_by_status["pr"] || []
-
-                      ready_blocked =
-                        (@worktrees_by_status["ready"] || []) ++
-                          (@worktrees_by_status["blocked"] || [])
-
-                      all_entries =
-                        running ++ pr ++ ready_blocked ++ (@worktrees_by_status["done"] || [])
-
-                      all_tasks = Enum.flat_map(all_entries, fn e -> e.tasks end)
-                      done_tasks = Enum.count(all_tasks, fn t -> t.status in ["done", "closed"] end)
-                      total_tasks = length(all_tasks) %>
+                    <% else %>
                       <div
                         class="h-full flex items-center justify-center"
                         style="color: var(--muted); font-size: var(--font-size-sm);"
                       >
                         <div class="text-center">
-                          <%!-- Diamond icons --%>
                           <div
                             class="flex items-center justify-center gap-2 mb-4"
                             style="font-size: 20px; color: var(--dim);"
@@ -3685,65 +3617,76 @@ defmodule ApothecaryWeb.DashboardLive do
                             <span style="color: var(--muted);">&#x2500;</span>
                             <span>&#x25C7;</span>
                           </div>
-
                           <div class="mb-4" style="color: var(--dim);">
-                            select a worktree to inspect
+                            select a branch to focus
                           </div>
-
                           <div class="mb-1" style="font-size: var(--font-size-xs);">
                             <span style="font-weight: 600;">j/k</span>
-                            navigate <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+                            navigate
+                            <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
                             <span style="font-weight: 600;">enter</span>
-                            inspect
+                            focus
                           </div>
                           <div class="mb-1" style="font-size: var(--font-size-xs);">
-                            <span style="font-weight: 600;">a</span>
-                            add task <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
-                            <span style="font-weight: 600;">x</span>
-                            delete
-                          </div>
-                          <div class="mb-4" style="font-size: var(--font-size-xs);">
-                            <span style="font-weight: 600;">s</span> stop brewing
-                          </div>
-
-                          <div
-                            style="border-top: 1px solid var(--border); margin: 0 auto; max-width: 280px;"
-                            class="pt-4"
-                          >
-                            <div
-                              class="flex items-center justify-center gap-6 mb-2"
-                              style="font-size: var(--font-size-xs);"
-                            >
-                              <div>
-                                <span style="color: var(--concocting);">&#x25CF;</span>
-                                <span style="color: var(--dim); font-weight: 600;">
-                                  {length(running)}
-                                </span>
-                                <div style="color: var(--muted);">brewing</div>
-                              </div>
-                              <div>
-                                <span style="color: var(--assaying);">&#x25CE;</span>
-                                <span style="color: var(--dim); font-weight: 600;">{length(pr)}</span>
-                                <div style="color: var(--muted);">reviewing</div>
-                              </div>
-                              <div>
-                                <span style="color: var(--muted);">&#x25CB;</span>
-                                <span style="color: var(--dim); font-weight: 600;">
-                                  {length(ready_blocked)}
-                                </span>
-                                <div style="color: var(--muted);">stocked</div>
-                              </div>
-                            </div>
-                            <div
-                              :if={total_tasks > 0}
-                              class="mt-2"
-                              style="color: var(--dim); font-size: var(--font-size-xs);"
-                            >
-                              {done_tasks}/{total_tasks} tasks complete
-                            </div>
+                            <span style="font-weight: 600;">c</span>
+                            chat
+                            <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+                            <span style="font-weight: 600;">w</span>
+                            branches
                           </div>
                         </div>
                       </div>
+                    <% end %>
+                  </div>
+                  <%!-- Chat input at bottom --%>
+                  <.chat_input
+                    input_focused={@input_focused}
+                    selected_card_id={@selected_card_id}
+                    adding_task_to={@adding_task_to}
+                  />
+                </div>
+
+                <%!-- Resize handle --%>
+                <div id="resize-handle" phx-hook="ResizeHandle" class="resize-handle" />
+
+                <%!-- Right panel: branches or preview --%>
+                <div
+                  id="branch-panel"
+                  class="h-full overflow-y-auto scroll-main flex-shrink-0"
+                  style={"width: 480px; min-width: 320px; max-width: 700px; border-left: 1px solid var(--border); #{if @focused_pane == :tree, do: "border-top: 2px solid var(--accent);", else: "border-top: 2px solid transparent;"}"}
+                  phx-click="focus-tree-pane"
+                >
+                  <%= if @show_preview do %>
+                    <.preview_panel
+                      port={@preview_port}
+                      dev_servers={@dev_servers}
+                      current_project={@current_project}
+                      show_logs={@show_preview_logs}
+                    />
+                  <% else %>
+                    <.settings_line
+                      target_count={@target_count}
+                      auto_pr={@auto_pr}
+                      swarm_status={@swarm_status}
+                      agents={@agents}
+                      dev_server={@dev_servers[@current_project && @current_project.id]}
+                      has_preview_config={@has_project_preview_config}
+                      project_id={@current_project && @current_project.id}
+                      editing_setting={@editing_setting}
+                      show_preview_help={@show_preview_help}
+                    />
+
+                    <.worktree_tree
+                      worktrees_by_status={@worktrees_by_status}
+                      agents={@agents}
+                      dev_servers={@dev_servers}
+                      selected_card={@selected_card}
+                      card_ids={@card_ids}
+                      collapsed_done={@collapsed_done}
+                      adding_task_to={@adding_task_to}
+                      search_mode={@search_mode}
+                      search_query={@search_query}
+                    />
                   <% end %>
                 </div>
               </div>

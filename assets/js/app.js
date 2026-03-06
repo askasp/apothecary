@@ -592,6 +592,72 @@ let Hooks = {
       })
     }
   },
+  ResizeHandle: {
+    mounted() {
+      this.dragging = false
+      const panel = document.getElementById("branch-panel")
+
+      this.el.addEventListener("mousedown", (e) => {
+        e.preventDefault()
+        this.dragging = true
+        this.el.classList.add("dragging")
+        document.body.style.cursor = "col-resize"
+        document.body.style.userSelect = "none"
+      })
+
+      this._onMove = (e) => {
+        if (!this.dragging || !panel) return
+        const containerRect = panel.parentElement.getBoundingClientRect()
+        const newWidth = containerRect.right - e.clientX
+        const clamped = Math.max(320, Math.min(700, newWidth))
+        panel.style.width = clamped + "px"
+        localStorage.setItem("apothecary-branch-panel-width", clamped)
+      }
+
+      this._onUp = () => {
+        if (this.dragging) {
+          this.dragging = false
+          this.el.classList.remove("dragging")
+          document.body.style.cursor = ""
+          document.body.style.userSelect = ""
+        }
+      }
+
+      document.addEventListener("mousemove", this._onMove)
+      document.addEventListener("mouseup", this._onUp)
+
+      // Restore saved width
+      const saved = localStorage.getItem("apothecary-branch-panel-width")
+      if (saved && panel) {
+        panel.style.width = saved + "px"
+      }
+    },
+    destroyed() {
+      document.removeEventListener("mousemove", this._onMove)
+      document.removeEventListener("mouseup", this._onUp)
+    }
+  },
+  ChatBottomInput: {
+    mounted() {
+      this.el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault()
+          e.stopPropagation()
+          const text = this.el.value.trim()
+          if (text) {
+            this.pushEvent("submit-input", { text })
+            this.el.value = ""
+          }
+        }
+      })
+    },
+    updated() {
+      // Re-focus if server re-renders while adding tasks
+      if (this.el.dataset.refocus === "true") {
+        this.el.focus()
+      }
+    }
+  },
   ScrollBottom: {
     mounted() {
       this.scrollToBottom()
