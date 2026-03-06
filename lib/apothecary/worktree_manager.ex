@@ -265,14 +265,58 @@ defmodule Apothecary.WorktreeManager do
 
     case Apothecary.Git.add_worktree_for_branch(project_dir, path, branch) do
       {:ok, _} ->
+        # Clean up any leftover merge state in the new worktree
+        cleanup_unmerged_state(path)
+
         Logger.info(
           "Created worktree for #{worktree_id} from existing branch #{branch}: #{path}"
         )
 
         {:ok, path}
 
+      {:error, {_code, msg}} = error when is_binary(msg) ->
+        if unmerged_error?(msg) do
+          # The project dir or branch has unmerged files — abort merge and retry
+          Logger.warning("Unmerged files detected, aborting merge and retrying: #{msg}")
+          Apothecary.Git.abort_merge(project_dir)
+
+          case Apothecary.Git.add_worktree_for_branch(project_dir, path, branch) do
+            {:ok, _} ->
+              cleanup_unmerged_state(path)
+
+              Logger.info(
+                "Created worktree for #{worktree_id} from branch #{branch} after merge abort: #{path}"
+              )
+
+              {:ok, path}
+
+            {:error, retry_reason} ->
+              {:error, retry_reason}
+          end
+        else
+          error
+        end
+
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp unmerged_error?(msg) do
+    String.contains?(msg, "unmerged") or
+      String.contains?(msg, "resolve your current index") or
+      String.contains?(msg, "not possible because you have unmerged files")
+  end
+
+  defp cleanup_unmerged_state(worktree_path) do
+    # Check if the worktree has unmerged files (leftover from a prior merge conflict)
+    case Apothecary.CLI.run("git", ["diff", "--name-only", "--diff-filter=U"], cd: worktree_path) do
+      {:ok, output} when output != "" ->
+        Logger.warning("Worktree #{worktree_path} has unmerged files, resetting merge state")
+        Apothecary.Git.abort_merge(worktree_path)
+
+      _ ->
+        :ok
     end
   end
 
@@ -292,6 +336,16 @@ defmodule Apothecary.WorktreeManager do
       {:ok, _} ->
         :ok
 
+      {:error, {_code, msg}} when is_binary(msg) ->
+        if unmerged_error?(msg) do
+          Logger.warning("Unmerged files during pull_main, aborting merge: #{msg}")
+          Apothecary.Git.abort_merge(project_dir)
+        else
+          Logger.warning(
+            "Failed to pull main before creating worktree #{worktree_id}: #{msg}"
+          )
+        end
+
       {:error, reason} ->
         Logger.warning(
           "Failed to pull main before creating worktree #{worktree_id}: #{inspect(reason)}"
@@ -302,6 +356,23 @@ defmodule Apothecary.WorktreeManager do
       {:ok, _} ->
         Logger.info("Created worktree for #{worktree_id}: #{path} (branch: #{branch})")
         {:ok, path, branch}
+
+      {:error, {_code, msg}} = error when is_binary(msg) ->
+        if unmerged_error?(msg) do
+          Logger.warning("Unmerged files during worktree create, aborting merge and retrying")
+          Apothecary.Git.abort_merge(project_dir)
+
+          case Apothecary.Git.create_worktree(project_dir, path, branch, base_branch) do
+            {:ok, _} ->
+              Logger.info("Created worktree for #{worktree_id} after merge abort: #{path}")
+              {:ok, path, branch}
+
+            {:error, retry_reason} ->
+              {:error, retry_reason}
+          end
+        else
+          error
+        end
 
       {:error, reason} ->
         {:error, reason}
