@@ -299,6 +299,31 @@ defmodule Apothecary.Git do
     :ok
   end
 
+  @doc "List local branch names, excluding the current branch and detached HEAD."
+  def list_branches(project_dir) do
+    case CLI.run("git", ["branch", "--format=%(refname:short)"], cd: project_dir) do
+      {:ok, output} ->
+        branches =
+          output
+          |> String.split("\n", trim: true)
+          |> Enum.map(&String.trim/1)
+          |> Enum.reject(&(&1 == ""))
+
+        {:ok, branches}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Create a worktree that checks out an existing branch (no new branch created).
+  Uses `git worktree add <path> <branch>` without -b.
+  """
+  def add_worktree_for_branch(project_dir, path, branch) do
+    CLI.run("git", ["worktree", "add", path, branch], cd: project_dir)
+  end
+
   @doc "Delete a local branch. Uses -D (force) since the branch may already be merged."
   def delete_branch(project_dir, branch) do
     CLI.run("git", ["branch", "-D", branch], cd: project_dir)

@@ -881,7 +881,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           </script>
         </div>
         <div class="mt-1" style="color: var(--muted); font-size: var(--font-size-xs);">
-          describe a worktree, or ? to ask
+          describe a worktree, ? to ask, # to open a branch
         </div>
       <% end %>
     </div>

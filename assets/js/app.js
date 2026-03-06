@@ -187,6 +187,7 @@ let Hooks = {
       this.mentionStart = -1
       this.selectedIndex = 0
       this.results = []
+      this.autocompleteType = null // "file" or "branch"
 
       this.dropdown = document.getElementById("file-autocomplete-dropdown")
 
@@ -212,7 +213,11 @@ let Hooks = {
           }
           if (e.key === "Enter") {
             e.preventDefault()
-            this.selectFile(this.results[this.selectedIndex])
+            if (this.autocompleteType === "branch") {
+              this.selectBranch(this.results[this.selectedIndex])
+            } else {
+              this.selectFile(this.results[this.selectedIndex])
+            }
             return
           }
           if (e.key === "Escape") {
@@ -236,12 +241,34 @@ let Hooks = {
         const pos = this.el.selectionStart
         const text = this.el.value.substring(0, pos)
 
+        // Check for # at the very start of the input (branch autocomplete)
+        const branchMatch = text.match(/^#([^\s]*)$/)
+        if (branchMatch) {
+          const query = branchMatch[1]
+          this.mentionStart = 0
+          this.mentionQuery = query
+          this.autocompleteType = "branch"
+
+          this.pushEvent("branch-search", { query }, (reply) => {
+            this.results = reply.branches || []
+            this.selectedIndex = 0
+            if (this.results.length > 0) {
+              this.mentionActive = true
+              this.renderDropdown()
+            } else {
+              this.closeMention()
+            }
+          })
+          return
+        }
+
         // Find the last @ that starts a mention (after whitespace or at start)
         const match = text.match(/(^|[\s\n])@([^\s]*)$/)
         if (match) {
           const query = match[2]
           this.mentionStart = pos - query.length - 1 // -1 for the @
           this.mentionQuery = query
+          this.autocompleteType = "file"
 
           if (query.length >= 1) {
             this.pushEvent("file-search", { query }, (reply) => {
@@ -315,8 +342,20 @@ let Hooks = {
       this.closeMention()
     },
 
+    selectBranch(branch) {
+      if (!branch) return
+      // Replace input with #branch-name followed by a space for optional description
+      this.el.value = "#" + branch + " "
+      const newPos = this.el.value.length
+      this.el.selectionStart = newPos
+      this.el.selectionEnd = newPos
+      this.el.focus()
+      this.closeMention()
+    },
+
     closeMention() {
       this.mentionActive = false
+      this.autocompleteType = null
       this.results = []
       this.selectedIndex = 0
       if (this.dropdown) {
@@ -338,16 +377,30 @@ let Hooks = {
         // Temporarily render off-screen to measure height
         this.dropdown.style.top = "-9999px"
 
-        this.dropdown.innerHTML = this.results.map((file, i) => {
-          const parts = file.split("/")
-          const fileName = parts.pop()
-          const dir = parts.join("/")
-          const isSelected = i === this.selectedIndex
-          return `<div class="file-ac-item ${isSelected ? "file-ac-selected" : ""}" data-index="${i}">
-            <span class="file-ac-name">${this.escapeHtml(fileName)}</span>
-            ${dir ? `<span class="file-ac-dir">${this.escapeHtml(dir)}/</span>` : ""}
-          </div>`
-        }).join("")
+        if (this.autocompleteType === "branch") {
+          this.dropdown.innerHTML = this.results.map((branch, i) => {
+            const isSelected = i === this.selectedIndex
+            // Split branch into prefix (e.g. "worktree/") and name
+            const lastSlash = branch.lastIndexOf("/")
+            const prefix = lastSlash >= 0 ? branch.substring(0, lastSlash + 1) : ""
+            const name = lastSlash >= 0 ? branch.substring(lastSlash + 1) : branch
+            return `<div class="file-ac-item ${isSelected ? "file-ac-selected" : ""}" data-index="${i}">
+              <span class="file-ac-name">${this.escapeHtml(name)}</span>
+              ${prefix ? `<span class="file-ac-dir">${this.escapeHtml(prefix)}</span>` : ""}
+            </div>`
+          }).join("")
+        } else {
+          this.dropdown.innerHTML = this.results.map((file, i) => {
+            const parts = file.split("/")
+            const fileName = parts.pop()
+            const dir = parts.join("/")
+            const isSelected = i === this.selectedIndex
+            return `<div class="file-ac-item ${isSelected ? "file-ac-selected" : ""}" data-index="${i}">
+              <span class="file-ac-name">${this.escapeHtml(fileName)}</span>
+              ${dir ? `<span class="file-ac-dir">${this.escapeHtml(dir)}/</span>` : ""}
+            </div>`
+          }).join("")
+        }
 
         // Position above textarea (or below if not enough space above)
         const dropdownHeight = this.dropdown.offsetHeight

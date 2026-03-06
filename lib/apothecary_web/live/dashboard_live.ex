@@ -538,6 +538,35 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("branch-search", %{"query" => query}, socket) do
+    project = socket.assigns.current_project
+
+    branches =
+      if project do
+        case Apothecary.Git.list_branches(project.path) do
+          {:ok, branches} ->
+            # Filter out main/master (they should use normal worktree creation)
+            main = Apothecary.Git.main_branch(project.path)
+
+            branches
+            |> Enum.reject(&(&1 == main))
+            |> Enum.filter(fn branch ->
+              query == "" or
+                String.contains?(String.downcase(branch), String.downcase(query))
+            end)
+            |> Enum.take(15)
+
+          {:error, _} ->
+            []
+        end
+      else
+        []
+      end
+
+    {:reply, %{branches: branches}, socket}
+  end
+
+  @impl true
   # Cmd+K (macOS) toggles project switcher
   def handle_event("hotkey", %{"metaKey" => true, "key" => "k"}, socket) do
     handle_event("hotkey", %{"ctrlKey" => true, "key" => "k"}, socket)
@@ -2834,12 +2863,18 @@ defmodule ApothecaryWeb.DashboardLive do
   # --- Input handlers ---
 
   defp create_from_input(text, socket) do
-    # Detect question prefix: "? question text"
-    if String.starts_with?(text, "?") do
-      question_text = text |> String.trim_leading("?") |> String.trim()
-      create_question(question_text, socket)
-    else
-      create_task_from_input(text, socket)
+    cond do
+      # Branch prefix: "#branch-name optional description"
+      String.starts_with?(text, "#") ->
+        create_worktree_from_branch(text, socket)
+
+      # Question prefix: "? question text"
+      String.starts_with?(text, "?") ->
+        question_text = text |> String.trim_leading("?") |> String.trim()
+        create_question(question_text, socket)
+
+      true ->
+        create_task_from_input(text, socket)
     end
   end
 
@@ -2865,6 +2900,72 @@ defmodule ApothecaryWeb.DashboardLive do
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
+    end
+  end
+
+  defp create_worktree_from_branch(text, socket) do
+    # Parse "#branch-name optional description"
+    rest = text |> String.trim_leading("#") |> String.trim()
+    {branch, description} = split_branch_and_description(rest)
+
+    project = socket.assigns.current_project
+
+    cond do
+      is_nil(project) ->
+        {:noreply, put_flash(socket, :error, "Select a project first")}
+
+      branch == "" ->
+        {:noreply, put_flash(socket, :error, "No branch specified")}
+
+      true ->
+        title = description || branch
+
+        case Worktrees.create_worktree(%{
+               title: title,
+               description: description,
+               git_branch: branch,
+               priority: 3,
+               project_id: project.id
+             }) do
+          {:ok, item} when not is_nil(item) ->
+            # Pre-checkout the git worktree for this branch
+            case Apothecary.WorktreeManager.checkout_branch(
+                   project.path,
+                   item.id,
+                   branch
+                 ) do
+              {:ok, path, _branch} ->
+                Worktrees.update_worktree(item.id, %{git_path: path, git_branch: branch})
+
+                {:noreply,
+                 socket
+                 |> assign(:adding_task_to, item.id)
+                 |> put_flash(:info, "Worktree created from branch #{branch}")}
+
+              {:error, reason} ->
+                {:noreply,
+                 socket
+                 |> assign(:adding_task_to, item.id)
+                 |> put_flash(
+                   :error,
+                   "Worktree created but branch checkout failed: #{inspect(reason)}"
+                 )}
+            end
+
+          {:ok, nil} ->
+            {:noreply, put_flash(socket, :error, "Failed to create worktree")}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
+        end
+    end
+  end
+
+  defp split_branch_and_description(text) do
+    # Branch name is everything up to the first whitespace
+    case String.split(text, ~r/\s+/, parts: 2) do
+      [branch] -> {branch, nil}
+      [branch, desc] -> {branch, String.trim(desc)}
     end
   end
 

@@ -27,6 +27,14 @@ defmodule Apothecary.WorktreeManager do
     GenServer.call(__MODULE__, {:checkout, project_dir, worktree_id, opts}, 30_000)
   end
 
+  @doc """
+  Check out an existing branch in a new worktree. Returns {:ok, path, branch} or {:error, reason}.
+  Unlike checkout/3 which creates a new branch, this uses an existing branch directly.
+  """
+  def checkout_branch(project_dir, worktree_id, branch) do
+    GenServer.call(__MODULE__, {:checkout_branch, project_dir, worktree_id, branch}, 30_000)
+  end
+
   @doc "Look up an existing worktree. Returns {:ok, path, branch} or :not_found."
   def get_worktree(worktree_id) do
     GenServer.call(__MODULE__, {:get_worktree, worktree_id})
@@ -89,6 +97,33 @@ defmodule Apothecary.WorktreeManager do
               path: path,
               branch: branch,
               parent_worktree_id: parent_worktree_id,
+              project_dir: project_dir
+            }
+
+            worktrees = Map.put(state.worktrees, worktree_id, entry)
+            {:reply, {:ok, path, branch}, %{state | worktrees: worktrees}}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
+    end
+  end
+
+  @impl true
+  def handle_call({:checkout_branch, project_dir, worktree_id, branch}, _from, state) do
+    worktree_id = to_string(worktree_id)
+
+    case Map.get(state.worktrees, worktree_id) do
+      %{path: path, branch: existing_branch} ->
+        {:reply, {:ok, path, existing_branch}, state}
+
+      nil ->
+        case create_worktree_for_branch(project_dir, worktree_id, branch) do
+          {:ok, path} ->
+            entry = %{
+              path: path,
+              branch: branch,
+              parent_worktree_id: nil,
               project_dir: project_dir
             }
 
@@ -214,6 +249,30 @@ defmodule Apothecary.WorktreeManager do
       end
     else
       acc
+    end
+  end
+
+  defp create_worktree_for_branch(project_dir, worktree_id, branch) do
+    base_dir = worktrees_dir(project_dir)
+    File.mkdir_p!(base_dir)
+
+    safe_id = String.replace(worktree_id, ~r/[^a-zA-Z0-9_-]/, "-")
+    path = Path.join(base_dir, safe_id)
+
+    if File.dir?(path) do
+      Apothecary.Git.remove_worktree(project_dir, path)
+    end
+
+    case Apothecary.Git.add_worktree_for_branch(project_dir, path, branch) do
+      {:ok, _} ->
+        Logger.info(
+          "Created worktree for #{worktree_id} from existing branch #{branch}: #{path}"
+        )
+
+        {:ok, path}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
