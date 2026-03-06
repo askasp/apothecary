@@ -538,26 +538,30 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
-  # Cmd+K (macOS) toggles project switcher
-  def handle_event("hotkey", %{"metaKey" => true, "key" => "k"}, socket) do
-    handle_event("hotkey", %{"ctrlKey" => true, "key" => "k"}, socket)
+  # Cmd+K/P (macOS) toggles project switcher
+  def handle_event("hotkey", %{"metaKey" => true, "key" => key}, socket)
+      when key in ["k", "p"] do
+    handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
   end
 
   def handle_event("hotkey", %{"metaKey" => true}, socket), do: {:noreply, socket}
 
-  def handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
-      when key in ["n", "p"] do
+  # Ctrl+N navigates down in project switcher when open
+  def handle_event("hotkey", %{"ctrlKey" => true, "key" => "n"}, socket) do
     if socket.assigns.show_project_switcher do
-      mapped = if key == "n", do: "j", else: "k"
-      {:noreply, handle_switcher_hotkey(mapped, socket)}
+      {:noreply, handle_switcher_hotkey("j", socket)}
     else
       {:noreply, socket}
     end
   end
 
-  # Ctrl+K toggles project switcher regardless of active tab
-  def handle_event("hotkey", %{"ctrlKey" => true, "key" => "k"}, socket) do
+  # Ctrl+P / Ctrl+K toggle project switcher (Ctrl+P also navigates up when open)
+  def handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
+      when key in ["p", "k"] do
     cond do
+      socket.assigns.show_project_switcher and key == "p" ->
+        {:noreply, handle_switcher_hotkey("k", socket)}
+
       socket.assigns.show_project_switcher ->
         {:noreply, assign(socket, :show_project_switcher, false)}
 

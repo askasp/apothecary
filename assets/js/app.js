@@ -77,8 +77,8 @@ let Hooks = {
           }
         }
 
-        // Ctrl+K / Cmd+K opens project switcher — let it through to LiveView
-        if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        // Ctrl+K/P / Cmd+K opens project switcher — let it through to LiveView
+        if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "p")) {
           e.preventDefault()
           return
         }
