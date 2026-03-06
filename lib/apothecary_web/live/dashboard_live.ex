@@ -1494,6 +1494,25 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
+  # --- Worktree oracle event handlers ---
+
+  @impl true
+  def handle_event("worktree-ask", %{"text" => text, "worktree_id" => worktree_id}, socket) do
+    text = String.trim(text)
+
+    if text == "" do
+      {:noreply, socket}
+    else
+      create_worktree_question(text, worktree_id, socket)
+    end
+  end
+
+  @impl true
+  def handle_event("delete-worktree-question", %{"id" => id}, socket) do
+    Worktrees.close(id)
+    {:noreply, socket}
+  end
+
   # --- Project event handlers ---
 
   @impl true
@@ -2843,6 +2862,28 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
+  defp create_worktree_question(text, worktree_id, socket) do
+    project_id =
+      if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
+
+    case Worktrees.create_worktree(%{
+           title: text,
+           kind: "question",
+           priority: 2,
+           project_id: project_id,
+           parent_worktree_id: worktree_id
+         }) do
+      {:ok, item} when not is_nil(item) ->
+        {:noreply, put_flash(socket, :info, "Question submitted about #{worktree_id}")}
+
+      {:ok, nil} ->
+        {:noreply, put_flash(socket, :error, "Failed to submit question")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
+    end
+  end
+
   defp create_question(text, socket) do
     project_id =
       if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
@@ -3614,6 +3655,8 @@ defmodule ApothecaryWeb.DashboardLive do
                         has_preview_config={@has_preview_config}
                         pending_action={@pending_action}
                         loading_action={@loading_action}
+                        worktree_questions={Enum.filter(@questions, fn q -> q.parent_worktree_id == @selected_task_id end)}
+                        agents={@agents}
                       />
                     <% true -> %>
                       <% running = @worktrees_by_status["running"] || []
