@@ -2459,10 +2459,10 @@ defmodule ApothecaryWeb.DashboardLive do
   defp handle_hotkey("e", socket), do: assign(socket, :active_tab, :recipes)
 
   defp handle_hotkey("n", socket) do
-    # Focus branch search input for new branch / search
+    # Focus right panel input for creating new worktree/task
     socket
-    |> assign(:focused_pane, :tree)
-    |> push_event("focus-element", %{selector: "#tree-search-input"})
+    |> assign(:focused_pane, :detail)
+    |> push_event("focus-primary-input", %{})
   end
 
   defp handle_hotkey("J", socket) do
