@@ -554,23 +554,6 @@ defmodule ApothecaryWeb.DashboardLive do
   @impl true
   # Cmd+K (macOS) toggles project switcher
   def handle_event("hotkey", %{"metaKey" => true, "key" => "k"}, socket) do
-    handle_event("hotkey", %{"ctrlKey" => true, "key" => "k"}, socket)
-  end
-
-  def handle_event("hotkey", %{"metaKey" => true}, socket), do: {:noreply, socket}
-
-  def handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
-      when key in ["n", "p"] do
-    if socket.assigns.show_project_switcher do
-      mapped = if key == "n", do: "j", else: "k"
-      {:noreply, handle_switcher_hotkey(mapped, socket)}
-    else
-      {:noreply, socket}
-    end
-  end
-
-  # Ctrl+K toggles project switcher regardless of active tab
-  def handle_event("hotkey", %{"ctrlKey" => true, "key" => "k"}, socket) do
     cond do
       socket.assigns.show_project_switcher ->
         {:noreply, assign(socket, :show_project_switcher, false)}
@@ -588,14 +571,26 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  # Ctrl+J/K/H/L always work for navigation, even when an input has focus
+  def handle_event("hotkey", %{"metaKey" => true}, socket), do: {:noreply, socket}
+
   def handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
-      when key in ["j", "h", "l"] do
+      when key in ["n", "p"] do
+    if socket.assigns.show_project_switcher do
+      mapped = if key == "n", do: "j", else: "k"
+      {:noreply, handle_switcher_hotkey(mapped, socket)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # Ctrl+H/J/K/L always work for navigation, even when an input has focus
+  def handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
+      when key in ["h", "j", "k", "l"] do
     cond do
       socket.assigns.loading_action != nil ->
         {:noreply, socket}
 
-      socket.assigns.show_project_switcher and key == "j" ->
+      socket.assigns.show_project_switcher and key in ["j", "k"] ->
         {:noreply, handle_switcher_hotkey(key, socket)}
 
       socket.assigns.diff_view != nil ->
@@ -3655,6 +3650,8 @@ defmodule ApothecaryWeb.DashboardLive do
           project_count={length(@projects)}
           questions={@questions}
           agents={@agents}
+          input_focused={@input_focused}
+          focused_pane={@focused_pane}
         />
       </div>
 

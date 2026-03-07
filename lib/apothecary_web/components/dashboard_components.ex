@@ -1988,6 +1988,8 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :project_count, :integer, default: 0
   attr :questions, :list, default: []
   attr :agents, :list, default: []
+  attr :input_focused, :boolean, default: false
+  attr :focused_pane, :atom, default: :tree
   def moonlight_status_bar(assigns) do
     running_count = length(assigns.worktrees_by_status["running"] || [])
     pr_count = length(assigns.worktrees_by_status["pr"] || [])
@@ -2007,17 +2009,26 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> assign(:queued_count, queued_count)
       |> assign(:done_count, done_count)
 
+    mode =
+      cond do
+        assigns.input_focused -> :insert
+        assigns.focused_pane == :detail -> :detail
+        true -> :normal
+      end
+
+    assigns = assign(assigns, :mode, mode)
+
     ~H"""
     <div class="status-bar flex items-center justify-between">
       <%= cond do %>
         <% is_nil(@current_project) -> %>
           <%!-- Landing status bar --%>
           <div class="flex items-center gap-2">
+            <.mode_badge mode={:normal} />
+            <span style="color: var(--border);">&middot;</span>
             <span>enter open</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>&#x2191;/&#x2193; select</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>tab autocomplete</span>
+            <span>j/k select</span>
             <span style="color: var(--border);">&middot;</span>
             <span>? help</span>
           </div>
@@ -2025,21 +2036,21 @@ defmodule ApothecaryWeb.DashboardComponents do
         <% @active_tab == :workbench && @selected_task_id && @selected_task -> %>
           <%!-- Workbench with selected task --%>
           <div class="flex items-center gap-2">
-            <span>/ chat</span>
+            <.mode_badge mode={@mode} />
             <span style="color: var(--border);">&middot;</span>
-            <span>j/k nav</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>J/K reorder</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>n new</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>s stop</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>d diff</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>p preview</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>?question</span>
+            <%= if @input_focused do %>
+              <span>esc normal</span>
+              <span style="color: var(--border);">&middot;</span>
+              <span>^hjkl nav</span>
+            <% else %>
+              <span>j/k nav</span>
+              <span style="color: var(--border);">&middot;</span>
+              <span>h/l panes</span>
+              <span style="color: var(--border);">&middot;</span>
+              <span>d diff</span>
+              <span style="color: var(--border);">&middot;</span>
+              <span>p preview</span>
+            <% end %>
           </div>
           <div class="flex items-center gap-2">
             <.braille_spinner
@@ -2056,17 +2067,21 @@ defmodule ApothecaryWeb.DashboardComponents do
         <% true -> %>
           <%!-- Workbench / default status bar --%>
           <div class="flex items-center gap-2">
-            <span>/ chat</span>
+            <.mode_badge mode={@mode} />
             <span style="color: var(--border);">&middot;</span>
-            <span>j/k nav</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>J/K reorder</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>n new</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>s stop</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>?question</span>
+            <%= if @input_focused do %>
+              <span>esc normal</span>
+              <span style="color: var(--border);">&middot;</span>
+              <span>^hjkl nav</span>
+            <% else %>
+              <span>j/k nav</span>
+              <span style="color: var(--border);">&middot;</span>
+              <span>h/l panes</span>
+              <span style="color: var(--border);">&middot;</span>
+              <span>n new</span>
+              <span style="color: var(--border);">&middot;</span>
+              <span>s brew</span>
+            <% end %>
           </div>
           <div class="flex items-center gap-2">
             <.braille_spinner
@@ -2373,17 +2388,18 @@ defmodule ApothecaryWeb.DashboardComponents do
             <div style="color: var(--accent);" class="mb-1">navigation</div>
             <.hk key="j/k" desc="next/prev branch" />
             <.hk key="h/l" desc="focus branches/detail" />
-            <.hk key="w" desc="focus branches panel" />
+            <.hk key="^hjkl" desc="navigate (works in input)" />
             <.hk key="g/G" desc="first/last branch" />
             <.hk key="1-4" desc="jump to lane" />
             <.hk key="enter" desc="focus branch" />
-            <.hk key="esc" desc="close / back" />
+            <.hk key="esc" desc="normal mode / back" />
             <.hk key="⌘k" desc="switch project" />
           </div>
 
           <div>
-            <div style="color: var(--accent);" class="mb-1">input</div>
+            <div style="color: var(--accent);" class="mb-1">input (insert mode)</div>
             <.hk key="c / /" desc="focus chat input" />
+            <.hk key="n" desc="new task/worktree" />
             <.hk key="a" desc="add task to branch" />
             <.hk key="?text" desc="ask question" />
           </div>
@@ -2417,6 +2433,21 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </div>
     </div>
+    """
+  end
+
+  defp mode_badge(assigns) do
+    {label, color} =
+      case assigns.mode do
+        :insert -> {"INSERT", "var(--concocting)"}
+        :detail -> {"DETAIL", "var(--assaying)"}
+        _ -> {"NORMAL", "var(--accent)"}
+      end
+
+    assigns = assigns |> assign(:label, label) |> assign(:color, color)
+
+    ~H"""
+    <span style={"color: #{@color}; font-weight: 600;"}>{@label}</span>
     """
   end
 
@@ -2698,7 +2729,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   end
 
   defp page_label(:dashboard), do: "NORMAL"
-  defp page_label(:agent), do: "BREWER"
+  defp page_label(:agent), do: "NORMAL"
   defp page_label(_), do: ""
 
   # ── Agent Status Badge (used by AgentLive) ───────────────

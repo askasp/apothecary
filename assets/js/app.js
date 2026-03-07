@@ -83,8 +83,9 @@ let Hooks = {
           }
         }
 
-        // Ctrl+K/P / Cmd+K opens project switcher — let it through to LiveView
-        if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "p")) {
+        // Ctrl+H/J/K/L — vim-style navigation even when input focused
+        // Ctrl+K/P / Cmd+K opens project switcher
+        if ((e.ctrlKey || e.metaKey) && ["h", "j", "k", "l", "p"].includes(e.key)) {
           e.preventDefault()
           return
         }
