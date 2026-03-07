@@ -99,6 +99,8 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:focused_pane, :tree)
       # Task inline input
       |> assign(:adding_task_to, nil)
+      # Branch creation mode
+      |> assign(:branch_mode, false)
       # Search mode
       |> assign(:search_mode, false)
       |> assign(:search_query, "")
@@ -1019,14 +1021,13 @@ defmodule ApothecaryWeb.DashboardLive do
          |> assign(:input_focused, false)
          |> push_event("blur-input", %{})}
       else
-        # No match — create a new worktree
-        socket =
-          socket
-          |> assign(:search_query, "")
-          |> assign(:input_focused, false)
-          |> push_event("blur-input", %{})
-
-        create_from_input(query, socket)
+        # No match — just clear the search
+        {:noreply,
+         socket
+         |> assign(:search_query, "")
+         |> assign(:input_focused, false)
+         |> push_event("blur-input", %{})
+         |> put_flash(:info, "No match. Press 'b' to create a branch.")}
       end
     end
   end
@@ -1569,6 +1570,27 @@ defmodule ApothecaryWeb.DashboardLive do
       text == "" ->
         {:noreply, socket}
 
+      # Branch creation mode: create worktree with typed name
+      socket.assigns.branch_mode ->
+        project_id =
+          if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
+
+        case Worktrees.create_worktree(%{
+               title: text,
+               priority: 3,
+               project_id: project_id
+             }) do
+          {:ok, item} when not is_nil(item) ->
+            {:noreply,
+             socket
+             |> assign(:branch_mode, false)
+             |> select_task(item.id)
+             |> put_flash(:info, "Branch created: #{text} — add tasks to start")}
+
+          _ ->
+            {:noreply, put_flash(socket, :error, "Failed to create branch")}
+        end
+
       # Task-add mode: create task in focused worktree (takes priority over ? prefix)
       socket.assigns.adding_task_to ->
         wt_id = socket.assigns.adding_task_to
@@ -1619,7 +1641,8 @@ defmodule ApothecaryWeb.DashboardLive do
         end
 
       true ->
-        create_from_input(text, socket)
+        # No context — hint the user to press 'b' or select a worktree
+        {:noreply, put_flash(socket, :info, "Press 'b' to create a branch, or select a worktree to add tasks")}
     end
   end
 
@@ -2076,6 +2099,9 @@ defmodule ApothecaryWeb.DashboardLive do
 
   defp handle_hotkey("Escape", socket) do
     cond do
+      socket.assigns.branch_mode ->
+        assign(socket, :branch_mode, false)
+
       socket.assigns.adding_task_to ->
         assign(socket, :adding_task_to, nil)
 
@@ -2291,9 +2317,10 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("c", socket) do
-    # Focus chat input in chat mode (clear task-add mode)
+    # Focus chat input in chat mode (clear task-add and branch modes)
     socket
     |> assign(:adding_task_to, nil)
+    |> assign(:branch_mode, false)
     |> assign(:focused_pane, :detail)
     |> push_event("focus-primary-input", %{})
   end
@@ -2577,6 +2604,15 @@ defmodule ApothecaryWeb.DashboardLive do
   # Tab switching: w=workbench, e=recipes
   defp handle_hotkey("w", socket), do: assign(socket, :focused_pane, :tree)
   defp handle_hotkey("e", socket), do: assign(socket, :active_tab, :recipes)
+
+  defp handle_hotkey("b", socket) do
+    # Enter branch creation mode and focus input
+    socket
+    |> assign(:branch_mode, true)
+    |> assign(:adding_task_to, nil)
+    |> assign(:focused_pane, :detail)
+    |> push_event("focus-primary-input", %{})
+  end
 
   defp handle_hotkey("n", socket) do
     # Focus right panel input for creating new worktree/task
@@ -2902,10 +2938,6 @@ defmodule ApothecaryWeb.DashboardLive do
 
   # --- Input handlers ---
 
-  defp create_from_input(text, socket) do
-    create_task_from_input(text, socket)
-  end
-
   defp create_question_for_worktree(text, socket) do
     question_text = text |> String.trim_leading("?") |> String.trim()
 
@@ -2938,61 +2970,6 @@ defmodule ApothecaryWeb.DashboardLive do
 
         {:ok, nil} ->
           {:noreply, put_flash(socket, :error, "Failed to submit question")}
-
-        {:error, reason} ->
-          {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
-      end
-    end
-  end
-
-  defp create_task_from_input(text, socket) do
-    {title, parent_id, dep_ids} = parse_smart_input(text)
-
-    if parent_id do
-      worktree_id =
-        if String.starts_with?(to_string(parent_id), "wt-") do
-          parent_id
-        else
-          case Worktrees.get_task(parent_id) do
-            {:ok, task} -> task.worktree_id || parent_id
-            _ -> parent_id
-          end
-        end
-
-      case Worktrees.create_task(%{title: title, worktree_id: worktree_id, priority: 3}) do
-        {:ok, item} when not is_nil(item) ->
-          Enum.each(dep_ids, fn dep_id ->
-            Worktrees.add_dependency(item.id, dep_id)
-          end)
-
-          {:noreply, put_flash(socket, :info, "Task added: #{item.id}")}
-
-        {:ok, nil} ->
-          {:noreply, put_flash(socket, :error, "Failed to add task")}
-
-        {:error, reason} ->
-          {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
-      end
-    else
-      {worktree_title, description} = split_title_description(title)
-
-      project_id =
-        if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
-
-      case Worktrees.create_worktree(%{
-             title: worktree_title,
-             description: description,
-             priority: 3,
-             project_id: project_id
-           }) do
-        {:ok, item} when not is_nil(item) ->
-          {:noreply,
-           socket
-           |> select_task(item.id)
-           |> put_flash(:info, "Worktree created: #{item.id} — add tasks below")}
-
-        {:ok, nil} ->
-          {:noreply, put_flash(socket, :error, "Failed to create worktree")}
 
         {:error, reason} ->
           {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
@@ -3219,58 +3196,6 @@ defmodule ApothecaryWeb.DashboardLive do
       assign(socket, :adding_task_to, worktree_id_at(socket.assigns.card_ids, idx))
     else
       socket
-    end
-  end
-
-  @doc false
-  def parse_smart_input(input) do
-    {input, parent_id} =
-      case Regex.run(~r/#([a-z0-9]+-[a-z0-9]+)/, input) do
-        [match, id] -> {String.replace(input, match, ""), id}
-        _ -> {input, nil}
-      end
-
-    {input, dep_ids} =
-      case Regex.scan(~r/>>([a-z0-9]+-[a-z0-9]+)/, input) do
-        [] ->
-          {input, []}
-
-        matches ->
-          dep_ids = Enum.map(matches, fn [_, id] -> id end)
-
-          input =
-            Enum.reduce(matches, input, fn [match, _], acc ->
-              String.replace(acc, match, "")
-            end)
-
-          {input, dep_ids}
-      end
-
-    title = input |> String.replace(~r/\s+/, " ") |> String.trim()
-    {title, parent_id, dep_ids}
-  end
-
-  # Splits free-text input into a short title (first line, max 80 chars) and
-  # the rest as description. Single short lines return nil description.
-  defp split_title_description(text) do
-    lines = String.split(text, "\n", trim: false)
-    first_line = String.trim(List.first(lines) || "")
-    rest = lines |> Enum.drop(1) |> Enum.join("\n") |> String.trim()
-
-    cond do
-      rest != "" ->
-        title =
-          if String.length(first_line) > 80,
-            do: String.slice(first_line, 0, 77) <> "...",
-            else: first_line
-
-        {title, rest}
-
-      String.length(first_line) > 80 ->
-        {String.slice(first_line, 0, 77) <> "...", first_line}
-
-      true ->
-        {first_line, nil}
     end
   end
 
@@ -3752,6 +3677,7 @@ defmodule ApothecaryWeb.DashboardLive do
                     selected_card_id={@selected_card_id}
                     adding_task_to={@adding_task_to}
                     working_agent={@working_agent}
+                    branch_mode={@branch_mode}
                   />
                 </div>
 

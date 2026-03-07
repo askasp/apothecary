@@ -631,7 +631,7 @@ defmodule Apothecary.Dispatcher do
   end
 
   defp ensure_git_worktree(worktree, project_dir) do
-    Apothecary.WorktreeManager.checkout(project_dir, worktree.id)
+    Apothecary.WorktreeManager.checkout(project_dir, worktree.id, title: worktree.title)
   end
 
   defp resolve_project_dir(%{project_id: project_id}) when not is_nil(project_id) do

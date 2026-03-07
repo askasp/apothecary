@@ -83,7 +83,7 @@ defmodule Apothecary.WorktreeManager do
             Apothecary.Git.main_branch(project_dir)
           end
 
-        case create_worktree(project_dir, worktree_id, base_branch) do
+        case create_worktree(project_dir, worktree_id, base_branch, opts) do
           {:ok, path, branch} ->
             entry = %{
               path: path,
@@ -217,12 +217,12 @@ defmodule Apothecary.WorktreeManager do
     end
   end
 
-  defp create_worktree(project_dir, worktree_id, base_branch) do
+  defp create_worktree(project_dir, worktree_id, base_branch, opts) do
     base_dir = worktrees_dir(project_dir)
     File.mkdir_p!(base_dir)
 
     safe_id = String.replace(worktree_id, ~r/[^a-zA-Z0-9_-]/, "-")
-    branch = "worktree/#{safe_id}"
+    branch = branch_name_from_id(worktree_id, opts[:title])
     path = Path.join(base_dir, safe_id)
 
     if File.dir?(path) do
@@ -247,5 +247,23 @@ defmodule Apothecary.WorktreeManager do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp branch_name_from_id(worktree_id, nil) do
+    safe_id = String.replace(worktree_id, ~r/[^a-zA-Z0-9_-]/, "-")
+    "worktree/#{safe_id}"
+  end
+
+  defp branch_name_from_id(_worktree_id, title) do
+    slug =
+      title
+      |> String.downcase()
+      |> String.replace(~r/[^a-z0-9\s\/._-]/, "")
+      |> String.trim()
+      |> String.replace(~r/\s+/, "-")
+      |> String.slice(0, 60)
+      |> String.trim_trailing("-")
+
+    if slug == "", do: branch_name_from_id(title, nil), else: slug
   end
 end

@@ -1050,18 +1050,21 @@ defmodule Apothecary.Worktrees do
   end
 
   defp worktree_ready?(
-         %{status: status, assigned_brewer_id: nil, parent_worktree_id: nil},
+         %{status: status, assigned_brewer_id: nil, parent_worktree_id: nil, id: id},
          _map
        )
-       when status in ["open", "revision_needed"],
-       do: true
+       when status in ["open", "revision_needed"] do
+    # Only dispatch if worktree has at least one task
+    list_tasks(worktree_id: id) != []
+  end
 
   defp worktree_ready?(
-         %{status: status, assigned_brewer_id: nil, parent_worktree_id: pid},
+         %{status: status, assigned_brewer_id: nil, parent_worktree_id: pid, id: id},
          wt_status_map
        )
        when status in ["open", "revision_needed"] and not is_nil(pid) do
-    Map.get(wt_status_map, pid) in ["done", "merged"]
+    Map.get(wt_status_map, pid) in ["done", "merged"] and
+      list_tasks(worktree_id: id) != []
   end
 
   # PR is open or brew is done but new tasks were added — redispatch to work on them

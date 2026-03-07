@@ -895,11 +895,15 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :selected_card_id, :string, default: nil
   attr :adding_task_to, :string, default: nil
   attr :working_agent, :map, default: nil
+  attr :branch_mode, :boolean, default: false
 
   def chat_input(assigns) do
     # Determine current input mode for placeholder and badge
     {mode, mode_color, placeholder} =
       cond do
+        assigns.branch_mode ->
+          {"branch", "var(--reviewing)", "branch name · esc cancel"}
+
         assigns.adding_task_to ->
           {"task", "var(--queued)", "add task to queue · ?question · esc cancel"}
 
@@ -910,7 +914,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           {"task", "var(--queued)", "task to queue · ?question to ask"}
 
         true ->
-          {nil, nil, "describe a worktree · ?question to ask"}
+          {nil, nil, "b new branch · select a branch to add tasks"}
       end
 
     assigns =
@@ -1025,26 +1029,6 @@ defmodule ApothecaryWeb.DashboardComponents do
 
     ~H"""
     <div class="px-3 py-1">
-      <%!-- Search / create bar --%>
-      <div class="mb-2 mt-1">
-        <form phx-submit="search-select" phx-change="search-tree" class="relative">
-          <div class="flex items-center gap-2" style="background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;">
-            <span style="color: var(--muted); font-size: var(--font-size-sm);">&#x2315;</span>
-            <input
-              name="query"
-              id="tree-search-input"
-              placeholder="branch..."
-              class="flex-1 bg-transparent outline-none"
-              style="color: var(--text); font-size: var(--font-size-sm); border: none; min-width: 0;"
-              value={@search_query}
-              phx-focus="input-focus"
-              phx-blur="search-blur"
-            />
-            <span style="color: var(--muted); font-size: var(--font-size-xxs);">enter</span>
-          </div>
-        </form>
-      </div>
-
       <%!-- Summary line --%>
       <div
         class="flex items-center gap-1 mb-2 px-1"
@@ -1228,9 +1212,9 @@ defmodule ApothecaryWeb.DashboardComponents do
               <span style="color: var(--muted); font-size: var(--font-size-xs); min-width: 12px;">
                 {card_num}
               </span>
-              <%!-- Title --%>
+              <%!-- Branch name --%>
               <span class="truncate" style={"color: #{@title_color}; font-weight: 500;"}>
-                {wt.title || wt.id}
+                {wt.git_branch || wt.title || wt.id}
               </span>
               <%!-- Right side: progress ratio + blocks + arrow --%>
               <span class="ml-auto flex items-center gap-1.5 flex-shrink-0" style="font-size: var(--font-size-xs); color: var(--muted);">
@@ -2442,8 +2426,9 @@ defmodule ApothecaryWeb.DashboardComponents do
 
           <div>
             <div style="color: var(--accent);" class="mb-1">input (insert mode)</div>
+            <.hk key="b" desc="new branch" />
             <.hk key="c / /" desc="chat mode (message brewer)" />
-            <.hk key="n" desc="new task/worktree" />
+            <.hk key="n" desc="focus input" />
             <.hk key="a" desc="task mode (add to branch)" />
             <.hk key="?text" desc="ask question" />
           </div>
