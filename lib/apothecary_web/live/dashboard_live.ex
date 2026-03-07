@@ -538,26 +538,30 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
-  # Cmd+K (macOS) toggles project switcher
-  def handle_event("hotkey", %{"metaKey" => true, "key" => "k"}, socket) do
-    handle_event("hotkey", %{"ctrlKey" => true, "key" => "k"}, socket)
+  # Cmd+K/P (macOS) toggles project switcher
+  def handle_event("hotkey", %{"metaKey" => true, "key" => key}, socket)
+      when key in ["k", "p"] do
+    handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
   end
 
   def handle_event("hotkey", %{"metaKey" => true}, socket), do: {:noreply, socket}
 
-  def handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
-      when key in ["n", "p"] do
+  # Ctrl+N navigates down in project switcher when open
+  def handle_event("hotkey", %{"ctrlKey" => true, "key" => "n"}, socket) do
     if socket.assigns.show_project_switcher do
-      mapped = if key == "n", do: "j", else: "k"
-      {:noreply, handle_switcher_hotkey(mapped, socket)}
+      {:noreply, handle_switcher_hotkey("j", socket)}
     else
       {:noreply, socket}
     end
   end
 
-  # Ctrl+K toggles project switcher regardless of active tab
-  def handle_event("hotkey", %{"ctrlKey" => true, "key" => "k"}, socket) do
+  # Ctrl+P / Ctrl+K toggle project switcher (Ctrl+P also navigates up when open)
+  def handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
+      when key in ["p", "k"] do
     cond do
+      socket.assigns.show_project_switcher and key == "p" ->
+        {:noreply, handle_switcher_hotkey("k", socket)}
+
       socket.assigns.show_project_switcher ->
         {:noreply, assign(socket, :show_project_switcher, false)}
 
@@ -1438,10 +1442,7 @@ defmodule ApothecaryWeb.DashboardLive do
       text == "" ->
         {:noreply, socket}
 
-      socket.assigns.working_agent ->
-        send_to_agent(text, socket)
-
-      # Task-add mode: create task in focused worktree
+      # Task-add mode: create task in focused worktree (check before working_agent)
       socket.assigns.adding_task_to ->
         wt_id = socket.assigns.adding_task_to
 
@@ -1452,6 +1453,9 @@ defmodule ApothecaryWeb.DashboardLive do
           _ ->
             {:noreply, put_flash(socket, :error, "Failed to add task")}
         end
+
+      socket.assigns.working_agent ->
+        send_to_agent(text, socket)
 
       true ->
         create_from_input(text, socket)
@@ -1504,6 +1508,25 @@ defmodule ApothecaryWeb.DashboardLive do
       {:error, _reason} ->
         {:noreply, put_flash(socket, :error, "Failed to delete question")}
     end
+  end
+
+  # --- Worktree oracle event handlers ---
+
+  @impl true
+  def handle_event("worktree-ask", %{"text" => text, "worktree_id" => worktree_id}, socket) do
+    text = String.trim(text)
+
+    if text == "" do
+      {:noreply, socket}
+    else
+      create_question(text, socket, worktree_id)
+    end
+  end
+
+  @impl true
+  def handle_event("delete-worktree-question", %{"id" => id}, socket) do
+    Worktrees.close(id)
+    {:noreply, socket}
   end
 
   # --- Project event handlers ---
@@ -3674,6 +3697,8 @@ defmodule ApothecaryWeb.DashboardLive do
                         has_preview_config={@has_preview_config}
                         pending_action={@pending_action}
                         loading_action={@loading_action}
+                        worktree_questions={Enum.filter(@questions, fn q -> q.parent_worktree_id == @selected_task_id end)}
+                        agents={@agents}
                       />
                     <% true -> %>
                       <% running = @worktrees_by_status["running"] || []
