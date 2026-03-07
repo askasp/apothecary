@@ -2989,7 +2989,8 @@ defmodule ApothecaryWeb.DashboardLive do
 
       {:noreply,
        socket
-       |> assign(:agent_output, output)}
+       |> assign(:agent_output, output)
+       |> put_flash(:info, "Sent to agent")}
     else
       {:noreply, put_flash(socket, :error, "No active agent process")}
     end
@@ -3412,17 +3413,37 @@ defmodule ApothecaryWeb.DashboardLive do
         socket.assigns[:collapsed_discarded] != false
       )
 
-    idx =
+    found_idx =
       if old_selected_id do
-        Enum.find_index(new_card_ids, &(&1 == old_selected_id)) ||
-          min(socket.assigns.selected_card, max(length(new_card_ids) - 1, 0))
+        Enum.find_index(new_card_ids, &(&1 == old_selected_id))
+      end
+
+    idx =
+      if found_idx do
+        found_idx
       else
         min(socket.assigns.selected_card, max(length(new_card_ids) - 1, 0))
       end
 
-    socket
-    |> assign(:card_ids, new_card_ids)
-    |> assign(:selected_card, idx)
+    socket =
+      socket
+      |> assign(:card_ids, new_card_ids)
+      |> assign(:selected_card, idx)
+
+    # If old selection disappeared (moved to collapsed group), select the card at the new index
+    new_selected_id = Enum.at(new_card_ids, idx)
+
+    cond do
+      is_nil(found_idx) && old_selected_id && new_selected_id &&
+          new_selected_id != socket.assigns[:selected_task_id] ->
+        select_task(socket, new_selected_id)
+
+      is_nil(found_idx) && old_selected_id && is_nil(new_selected_id) ->
+        select_task(socket, nil)
+
+      true ->
+        socket
+    end
   end
 
   defp find_entry_by_id(worktrees_by_status, card_id) do

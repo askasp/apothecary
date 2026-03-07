@@ -1201,7 +1201,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           >
             <div class="flex items-center gap-1.5">
               <%!-- Status dot --%>
-              <%= if @animated_header_dot do %>
+              <%= if @animated_header_dot && entry.agent do %>
                 <span style={"color: #{@color}; flex-shrink: 0;"}>
                   <.braille_spinner id={"wt-spin-#{wt.id}"} offset={card_num * 3} />
                 </span>
