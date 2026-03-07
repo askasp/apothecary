@@ -1388,7 +1388,7 @@ defmodule ApothecaryWeb.DashboardComponents do
                 &middot; :{@dev_port} &#x2197;
               </span>
               <span
-                :if={@working_agent && !@working_agent.sandboxed}
+                :if={@working_agent && @working_agent.status == :working && !@working_agent.sandboxed}
                 style="color: var(--error); font-weight: 500;"
               >
                 &middot; unsandboxed

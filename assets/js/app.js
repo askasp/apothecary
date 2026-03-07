@@ -138,7 +138,8 @@ let Hooks = {
         }
       })
       this.handleEvent("scroll-detail", ({ direction }) => {
-        const el = document.getElementById("detail-pane")
+        const pane = document.getElementById("detail-pane")
+        const el = pane && pane.querySelector(".scroll-main")
         if (el) {
           const amount = direction === "down" ? 120 : -120
           el.scrollBy({ top: amount, behavior: "smooth" })
@@ -653,6 +654,11 @@ let Hooks = {
             this.el.value = ""
             this.updateModeBadge("")
           }
+        }
+        // In chat mode, pressing + with empty input switches to task-add mode
+        if (e.key === "+" && this.el.dataset.serverMode === "chat" && this.el.value === "") {
+          e.preventDefault()
+          this.pushEvent("switch-to-task-mode", {})
         }
       })
       this.el.addEventListener("input", () => {

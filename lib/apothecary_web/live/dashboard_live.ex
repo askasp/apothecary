@@ -553,6 +553,17 @@ defmodule ApothecaryWeb.DashboardLive do
     do: {:noreply, assign(socket, :input_focused, false)}
 
   @impl true
+  def handle_event("switch-to-task-mode", _params, socket) do
+    wt_id = socket.assigns.selected_task_id
+
+    if wt_id do
+      {:noreply, assign(socket, :adding_task_to, wt_id)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
   def handle_event("file-search", %{"query" => query}, socket) do
     results = FileTree.search(query, socket.assigns.project_files)
     {:reply, %{files: results}, socket}

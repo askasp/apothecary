@@ -25,7 +25,7 @@ defmodule Apothecary.MCP.Tools.ListTasks do
 
       text =
         tasks
-        |> Enum.sort_by(fn t -> {t.priority || 99, t.id} end)
+        |> Enum.sort_by(fn t -> {t.priority || 99, t.created_at || ""} end)
         |> Enum.map(&format_task/1)
         |> Enum.join("\n")
 

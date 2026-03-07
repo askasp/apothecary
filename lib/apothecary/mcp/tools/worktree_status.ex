@@ -28,7 +28,7 @@ defmodule Apothecary.MCP.Tools.WorktreeStatus do
 
           task_lines =
             tasks
-            |> Enum.sort_by(fn t -> {t.priority || 99, t.id} end)
+            |> Enum.sort_by(fn t -> {t.priority || 99, t.created_at || ""} end)
             |> Enum.map(fn t ->
               icon =
                 case t.status do

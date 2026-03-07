@@ -430,6 +430,7 @@ defmodule Apothecary.Worktrees do
     tasks
     |> maybe_filter(:worktree_id, filters[:worktree_id])
     |> maybe_filter(:status, filters[:status])
+    |> Enum.sort_by(fn t -> {t.priority || 99, t.created_at || ""} end)
   end
 
   def update_task(id, changes) do
