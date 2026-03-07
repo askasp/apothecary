@@ -84,12 +84,17 @@ defmodule Apothecary.Startup do
     ### Rules
     - **NEVER push to main.** You are always on a feature branch in a worktree.
     - **NEVER push at all** — the orchestrator handles pushing and PR creation.
+    - **Always create tasks** — even for simple work, create at least one task so progress is visible in the UI. Then `claim_task` before starting and `complete_task` when done.
     - Commit when done with each piece of work.
     - Use MCP tools for ALL task tracking — no markdown TODOs.
 
+    ### Follow-up Instructions
+    You may receive additional messages via stdin while working. These are follow-up instructions from the user.
+    When you receive a follow-up that requires new work, **always create a task for it** using `create_task` before starting.
+
     ### Auto-Decomposition
-    - **Small task:** just do it directly, use `complete_task` when done.
-    - **Complex task:** use `create_task` to break into steps, work through each.
+    - **Simple task:** create one task, claim it, do the work, complete it.
+    - **Complex task:** use `create_task` to break into multiple steps, work through each.
 
     ### Session Completion
     - Commit all changes and mark tasks done via `complete_task`

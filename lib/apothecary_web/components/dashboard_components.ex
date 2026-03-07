@@ -188,7 +188,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             style="border-left: 1px solid var(--border); padding-left: 12px;"
           >
             <button
-              :for={{tab, label} <- [workbench: "workbench", oracle: "oracle", recipes: "recurring"]}
+              :for={{tab, label} <- [workbench: "workbench", recipes: "recurring"]}
               phx-click="switch-tab"
               phx-value-tab={tab}
               class="cursor-pointer"
@@ -889,6 +889,73 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
+  # ── Chat Input (bottom of left panel) ─────────────────
+
+  attr :input_focused, :boolean, default: false
+  attr :selected_card_id, :string, default: nil
+  attr :adding_task_to, :string, default: nil
+  attr :working_agent, :map, default: nil
+
+  def chat_input(assigns) do
+    # Determine current input mode for placeholder and badge
+    {mode, mode_color, placeholder} =
+      cond do
+        assigns.adding_task_to ->
+          {"task", "var(--queued)", "add task to queue · ?question · esc cancel"}
+
+        assigns.working_agent ->
+          {"chat", "var(--concocting)", "message brewer · ?question · +task to queue"}
+
+        assigns.selected_card_id ->
+          {"task", "var(--queued)", "task to queue · ?question to ask"}
+
+        true ->
+          {nil, nil, "describe a worktree · ?question to ask"}
+      end
+
+    assigns =
+      assigns
+      |> assign(:mode, mode)
+      |> assign(:mode_color, mode_color)
+      |> assign(:placeholder, placeholder)
+
+    ~H"""
+    <div
+      style="border-top: 1px solid var(--border); background: var(--bg);"
+      class="px-3 py-2 flex-shrink-0"
+    >
+      <div class="flex items-center gap-2">
+        <span
+          :if={@mode}
+          style={"background: color-mix(in srgb, #{@mode_color} 20%, var(--surface)); color: #{@mode_color}; font-size: var(--font-size-xxs); padding: 2px 6px; border-radius: 4px; font-weight: 600; white-space: nowrap;"}
+        >
+          {@mode}
+        </span>
+        <input
+          id="primary-input"
+          type="text"
+          phx-hook="ChatBottomInput"
+          phx-focus="input-focus"
+          phx-blur="input-blur"
+          autocomplete="off"
+          class="chat-bottom-input"
+          placeholder={@placeholder}
+          data-wt-id={@selected_card_id}
+          data-refocus={if @adding_task_to, do: "true", else: "false"}
+        />
+        <span style="color: var(--muted); font-size: var(--font-size-xs);">/</span>
+      </div>
+      <div
+        id="file-autocomplete-dropdown"
+        phx-update="ignore"
+        class="hidden fixed max-h-48 overflow-y-auto"
+        style="background: var(--surface); border: 1px solid var(--border); z-index: 9999;"
+      >
+      </div>
+    </div>
+    """
+  end
+
   # ── Worktree Tree ──────────────────────────────────────
 
   attr :worktrees_by_status, :map, required: true
@@ -938,24 +1005,62 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> assign(:queued, queued)
       |> assign(:bottled, bottled)
 
+    total_count = length(brewing) + length(assaying) + length(queued) + length(bottled)
+
+    # Count idle agents
+    idle_count =
+      Enum.count(assigns.agents, fn a -> a.status in [:idle, :starting] end)
+
+    assigns =
+      assigns
+      |> assign(:total_count, total_count)
+      |> assign(:idle_count, idle_count)
+
     ~H"""
     <div class="px-3 py-1">
-      <%!-- Search input --%>
-      <div :if={@search_mode} class="mb-3 flex items-center gap-2">
-        <span style="color: var(--muted);">/</span>
-        <form phx-submit="search-select" phx-change="search-tree" class="flex-1">
-          <input
-            name="query"
-            id="tree-search-input"
-            autofocus
-            placeholder="search..."
-            class="search-input"
-            value={@search_query}
-            phx-focus="input-focus"
-            phx-blur="search-blur"
-          />
+      <%!-- Search / create bar --%>
+      <div class="mb-2 mt-1">
+        <form phx-submit="search-select" phx-change="search-tree" class="relative">
+          <div class="flex items-center gap-2" style="background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;">
+            <span style="color: var(--muted); font-size: var(--font-size-sm);">&#x2315;</span>
+            <input
+              name="query"
+              id="tree-search-input"
+              placeholder="branch..."
+              class="flex-1 bg-transparent outline-none"
+              style="color: var(--text); font-size: var(--font-size-sm); border: none; min-width: 0;"
+              value={@search_query}
+              phx-focus="input-focus"
+              phx-blur="search-blur"
+            />
+            <span style="color: var(--muted); font-size: var(--font-size-xxs);">enter</span>
+          </div>
         </form>
       </div>
+
+      <%!-- Summary line --%>
+      <div
+        class="flex items-center gap-1 mb-2 px-1"
+        style="font-size: var(--font-size-xs);"
+      >
+        <span :if={@brewing != []} style="color: var(--concocting); font-weight: 600;">
+          {length(@brewing)} brewing
+        </span>
+        <span :if={@assaying != []} style="color: var(--assaying); font-weight: 600;">
+          {length(@assaying)} reviewing
+        </span>
+        <span style="color: var(--muted);">
+          <span :if={@brewing != [] || @assaying != []}>&middot; </span>{@total_count} total
+        </span>
+        <span :if={@idle_count > 0} style="color: var(--muted);">
+          &middot; {@idle_count} idle
+        </span>
+        <span :if={@total_count > 0} class="ml-auto" style="color: var(--muted);">
+          1-{@total_count}
+        </span>
+      </div>
+
+      <div style="border-top: 1px solid var(--border); margin: 4px 0 6px;" />
 
       <%!-- Brewing group --%>
       <.tree_group
@@ -994,12 +1099,12 @@ defmodule ApothecaryWeb.DashboardComponents do
         :if={@queued != []}
         label="queued"
         count={length(@queued)}
-        color="var(--dim)"
+        color="var(--muted)"
         entries={@queued}
         dot="○"
         dot_class=""
-        title_color="var(--text)"
-        opacity="0.7"
+        title_color="var(--muted)"
+        opacity="1"
         card_ids={@card_ids}
         selected_card={@selected_card}
         adding_task_to={@adding_task_to}
@@ -1008,7 +1113,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%!-- Bottled group (collapsed by default) --%>
       <%= if @bottled != [] do %>
         <div
-          class="cursor-pointer py-1"
+          class="cursor-pointer py-1 px-1"
           phx-click="toggle-done-collapse"
           style="font-size: var(--font-size-sm);"
         >
@@ -1043,7 +1148,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
-  # Tree group component
+  # Tree group component — compact card list for branch panel
   attr :label, :any, default: nil
   attr :count, :integer, default: 0
   attr :color, :string, required: true
@@ -1061,126 +1166,58 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp tree_group(assigns) do
     ~H"""
     <div style={"opacity: #{@opacity};"}>
-      <div
-        :if={@label}
-        class="pt-1.5 pb-0.5"
-        style={"color: #{@color}; font-size: var(--font-size-sm);"}
-      >
-        {@label} ({@count})
-        <.braille_spinner :if={@animated_header_dot} id="tree-brewing-spinner" offset={0} />
-      </div>
       <div style="font-size: var(--font-size-sm);">
-        <%= for {entry, idx} <- Enum.with_index(@entries) do %>
-          <% last? = idx == length(@entries) - 1
-          wt = entry.worktree
+        <%= for {entry, _idx} <- Enum.with_index(@entries) do %>
+          <% wt = entry.worktree
           selected? = selected_entry?(@card_ids, @selected_card, wt.id)
+          card_num = card_number(@card_ids, wt.id)
           tasks = entry.tasks
           done_count = Enum.count(tasks, &(&1.status in ["done", "closed"]))
-          total_count = length(tasks)
-          port = entry_port(entry.dev_server) %>
-          <%!-- Leading connector from group label --%>
-          <div :if={@label && idx == 0} class="tree-char pl-1" style="font-size: var(--font-size-sm);">
-            │
-          </div>
+          total_count = length(tasks) %>
           <div
-            style={"#{if selected?, do: "border-left: 2px solid var(--accent); background: var(--surface); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);", else: "border-left: 2px solid transparent;"}"}
-            class="cursor-pointer"
+            class={"branch-card #{if selected?, do: "branch-card--selected"}"}
+            style={if selected?, do: "border-left: 2px solid #{@color};", else: "border-left: 2px solid transparent;"}
             phx-click="select-task"
             phx-value-id={wt.id}
             data-card-id={wt.id}
             data-selected={if(selected?, do: "true")}
           >
-            <%!-- Tree line + dot + title --%>
-            <div class="flex items-baseline gap-1.5 py-0.5 px-1">
-              <span class="tree-char">{if last?, do: "└─", else: "├─"}</span>
+            <div class="flex items-center gap-1.5">
+              <%!-- Status dot --%>
               <%= if @animated_header_dot do %>
-                <span style={"color: #{@color};"}>
-                  <.braille_spinner id={"wt-spin-#{wt.id}"} offset={idx * 3} />
+                <span style={"color: #{@color}; flex-shrink: 0;"}>
+                  <.braille_spinner id={"wt-spin-#{wt.id}"} offset={card_num * 3} />
                 </span>
               <% else %>
-                <span class={@dot_class} style={"color: #{@color};"}>{@dot}</span>
+                <span class={@dot_class} style={"color: #{@color}; flex-shrink: 0;"}>{@dot}</span>
               <% end %>
-              <span style={"color: #{@title_color}; font-weight: 500;"}>{wt.title || wt.id}</span>
-              <span
-                :if={selected?}
-                style="color: var(--accent); margin-left: auto; padding-right: 4px;"
-              >
-                ◂
+              <%!-- Card number --%>
+              <span style="color: var(--muted); font-size: var(--font-size-xs); min-width: 12px;">
+                {card_num}
               </span>
-            </div>
-            <%!-- Metadata line --%>
-            <div
-              class="flex items-center gap-1 pl-8 pb-0.5"
-              style="color: var(--muted); font-size: var(--font-size-xs);"
-            >
-              <span>{wt.id}</span>
-              <span :if={total_count > 0}>
-                &middot; {done_count}/{total_count} {progress_bar(done_count, total_count)}
+              <%!-- Title --%>
+              <span class="truncate" style={"color: #{@title_color}; font-weight: 500;"}>
+                {wt.title || wt.id}
               </span>
-              <span :if={port}>
-                &middot; :{port}
-              </span>
-              <span :if={@status_label}>
-                &middot; {@status_label}
-              </span>
-            </div>
-          </div>
-          <%!-- Inline tasks sub-tree --%>
-          <%= if tasks != [] do %>
-            <div class="pl-8" style="font-size: var(--font-size-xs);">
-              <%= for {task, tidx} <- Enum.with_index(tasks) do %>
-                <% tlast? = tidx == length(tasks) - 1
-                {ing_dot, ing_dot_color, ing_dot_class} = task_dot(task.status)
-                ing_text_color = task_text_color(task.status) %>
-                <div class="flex items-baseline gap-1 py-px px-1">
-                  <span class="tree-char">{if tlast?, do: "└─", else: "├─"}</span>
-                  <%= if task.status == "in_progress" do %>
-                    <span style={"color: #{ing_dot_color};"}>
-                      <.braille_spinner id={"ing-spin-#{task.id}"} offset={tidx * 3} />
-                    </span>
-                  <% else %>
-                    <span class={ing_dot_class} style={"color: #{ing_dot_color};"}>{ing_dot}</span>
+              <%!-- Right side: progress ratio + blocks + arrow --%>
+              <span class="ml-auto flex items-center gap-1.5 flex-shrink-0" style="font-size: var(--font-size-xs); color: var(--muted);">
+                <span :if={total_count > 0}>{done_count}/{total_count}</span>
+                <span :if={total_count > 0} class="branch-progress">
+                  <%= for i <- 0..min(total_count - 1, 15) do %>
+                    <span
+                      class="branch-progress-block"
+                      style={"background: #{if i < done_count, do: @color, else: "var(--border)"}; opacity: #{if i < done_count, do: "1", else: "0.4"};"}
+                    />
                   <% end %>
-                  <span style={"color: #{ing_text_color};"}>{task.title}</span>
-                </div>
-              <% end %>
-            </div>
-          <% end %>
-          <%!-- Inline task add indicator --%>
-          <div
-            :if={@adding_task_to == wt.id}
-            class="pl-8 py-0.5"
-            style="font-size: var(--font-size-xs);"
-          >
-            <div class="flex items-baseline gap-1 px-1">
-              <span class="tree-char">└╴</span>
-              <span style="color: var(--accent);">○</span>
-              <span style="color: var(--dim); font-style: italic;">adding...</span>
+                </span>
+              </span>
             </div>
           </div>
-          <%!-- Connector line between entries (not after last) --%>
-          <div :if={!last?} class="tree-char pl-1" style="font-size: var(--font-size-sm);">│</div>
         <% end %>
       </div>
     </div>
     """
   end
-
-  defp progress_bar(done, total) when total > 0 do
-    filled = round(done / total * 6)
-    String.duplicate("▓", filled) <> String.duplicate("░", 6 - filled)
-  end
-
-  defp progress_bar(_, _), do: ""
-
-  defp task_dot(status) when status in ["done", "closed"], do: {"●", "var(--accent)", ""}
-  defp task_dot("in_progress"), do: {"∷", "var(--concocting)", "task-dot-active"}
-  defp task_dot("blocked"), do: {"○", "var(--error)", ""}
-  defp task_dot(_), do: {"○", "var(--muted)", ""}
-
-  defp task_text_color(status) when status in ["done", "closed"], do: "var(--dim)"
-  defp task_text_color("in_progress"), do: "var(--text)"
-  defp task_text_color(_), do: "var(--muted)"
 
   defp selected_entry?(card_ids, selected_card, wt_id) do
     case Enum.at(card_ids, selected_card) do
@@ -1189,8 +1226,12 @@ defmodule ApothecaryWeb.DashboardComponents do
     end
   end
 
-  defp entry_port(%{status: :running, ports: [%{port: p} | _]}), do: p
-  defp entry_port(_), do: nil
+  defp card_number(card_ids, wt_id) do
+    case Enum.find_index(card_ids, &(&1 == wt_id)) do
+      nil -> 0
+      idx -> idx + 1
+    end
+  end
 
   # ── Worktree Detail ────────────────────────────────────
 
@@ -1205,7 +1246,6 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :loading_action, :atom, default: nil
   attr :editing_child_id, :string, default: nil
   attr :worktree_questions, :list, default: []
-  attr :agents, :list, default: []
 
   def worktree_detail(assigns) do
     pr_url = Map.get(assigns.task, :pr_url)
@@ -1231,10 +1271,44 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> assign(:last_commit, last_commit)
       |> assign(:loading?, assigns.loading_action != nil)
 
+    # Compute task progress
+    done_children = Enum.count(assigns.children, fn c -> c.status in ["done", "closed"] end)
+    total_children = length(assigns.children)
+
+    # Git branch name
+    git_branch = Map.get(assigns.task, :git_branch, nil)
+
+    # Dev server port
+    dev_port =
+      case assigns.dev_server do
+        %{ports: [%{port: p} | _], status: :running} -> p
+        _ -> nil
+      end
+
+    # Split children into done, active (in_progress), and pending
+    done_tasks = Enum.filter(assigns.children, fn c -> c.status in ["done", "closed"] end)
+    active_task = Enum.find(assigns.children, fn c -> c.status == "in_progress" end)
+
+    pending_tasks =
+      Enum.filter(assigns.children, fn c ->
+        c.status not in ["done", "closed", "in_progress"]
+      end)
+
+
+    assigns =
+      assigns
+      |> assign(:done_children, done_children)
+      |> assign(:total_children, total_children)
+      |> assign(:git_branch, git_branch)
+      |> assign(:dev_port, dev_port)
+      |> assign(:done_tasks, done_tasks)
+      |> assign(:active_task, active_task)
+      |> assign(:pending_tasks, pending_tasks)
+
     ~H"""
     <div class="px-4 py-4 scroll-main overflow-y-auto flex-1">
       <%!-- 1. Title + Status --%>
-      <div class="mb-5">
+      <div class="mb-3">
         <div class="flex items-start justify-between">
           <div class="flex-1 min-w-0">
             <%= if @editing_field == :title do %>
@@ -1256,28 +1330,52 @@ defmodule ApothecaryWeb.DashboardComponents do
                 </div>
               </.form>
             <% else %>
-              <div
-                phx-click="start-edit"
-                phx-value-field="title"
-                class="cursor-pointer"
-                style="font-size: var(--font-size-title); font-weight: 600; color: var(--text);"
-              >
-                {@task.title}
+              <div class="flex items-center gap-2">
+                <span style={"color: #{@status_color};"}>
+                  <%= if @status_group == "brewing" do %>
+                    <.braille_spinner id="detail-title-spin" offset={0} />
+                  <% else %>
+                    {@status_dot}
+                  <% end %>
+                </span>
+                <span
+                  phx-click="start-edit"
+                  phx-value-field="title"
+                  class="cursor-pointer"
+                  style="font-size: var(--font-size-title); font-weight: 600; color: var(--text);"
+                >
+                  {@task.title}
+                </span>
               </div>
             <% end %>
+            <%!-- Metadata line --%>
             <div
-              class="flex items-center gap-2 mt-1"
+              class="flex items-center gap-1 mt-1 flex-wrap"
               style="font-size: var(--font-size-xs); color: var(--muted);"
             >
               <span>{@task.id}</span>
-              <span :if={@brewer_label} style="color: var(--dim);">&middot; {@brewer_label}</span>
+              <span :if={@git_branch}>
+                &middot; <span style="color: var(--dim);">{@git_branch}</span>
+              </span>
+              <span :if={@brewer_label}>
+                &middot; <span style="color: var(--dim);">{@brewer_label}</span>
+              </span>
+              <span :if={@time_ago}>&middot; {@time_ago}</span>
+              <span
+                :if={@dev_port}
+                class="cursor-pointer"
+                style="color: var(--accent);"
+                phx-click="show-preview"
+                phx-value-port={@dev_port}
+              >
+                &middot; :{@dev_port} &#x2197;
+              </span>
               <span
                 :if={@working_agent && !@working_agent.sandboxed}
                 style="color: var(--error); font-weight: 500;"
               >
                 &middot; unsandboxed
               </span>
-              <span :if={@time_ago}>&middot; {@time_ago}</span>
             </div>
           </div>
           <button
@@ -1290,45 +1388,64 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </div>
 
-      <%!-- 2. Actions --%>
-      <div class="flex items-center gap-3 mb-5" style="font-size: var(--font-size-sm);">
-        <%= if @loading? do %>
-          <div class="flex items-center gap-2">
-            <.spinner class="w-3 h-3" />
-            <span style="color: var(--dim);">{loading_label(@loading_action)}</span>
+      <%!-- 2. Progress bar --%>
+      <div :if={@total_children > 0} class="mb-1">
+        <div class="flex items-center gap-2">
+          <div class="flex-1 rounded-full overflow-hidden" style="height: 4px; background: var(--border);">
+            <div
+              style={"width: #{if @total_children > 0, do: round(@done_children / @total_children * 100), else: 0}%; height: 100%; background: var(--concocting); border-radius: 9999px; transition: width 0.3s ease;"}
+            />
           </div>
-        <% else %>
-          <%= if @pending_action do %>
-            <span style="color: var(--concocting);">
-              {cond do
-                match?({:local_merge, _, _}, @pending_action) -> "merge locally (no PR)?"
-                match?({:direct_merge, _, _}, @pending_action) -> "merge directly?"
-                true -> "merge this PR?"
-              end}
+          <span style="font-size: var(--font-size-xs); color: var(--muted); flex-shrink: 0;">
+            {@done_children}/{@total_children}
+          </span>
+        </div>
+      </div>
+
+      <%!-- 3. Done tasks summary --%>
+      <div :if={@done_children > 0} class="mb-1" style="font-size: var(--font-size-xs); color: var(--dim);">
+        <span style="color: var(--accent);">&#x25CF;</span>
+        {@done_children} done
+      </div>
+
+      <%!-- 4. Done tasks listed with checkmarks --%>
+      <div :if={@done_tasks != []} class="mb-1" style="font-size: var(--font-size-sm);">
+        <div :for={task <- @done_tasks} class="flex items-center gap-2 py-0.5">
+          <span style="color: var(--accent);">✓</span>
+          <span style="color: var(--muted); text-decoration: line-through;">{task.title}</span>
+        </div>
+      </div>
+
+      <%!-- 5. Active task (highlighted) --%>
+      <div :if={@active_task} class="detail-active-task mb-1">
+        <div class="flex items-center gap-2">
+          <span style="color: var(--concocting);">
+            <.braille_spinner id="detail-active-task-spin" offset={2} />
+          </span>
+          <span style="color: var(--text); font-weight: 500; font-size: var(--font-size-sm);">
+            {@active_task.title}
+          </span>
+          <span
+            :if={@brewer_label}
+            class="ml-auto"
+            style="color: var(--muted); font-size: var(--font-size-xxs);"
+          >
+            {@brewer_label}
+          </span>
+        </div>
+      </div>
+
+      <%!-- 6. Queued tasks — tree chars, no hover --%>
+      <div :if={@pending_tasks != []} class="mb-2" style="font-size: var(--font-size-sm);">
+        <%= for {child, idx} <- Enum.with_index(@pending_tasks) do %>
+          <% is_last = idx == length(@pending_tasks) - 1 %>
+          <div class="flex items-center gap-2 py-0.5">
+            <span style="color: var(--border); font-family: monospace; font-size: var(--font-size-xs); width: 16px; text-align: center; flex-shrink: 0;">
+              {if is_last, do: "└─", else: "├─"}
             </span>
-            <button phx-click="confirm-merge" class="action-pill">confirm</button>
-            <button phx-click="cancel-merge" class="action-text">cancel</button>
-          <% else %>
-            <%= if @task.status in ["brew_done", "done", "closed"] and is_nil(@pr_url) do %>
-              <span class="action-pill" phx-click="promote-to-assaying">c create-pr</span>
-              <span class="action-pill" phx-click="local-merge">g git-merge</span>
-            <% end %>
-            <span :if={@pr_url} class="action-pill" phx-click="merge-pr">m merge</span>
-            <span
-              :if={@task.status not in ["done", "closed", "merged"]}
-              class="action-outlined"
-              phx-click="requeue"
-            >
-              r requeue
-            </span>
-            <span
-              :if={@task.status not in ["done", "closed", "merged"]}
-              class="action-outlined"
-              phx-click="close-task"
-            >
-              x close
-            </span>
-          <% end %>
+            <span style="color: var(--muted);">○</span>
+            <span style="color: var(--muted);">{child.title}</span>
+          </div>
         <% end %>
       </div>
 
@@ -1377,146 +1494,108 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </details>
 
-      <%!-- 3. TASKS --%>
-      <div class="mb-5">
-        <div class="section-header mb-2">TASKS</div>
-        <%= if @children == [] do %>
-          <div style="color: var(--muted); font-size: var(--font-size-sm);">none</div>
-        <% else %>
+      <%!-- 5. Activity stream (agent output live, or notes as historical stream) --%>
+      <%= if @agent_output != [] do %>
+        <%!-- Live brewer stream --%>
+        <div class="mb-4">
           <div
-            :for={child <- @children}
-            class="flex items-center gap-2 py-1 group/child"
-            style="font-size: var(--font-size-sm);"
+            class="mb-3"
+            style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 12px;"
           >
-            <%= if @editing_child_id == child.id do %>
-              <.form
-                for={%{}}
-                phx-submit="save-child-edit"
-                class="flex items-center gap-2 flex-1"
-              >
-                <input type="hidden" name="task_id" value={child.id} />
-                <input
-                  type="text"
-                  name="title"
-                  value={child.title}
-                  autofocus
-                  phx-focus="input-focus"
-                  phx-blur="input-blur"
-                  class="moonlight-input flex-1"
-                  style="font-size: var(--font-size-sm);"
-                />
-                <button type="submit" class="action-pill" style="font-size: var(--font-size-xxs);">
-                  save
-                </button>
-                <button
-                  type="button"
-                  phx-click="cancel-child-edit"
-                  class="action-text"
-                  style="font-size: var(--font-size-xxs);"
-                >
-                  cancel
-                </button>
-              </.form>
-            <% else %>
-              <span
-                phx-click="toggle-child-status"
-                phx-value-id={child.id}
-                class="cursor-pointer"
-                style={"color: #{if child.status in ["done", "closed"], do: "var(--accent)", else: "var(--concocting)"};"}
-              >
-                {if child.status in ["done", "closed"], do: "✓", else: "◌"}
-              </span>
-              <span style={"color: #{if child.status in ["done", "closed"], do: "var(--dim)", else: "var(--text)"};"}>
-                {child.title}
-              </span>
-              <span
-                class="ml-auto flex items-center gap-2"
-                style="font-size: var(--font-size-xxs);"
-              >
-                <span
-                  phx-click="edit-child"
-                  phx-value-id={child.id}
-                  class="cursor-pointer opacity-0 group-hover/child:opacity-100 transition-opacity"
-                  style="color: var(--muted);"
-                >
-                  edit
-                </span>
-                <span
-                  phx-click="delete-child"
-                  phx-value-id={child.id}
-                  class="cursor-pointer opacity-0 group-hover/child:opacity-100 transition-opacity"
-                  style="color: var(--error);"
-                  data-confirm="Delete this task?"
-                >
-                  del
-                </span>
-                <span style="color: var(--muted);">
-                  {child.id}
-                </span>
-              </span>
+            <span style="color: var(--muted); font-size: var(--font-size-xs);">
+              &mdash; {@brewer_label || "brewer"} assigned to {String.slice(@task.id || "", 0..9)}
+            </span>
+          </div>
+          <div
+            id="agent-output-inline"
+            class="detail-brewer-log"
+            phx-hook="ScrollBottom"
+          >
+            <div :for={line <- Enum.take(@agent_output, -60)}>
+              <.brewer_log_line line={line} />
+            </div>
+          </div>
+          <div :if={@working_agent && @working_agent.status == :working} class="mt-1">
+            <span style="color: var(--concocting); font-size: var(--font-size-sm);">
+              <.braille_spinner id="detail-working-spin" offset={1} />
+              working...
+            </span>
+          </div>
+        </div>
+      <% else %>
+        <%!-- Historical notes rendered as stream --%>
+        <div :if={@task.notes && @task.notes != ""} class="mb-4">
+          <div
+            class="mb-3"
+            style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 12px;"
+          />
+          <div
+            id="task-notes-stream"
+            class="detail-brewer-log"
+          >
+            <div :for={line <- String.split(@task.notes || "", "\n")}>
+              <.brewer_log_line line={line} />
+            </div>
+          </div>
+          <.copy_button target="#task-notes-stream" />
+        </div>
+      <% end %>
+
+      <%!-- 6. Oracle Q&A for this worktree --%>
+      <div :if={@worktree_questions != []} class="mb-4">
+        <div
+          style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 12px; margin-bottom: 8px;"
+        />
+        <div :for={q <- @worktree_questions} class="mb-3">
+          <div class="flex items-start gap-2" style="font-size: var(--font-size-sm);">
+            <span style="color: var(--concocting); font-weight: 600; flex-shrink: 0;">?</span>
+            <span style="color: var(--text); font-weight: 500;">{q.title}</span>
+          </div>
+          <div
+            :if={q.notes && q.notes != ""}
+            class="ml-5 mt-1 pl-3"
+            style="border-left: 2px solid var(--border); font-size: var(--font-size-sm); color: var(--dim); white-space: pre-wrap;"
+          >
+            {q.notes}
+          </div>
+        </div>
+      </div>
+
+      <%!-- 7. Actions (only for merge/PR states) --%>
+      <div
+        :if={@loading? || @pending_action || @pr_url || @task.status in ["brew_done", "done", "closed"]}
+        class="flex items-center gap-3 mb-4"
+        style="font-size: var(--font-size-sm);"
+      >
+        <%= if @loading? do %>
+          <div class="flex items-center gap-2">
+            <.spinner class="w-3 h-3" />
+            <span style="color: var(--dim);">{loading_label(@loading_action)}</span>
+          </div>
+        <% else %>
+          <%= if @pending_action do %>
+            <span style="color: var(--concocting);">
+              {cond do
+                match?({:local_merge, _, _}, @pending_action) -> "merge locally (no PR)?"
+                match?({:direct_merge, _, _}, @pending_action) -> "merge directly?"
+                true -> "merge this PR?"
+              end}
+            </span>
+            <button phx-click="confirm-merge" class="action-pill">confirm</button>
+            <button phx-click="cancel-merge" class="action-text">cancel</button>
+          <% else %>
+            <%= if @task.status in ["brew_done", "done", "closed"] and is_nil(@pr_url) do %>
+              <span class="action-pill" phx-click="promote-to-assaying">c create-pr</span>
+              <span class="action-pill" phx-click="local-merge">g git-merge</span>
+              <span class="action-pill" phx-click="show-diff">d diff</span>
+              <span class="action-pill" phx-click="close-task">x close</span>
             <% end %>
-          </div>
+            <span :if={@pr_url} class="action-pill" phx-click="merge-pr">m merge</span>
+          <% end %>
         <% end %>
-        <div class="mt-1">
-          <span
-            class="action-text cursor-pointer"
-            style="color: var(--accent); font-size: var(--font-size-sm);"
-            phx-click="add-task-to-worktree"
-            phx-value-id={@task.id}
-          >
-            + add task
-          </span>
-        </div>
       </div>
 
-      <%!-- 4. GIT --%>
-      <div :if={@last_commit || @git_changes} class="mb-5">
-        <div class="section-header mb-2">GIT</div>
-        <div :if={@last_commit} style="font-size: var(--font-size-sm);" class="mb-2">
-          <span style="color: var(--text); font-weight: 600;">
-            {String.slice(@last_commit.hash || "", 0..6)}
-          </span>
-          <span style="color: var(--dim);">&nbsp;{@last_commit.message}</span>
-        </div>
-        <div :if={@git_changes} style="font-size: var(--font-size-xs);">
-          <div :for={file <- @git_changes.files || []} class="flex items-center gap-2 py-0.5">
-            <span style="color: var(--muted);">{file.path}</span>
-            <span :if={file.additions > 0} style="color: var(--accent); font-weight: 600;">
-              +{file.additions}
-            </span>
-            <span :if={file.deletions > 0} style="color: var(--error); font-weight: 600;">
-              -{file.deletions}
-            </span>
-          </div>
-          <% file_count = length(@git_changes.files || []) %>
-          <% total_add = Enum.sum(Enum.map(@git_changes.files || [], & &1.additions)) %>
-          <% total_del = Enum.sum(Enum.map(@git_changes.files || [], & &1.deletions)) %>
-          <div class="mt-1" style="color: var(--muted); font-size: var(--font-size-xs);">
-            {file_count} {if file_count == 1, do: "file", else: "files"} &middot; +{total_add} -{total_del}
-          </div>
-        </div>
-        <div class="mt-2">
-          <span class="action-text" phx-click="view-diff" phx-value-id={@task.id}>d view diff</span>
-        </div>
-      </div>
-
-      <%!-- 5. PREVIEW --%>
-      <.preview_controls
-        dev_server={@dev_server}
-        has_config={@has_preview_config}
-        target_id={@task.id}
-        inline={false}
-      />
-
-      <%!-- 6. OUTPUT --%>
-      <div :if={@agent_output != []} class="mb-5">
-        <div class="section-header mb-2">
-          OUTPUT &middot; {length(@agent_output)} lines
-        </div>
-        <.agent_output_panel output={@agent_output} />
-      </div>
-
-      <%!-- 7. PR link --%>
+      <%!-- 8. PR link --%>
       <div :if={@pr_url} class="mb-5">
         <div class="section-header mb-2">PULL REQUEST</div>
         <a
@@ -1528,7 +1607,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         </a>
       </div>
 
-      <%!-- 8. Description --%>
+      <%!-- 9. Description --%>
       <div :if={@task.description && @task.description != ""} class="mb-5">
         <div class="section-header mb-2">DESCRIPTION</div>
         <%= if @editing_field == :description do %>
@@ -1558,197 +1637,92 @@ defmodule ApothecaryWeb.DashboardComponents do
           </div>
         <% end %>
       </div>
-
-      <%!-- Notes --%>
-      <div :if={@task.notes && @task.notes != ""} class="mb-5">
-        <div class="section-header mb-2">NOTES</div>
-        <div
-          id="task-notes-content"
-          style="color: var(--dim); font-size: var(--font-size-xs); white-space: pre-wrap;"
-        >
-          {@task.notes}
-        </div>
-        <.copy_button target="#task-notes-content" />
-      </div>
-
-      <%!-- 9. ASK ABOUT THIS WORKTREE --%>
-      <.worktree_oracle
-        worktree_id={@task.id}
-        questions={@worktree_questions}
-        agents={@agents}
-      />
-
-      <%!-- 10. MCP SERVERS --%>
-      <div class="mb-5">
-        <div class="section-header mb-2">MCP SERVERS</div>
-        <div style="font-size: var(--font-size-sm);">
-          <%= if @task.mcp_servers && map_size(@task.mcp_servers) > 0 do %>
-            <span style="color: var(--dim);">{map_size(@task.mcp_servers)} configured</span>
-          <% else %>
-            <span style="color: var(--dim);">inherited from project</span>
-          <% end %>
-          <span style="color: var(--accent); font-weight: 600;">&nbsp;+ add</span>
-        </div>
-      </div>
     </div>
     """
   end
 
-  # ── Worktree Oracle (inline question panel) ─
-
-  attr :worktree_id, :string, required: true
-  attr :questions, :list, default: []
-  attr :agents, :list, default: []
-
-  defp worktree_oracle(assigns) do
-    active_wt_ids =
-      assigns.agents
-      |> Enum.flat_map(fn a ->
-        if a.current_worktree, do: [to_string(a.current_worktree.id)], else: []
-      end)
-      |> MapSet.new()
-
-    sorted = Enum.sort_by(assigns.questions, fn q -> q.created_at || "" end, :desc)
-
-    assigns =
-      assigns
-      |> assign(:sorted, sorted)
-      |> assign(:active_wt_ids, active_wt_ids)
+  # Renders a single brewer output line with tool call styling
+  defp brewer_log_line(assigns) do
+    {line_type, tag, rest} = parse_log_line(assigns.line)
+    assigns = assign(assigns, line_type: line_type, tag: tag, rest: rest)
 
     ~H"""
-    <div class="mb-5">
-      <div class="section-header mb-2">ASK</div>
-      <%!-- Question list --%>
-      <%= for q <- @sorted do %>
-        <% is_thinking =
-          (q.notes == nil or q.notes == "") and MapSet.member?(@active_wt_ids, q.id) %>
-        <% has_answer = q.notes != nil and q.notes != "" %>
-        <div class="mb-3" style="font-size: var(--font-size-sm);">
-          <div class="flex items-start gap-2">
-            <span style={"color: #{cond do
-              is_thinking -> "var(--concocting)"
-              has_answer -> "var(--accent)"
-              true -> "var(--muted)"
-            end}; flex-shrink: 0; margin-top: 2px;"}>
-              <%= cond do %>
-                <% is_thinking -> %>
-                  <.braille_spinner id={"wt-q-#{q.id}"} offset={0} />
-                <% has_answer -> %>
-                  &#x25CF;
-                <% true -> %>
-                  &#x25CB;
-              <% end %>
-            </span>
-            <div class="flex-1 min-w-0">
-              <div style="color: var(--text); font-weight: 500;">
-                {String.slice(q.title, 0, 80)}{if String.length(q.title) > 80, do: "..."}
-              </div>
-              <%= if has_answer do %>
-                <div
-                  class="mt-1 oracle-body"
-                  style="color: var(--dim); font-size: var(--font-size-xs); line-height: 1.5;"
-                >
-                  {format_oracle_response(q.notes)}
-                </div>
-              <% else %>
-                <%= if is_thinking do %>
-                  <div
-                    class="mt-1 flex items-center gap-1"
-                    style="color: var(--concocting); font-size: var(--font-size-xs);"
-                  >
-                    thinking&hellip;
-                  </div>
-                <% else %>
-                  <div class="mt-1" style="color: var(--muted); font-size: var(--font-size-xs);">
-                    queued
-                  </div>
-                <% end %>
-              <% end %>
-            </div>
-            <span
-              phx-click="delete-worktree-question"
-              phx-value-id={q.id}
-              class="cursor-pointer opacity-0 group-hover:opacity-100 flex-shrink-0"
-              style="color: var(--error); font-size: var(--font-size-xxs);"
-              data-confirm="Delete this question?"
-            >
-              del
-            </span>
-          </div>
-        </div>
+    <div style="font-size: var(--font-size-xs); line-height: 1.6;">
+      <%= case @line_type do %>
+        <% :tool -> %>
+          <span style="color: var(--accent); font-weight: 600;">[{@tag}]</span>
+          <span style="color: var(--text); font-weight: 500;"> {@rest}</span>
+        <% :user -> %>
+          <span style="color: var(--queued); font-weight: 600;">▸ you:</span>
+          <span style="color: var(--text); font-weight: 500;"> {@rest}</span>
+        <% :narrative -> %>
+          <span style="color: var(--dim); font-weight: 500;">&mdash; {@rest}</span>
+        <% :committed -> %>
+          <span style="color: var(--accent);">{@rest}</span>
+        <% _ -> %>
+          <span style="color: var(--muted);">{@rest}</span>
       <% end %>
-      <%!-- Input --%>
-      <div class="relative mt-2">
-        <textarea
-          id={"worktree-ask-#{@worktree_id}"}
-          rows="1"
-          phx-hook=".WorktreeAsk"
-          data-worktree-id={@worktree_id}
-          autocomplete="off"
-          class="moonlight-input w-full resize-none"
-          style="min-height: 32px; max-height: 80px; font-size: var(--font-size-sm); padding: 8px 32px 8px 10px;"
-          placeholder="ask about this worktree..."
-        ></textarea>
-        <button
-          id={"worktree-ask-send-#{@worktree_id}"}
-          phx-hook=".WorktreeAskSend"
-          data-worktree-id={@worktree_id}
-          type="button"
-          class="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer p-1"
-          style="color: var(--muted);"
-          title="Send (Enter)"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            class="w-3 h-3"
-          >
-            <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" />
-          </svg>
-        </button>
-      </div>
-      <div class="mt-1" style="color: var(--muted); font-size: var(--font-size-xxs);">
-        ask about this worktree's changes
-      </div>
     </div>
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".WorktreeAsk">
-      export default {
-        mounted() {
-          this.el.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault()
-              const text = this.el.value.trim()
-              if (text) {
-                this.pushEvent("worktree-ask", {
-                  text,
-                  worktree_id: this.el.dataset.worktreeId
-                })
-                this.el.value = ""
-              }
-            }
-          })
-        }
-      }
-    </script>
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".WorktreeAskSend">
-      export default {
-        mounted() {
-          this.el.addEventListener("click", () => {
-            const worktreeId = this.el.dataset.worktreeId
-            const textarea = document.getElementById("worktree-ask-" + worktreeId)
-            if (textarea) {
-              const text = textarea.value.trim()
-              if (text) {
-                this.pushEvent("worktree-ask", { text, worktree_id: worktreeId })
-                textarea.value = ""
-              }
-            }
-          })
-        }
-      }
-    </script>
     """
+  end
+
+  defp parse_log_line(line) do
+    cond do
+      # User message sent to brewer
+      match = Regex.run(~r/^▸ you: (.*)$/, line) ->
+        [_, rest] = match
+        {:user, nil, rest}
+
+      # Tool use: [tool: Bash] or [Bash] style
+      match = Regex.run(~r/^\[tool: (.+?)\](.*)$/, line) ->
+        [_, name, rest] = match
+        {:tool, name, String.trim(rest)}
+
+      match = Regex.run(~r/^\[([A-Z][A-Za-z]+)\]\s*(.*)$/, line) ->
+        [_, name, rest] = match
+        {:tool, name, String.trim(rest)}
+
+      # Narrative: — or -- prefixed
+      String.starts_with?(line, "—") or String.starts_with?(line, "-- ") ->
+        {:narrative, nil,
+         String.trim_leading(line, "—") |> String.trim_leading("-- ") |> String.trim()}
+
+      # Timestamped notes: [2026-03-06 22:58:01] text
+      match = Regex.run(~r/^\[\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\]\s*(.*)$/, line) ->
+        [_, rest] = match
+        {:narrative, nil, rest}
+
+      # Session markers
+      Regex.match?(~r/^Session completed|^Branch pushed|^Commits? made/i, line) ->
+        {:narrative, nil, line}
+
+      # Commit lines (hash + message)
+      Regex.match?(~r/^[0-9a-f]{7,}\s+/, line) ->
+        {:committed, nil, line}
+
+      String.starts_with?(String.downcase(line), "committed") or
+          String.starts_with?(String.downcase(line), "commit") ->
+        {:committed, nil, line}
+
+      # Diff stat lines: file | count ++++---
+      Regex.match?(~r/^.+\|\s+\d+\s*[+\-]+/, line) ->
+        {:committed, nil, line}
+
+      # Summary diff line: N files changed, N insertions(+), N deletions(-)
+      Regex.match?(~r/^\d+ files? changed/, line) ->
+        {:committed, nil, line}
+
+      # File path lines (src/foo.tsx, lib/bar.ex, etc.)
+      Regex.match?(~r/^(src|lib|test|assets|config)\/\S+/, line) ->
+        {:committed, nil, line}
+
+      # PASS/FAIL test results
+      Regex.match?(~r/^(PASS|FAIL|OK)\s/, line) ->
+        {:committed, nil, line}
+
+      true ->
+        {:text, nil, line}
+    end
   end
 
   # ── Preview Panel (unified preview with source switcher) ─
@@ -2014,8 +1988,6 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :project_count, :integer, default: 0
   attr :questions, :list, default: []
   attr :agents, :list, default: []
-  attr :oracle_target_count, :integer, default: 0
-
   def moonlight_status_bar(assigns) do
     running_count = length(assigns.worktrees_by_status["running"] || [])
     pr_count = length(assigns.worktrees_by_status["pr"] || [])
@@ -2028,33 +2000,12 @@ defmodule ApothecaryWeb.DashboardComponents do
 
     done_count = length(assigns.worktrees_by_status["done"] || [])
 
-    # Count active thinkers (agents working on questions)
-    active_question_ids =
-      assigns.agents
-      |> Enum.flat_map(fn a ->
-        if a.current_worktree, do: [to_string(a.current_worktree.id)], else: []
-      end)
-      |> MapSet.new()
-
-    thinking_count =
-      Enum.count(assigns.questions, fn q ->
-        (q.notes == nil or q.notes == "") and MapSet.member?(active_question_ids, q.id)
-      end)
-
-    pending_question_count =
-      Enum.count(assigns.questions, fn q ->
-        (q.notes == nil or q.notes == "") and not MapSet.member?(active_question_ids, q.id)
-      end)
-
     assigns =
       assigns
       |> assign(:running_count, running_count)
       |> assign(:pr_count, pr_count)
       |> assign(:queued_count, queued_count)
       |> assign(:done_count, done_count)
-      |> assign(:thinking_count, thinking_count)
-      |> assign(:pending_question_count, pending_question_count)
-      |> assign(:question_count, length(assigns.questions))
 
     ~H"""
     <div class="status-bar flex items-center justify-between">
@@ -2071,50 +2022,32 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span>? help</span>
           </div>
           <div style="color: var(--muted);">v0.1.0</div>
-        <% @active_tab == :oracle -> %>
-          <%!-- Oracle status bar --%>
-          <div class="flex items-center gap-2">
-            <span>j/k nav</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>enter select</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>c/n input</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>d delete</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>+/- oracles</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>w/e/o tabs</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>? help</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <span style="color: var(--dim);">{@oracle_target_count} oracles</span>
-            <span style="color: var(--muted);">&middot;</span>
-            <span style="color: var(--dim);">{@question_count} questions</span>
-          </div>
         <% @active_tab == :workbench && @selected_task_id && @selected_task -> %>
           <%!-- Workbench with selected task --%>
           <div class="flex items-center gap-2">
-            <span>h/l pane</span>
+            <span>/ chat</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>j/k scroll</span>
+            <span>j/k nav</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>q back</span>
+            <span>J/K reorder</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>n new</span>
+            <span style="color: var(--border);">&middot;</span>
+            <span>s stop</span>
             <span style="color: var(--border);">&middot;</span>
             <span>d diff</span>
             <span style="color: var(--border);">&middot;</span>
             <span>p preview</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>r requeue</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>m merge</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>x close</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>? help</span>
+            <span>?question</span>
           </div>
           <div class="flex items-center gap-2">
+            <.braille_spinner
+              :if={@running_count > 0}
+              id="statusbar-bubbles-detail"
+              offset={0}
+              type={:bubbles}
+            />
             <span style="color: var(--concocting);">&#x25CF;{@running_count}</span>
             <span style="color: var(--assaying);">&#x25CE;{@pr_count}</span>
             <span style="color: var(--muted);">&#x25CB;{@queued_count}</span>
@@ -2123,27 +2056,17 @@ defmodule ApothecaryWeb.DashboardComponents do
         <% true -> %>
           <%!-- Workbench / default status bar --%>
           <div class="flex items-center gap-2">
+            <span>/ chat</span>
+            <span style="color: var(--border);">&middot;</span>
             <span>j/k nav</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>l detail</span>
+            <span>J/K reorder</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>a add</span>
+            <span>n new</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>s brew</span>
+            <span>s stop</span>
             <span style="color: var(--border);">&middot;</span>
-            <span>d diff</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>+/- brewers</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>/ search</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>P pull main</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>w/e/o tabs</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>⌃tab project</span>
-            <span style="color: var(--border);">&middot;</span>
-            <span>? help</span>
+            <span>?question</span>
           </div>
           <div class="flex items-center gap-2">
             <.braille_spinner
@@ -2448,29 +2371,28 @@ defmodule ApothecaryWeb.DashboardComponents do
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4" style="font-size: var(--font-size-sm);">
           <div>
             <div style="color: var(--accent);" class="mb-1">navigation</div>
-            <.hk key="j/k" desc="next/prev worktree" />
-            <.hk key="h/l" desc="switch panes" />
-            <.hk key="g/G" desc="first/last worktree" />
+            <.hk key="j/k" desc="next/prev branch" />
+            <.hk key="h/l" desc="focus branches/detail" />
+            <.hk key="w" desc="focus branches panel" />
+            <.hk key="g/G" desc="first/last branch" />
             <.hk key="1-4" desc="jump to lane" />
-            <.hk key="enter" desc="inspect worktree" />
+            <.hk key="enter" desc="focus branch" />
             <.hk key="esc" desc="close / back" />
-            <.hk key="/" desc="search" />
             <.hk key="⌘k" desc="switch project" />
           </div>
 
           <div>
-            <div style="color: var(--accent);" class="mb-1">tabs</div>
-            <.hk key="w" desc="workbench" />
-            <.hk key="e" desc="recurring" />
-            <.hk key="o" desc="oracle" />
+            <div style="color: var(--accent);" class="mb-1">input</div>
+            <.hk key="c / /" desc="focus chat input" />
+            <.hk key="a" desc="add task to branch" />
+            <.hk key="?text" desc="ask question" />
           </div>
 
           <div>
             <div style="color: var(--accent);" class="mb-1">actions</div>
             <.hk key="s" desc="start/stop brewing" />
-            <.hk key="+/-" desc="brewer/oracle count" />
-            <.hk key="c" desc="focus input" />
-            <.hk key="a" desc="add task" />
+            <.hk key="+/-" desc="brewer count" />
+            <.hk key="J/K" desc="reorder priority" />
             <.hk key="d" desc="view diff" />
             <.hk key="t" desc="open terminal" />
             <.hk key="p" desc="open preview" />
@@ -2482,15 +2404,15 @@ defmodule ApothecaryWeb.DashboardComponents do
             <div style="color: var(--accent);" class="mb-1">global</div>
             <.hk key="R" desc="requeue orphans" />
             <.hk key="D" desc="delete worktree" />
+            <.hk key="e" desc="recurring tasks" />
+            <.hk key="?text" desc="ask question" />
           </div>
 
           <div :if={@has_selected_task}>
             <div style="color: var(--accent);" class="mb-1">detail view</div>
-            <.hk key="c" desc="create PR" />
             <.hk key="m" desc="merge" />
             <.hk key="r" desc="requeue" />
             <.hk key="x" desc="close worktree" />
-            <.hk key="&#x2191;/&#x2193;" desc="change priority" />
           </div>
         </div>
       </div>
@@ -2506,427 +2428,6 @@ defmodule ApothecaryWeb.DashboardComponents do
     </div>
     """
   end
-
-  # ── Oracle View ──────────────────────────────────────────
-
-  attr :questions, :list, required: true
-  attr :agents, :list, default: []
-  attr :selected_question_id, :string, default: nil
-  attr :oracle_target_count, :integer, default: 0
-  attr :editing_setting, :atom, default: nil
-  attr :oracle_status, :atom, default: :paused
-
-  def oracle_view(assigns) do
-    active_wt_ids =
-      assigns.agents
-      |> Enum.flat_map(fn a ->
-        if a.current_worktree, do: [to_string(a.current_worktree.id)], else: []
-      end)
-      |> MapSet.new()
-
-    sorted = Enum.sort_by(assigns.questions, fn q -> q.created_at || "" end, :desc)
-
-    brewing? = assigns.oracle_status == :running
-
-    any_oracle_working? =
-      Enum.any?(sorted, fn q ->
-        (q.notes == nil or q.notes == "") and MapSet.member?(active_wt_ids, q.id)
-      end)
-
-    selected =
-      if assigns.selected_question_id do
-        Enum.find(sorted, fn q -> q.id == assigns.selected_question_id end)
-      else
-        List.first(sorted)
-      end
-
-    assigns =
-      assigns
-      |> assign(:sorted, sorted)
-      |> assign(:active_wt_ids, active_wt_ids)
-      |> assign(:brewing?, brewing?)
-      |> assign(:any_oracle_working?, any_oracle_working?)
-      |> assign(:selected, selected)
-
-    ~H"""
-    <div class="flex h-full" id="oracle-container">
-      <%!-- Left panel: question list --%>
-      <div
-        class="h-full flex flex-col flex-shrink-0"
-        style="width: 36%; min-width: 280px; max-width: 420px; border-right: 1px solid var(--border);"
-      >
-        <%!-- Header — oracle pill (mirrors brewer pill style) --%>
-        <div
-          class="px-3 py-2 flex items-center"
-          style="border-bottom: 1px solid var(--border); font-size: var(--font-size-xs);"
-        >
-          <span
-            class="inline-flex items-center gap-1"
-            style={"border: 1px solid #{if @brewing? && @oracle_target_count > 0, do: "var(--concocting)", else: "var(--border)"}; border-radius: 4px; padding: 2px 8px;"}
-          >
-            <span style={"color: #{cond do
-              @brewing? && @any_oracle_working? -> "var(--concocting)"
-              @brewing? && @oracle_target_count > 0 -> "var(--text)"
-              true -> "var(--muted)"
-            end};"}>
-              <%= if @brewing? && @any_oracle_working? do %>
-                <.braille_spinner id="oracle-spinner" offset={0} />
-              <% else %>
-                &#x2847;
-              <% end %>
-            </span>
-            <span style={"color: #{if @brewing? && @oracle_target_count > 0, do: "var(--text)", else: "var(--muted)"}; font-weight: 600;"}>
-              {@oracle_target_count}
-            </span>
-            <span style={"color: #{if @brewing? && @oracle_target_count > 0, do: "var(--dim)", else: "var(--muted)"};"}>
-              oracles
-            </span>
-          </span>
-          <%!-- +/- controls --%>
-          <%= if @editing_setting == :oracles do %>
-            <span class="inline-flex items-center gap-1 ml-1">
-              <button
-                phx-click="decrement-oracles"
-                class="cursor-pointer"
-                style="color: var(--accent);"
-              >
-                &minus;
-              </button>
-              <button
-                phx-click="increment-oracles"
-                class="cursor-pointer"
-                style="color: var(--accent);"
-              >
-                +
-              </button>
-              <button phx-click="confirm-setting" class="cursor-pointer" style="color: var(--muted);">
-                &#x2713;
-              </button>
-            </span>
-          <% else %>
-            <button
-              phx-click="edit-setting"
-              phx-value-setting="oracles"
-              class="cursor-pointer ml-1"
-              style="color: var(--muted);"
-              title="Adjust oracle count (+/-)"
-            >
-              &#x25B4;&#x25BE;
-            </button>
-          <% end %>
-          <span style="color: var(--border); margin: 0 6px;">&middot;</span>
-          <span style="color: var(--dim);">{length(@sorted)} questions</span>
-        </div>
-
-        <%!-- Question list --%>
-        <div class="flex-1 overflow-y-auto scroll-main">
-          <%= for q <- @sorted do %>
-            <% is_selected = @selected && @selected.id == q.id %>
-            <% is_thinking =
-              (q.notes == nil or q.notes == "") and MapSet.member?(@active_wt_ids, q.id) %>
-            <% has_answer = q.notes != nil and q.notes != "" %>
-            <div
-              phx-click="select-question"
-              phx-value-id={q.id}
-              class="px-3 py-2 cursor-pointer"
-              style={"border-left: 3px solid #{if is_selected, do: "var(--accent)", else: "transparent"}; background: #{if is_selected, do: "var(--surface)", else: "transparent"};"}
-            >
-              <div class="flex items-center gap-2" style="font-size: var(--font-size-xs);">
-                <span style={"color: #{cond do
-                  is_thinking -> "var(--concocting)"
-                  has_answer -> "var(--accent)"
-                  true -> "var(--muted)"
-                end};"}>
-                  <%= cond do %>
-                    <% is_thinking -> %>
-                      <.braille_spinner id={"oracle-q-#{q.id}"} offset={0} />
-                    <% has_answer -> %>
-                      &#x25CF;
-                    <% true -> %>
-                      &#x25CB;
-                  <% end %>
-                </span>
-                <span style="color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-sm);">
-                  {String.slice(q.title, 0, 40)}{if String.length(q.title) > 40, do: "..."}
-                </span>
-              </div>
-              <div
-                class="flex items-center gap-2 mt-1"
-                style="font-size: var(--font-size-xxs); color: var(--muted);"
-              >
-                <span>{format_relative_time(q.created_at)}</span>
-                <span>&middot;</span>
-                <span>main</span>
-              </div>
-            </div>
-          <% end %>
-        </div>
-
-        <%!-- Input area at bottom --%>
-        <div class="px-3 py-2" style="border-top: 1px solid var(--border);">
-          <div class="relative">
-            <textarea
-              id="oracle-input"
-              rows="1"
-              phx-hook=".OracleInput"
-              autocomplete="off"
-              class="moonlight-input w-full resize-none"
-              style="min-height: 32px; max-height: 80px; font-size: var(--font-size-sm); padding: 8px 32px 8px 10px;"
-              placeholder="ask about the codebase..."
-            ></textarea>
-            <button
-              id="oracle-input-send"
-              phx-hook=".OracleSend"
-              type="button"
-              class="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer p-1"
-              style="color: var(--muted);"
-              title="Send (Enter)"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                class="w-3 h-3"
-              >
-                <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" />
-              </svg>
-            </button>
-          </div>
-          <div class="mt-1" style="color: var(--muted); font-size: var(--font-size-xxs);">
-            ask &mdash; runs in parallel with existing
-          </div>
-        </div>
-      </div>
-
-      <%!-- Right panel: selected question detail --%>
-      <div class="flex-1 h-full overflow-y-auto scroll-main">
-        <%= if @selected do %>
-          <% is_thinking =
-            (@selected.notes == nil or @selected.notes == "") and
-              MapSet.member?(@active_wt_ids, @selected.id) %>
-          <div class="px-4 py-3">
-            <%!-- Question title --%>
-            <div class="flex items-start gap-2 mb-1">
-              <span style={"color: #{if @selected.notes && @selected.notes != "", do: "var(--accent)", else: if(is_thinking, do: "var(--concocting)", else: "var(--muted)")}; font-size: var(--font-size-sm);"}>
-                <%= cond do %>
-                  <% is_thinking -> %>
-                    <span class="dot-pulse">&#x25C9;</span>
-                  <% @selected.notes && @selected.notes != "" -> %>
-                    &#x25CF;
-                  <% true -> %>
-                    &#x25CB;
-                <% end %>
-              </span>
-              <h2 style="color: var(--text); font-size: var(--font-size-sm); font-weight: 600; line-height: 1.4;">
-                {@selected.title}
-              </h2>
-            </div>
-
-            <%!-- Meta line --%>
-            <div class="mb-4" style="color: var(--muted); font-size: var(--font-size-xxs);">
-              <span>{@selected.id}</span>
-              <span>&middot;</span>
-              <span>{format_relative_time(@selected.created_at)}</span>
-              <span>&middot;</span>
-              <span>context: <strong style="color: var(--dim);">main</strong></span>
-            </div>
-
-            <%!-- Answer or thinking state --%>
-            <%= if @selected.notes && @selected.notes != "" do %>
-              <div class="oracle-response py-2 px-3">
-                <div class="mb-1" style="color: var(--muted); font-size: var(--font-size-xs);">
-                  oracle &middot; {format_relative_time(@selected.created_at)}
-                </div>
-                <div class="oracle-body" style="font-size: var(--font-size-sm);">
-                  {format_oracle_response(@selected.notes)}
-                </div>
-              </div>
-            <% else %>
-              <%= if is_thinking do %>
-                <div
-                  class="py-2 px-3"
-                  style="background: var(--surface); border-left: 2px solid var(--concocting);"
-                >
-                  <div
-                    class="flex items-center gap-2"
-                    style="color: var(--concocting); font-size: var(--font-size-xs);"
-                  >
-                    <.braille_spinner id="oracle-detail-spinner" offset={0} />
-                    <span>thinking&hellip;</span>
-                  </div>
-                </div>
-              <% else %>
-                <div class="py-2 px-3" style="color: var(--muted); font-size: var(--font-size-sm);">
-                  queued &mdash; waiting for an available thinker
-                </div>
-              <% end %>
-            <% end %>
-
-            <%!-- Follow-up input --%>
-            <%= if @selected.notes && @selected.notes != "" do %>
-              <div class="mt-4">
-                <div class="relative">
-                  <textarea
-                    id="oracle-followup-input"
-                    rows="1"
-                    phx-hook=".OracleFollowup"
-                    autocomplete="off"
-                    class="moonlight-input w-full resize-none"
-                    style="min-height: 32px; max-height: 80px; font-size: var(--font-size-sm); padding: 8px 10px;"
-                    placeholder="follow up on this divination..."
-                  ></textarea>
-                </div>
-              </div>
-            <% end %>
-          </div>
-        <% else %>
-          <div
-            class="h-full flex items-center justify-center"
-            style="color: var(--muted); font-size: var(--font-size-sm);"
-          >
-            <div class="text-center">
-              <div class="mb-1">no divinations yet</div>
-              <div style="font-size: var(--font-size-xs);">ask a question in the left panel</div>
-            </div>
-          </div>
-        <% end %>
-      </div>
-      <%!-- JS hooks --%>
-      <script :type={Phoenix.LiveView.ColocatedHook} name=".OracleSend">
-        export default {
-          mounted() {
-            this.el.addEventListener("click", () => {
-              const textarea = document.getElementById("oracle-input")
-              if (textarea) {
-                const text = textarea.value.trim()
-                if (text) {
-                  this.pushEvent("oracle-ask", { text })
-                  textarea.value = ""
-                }
-              }
-            })
-          }
-        }
-      </script>
-      <script :type={Phoenix.LiveView.ColocatedHook} name=".OracleInput">
-        export default {
-          mounted() {
-            this.el.addEventListener("keydown", (e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault()
-                const text = this.el.value.trim()
-                if (text) {
-                  this.pushEvent("oracle-ask", { text })
-                  this.el.value = ""
-                }
-              }
-            })
-          }
-        }
-      </script>
-      <script :type={Phoenix.LiveView.ColocatedHook} name=".OracleFollowup">
-        export default {
-          mounted() {
-            this.el.addEventListener("keydown", (e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault()
-                const text = this.el.value.trim()
-                if (text) {
-                  this.pushEvent("oracle-ask", { text })
-                  this.el.value = ""
-                }
-              }
-            })
-          }
-        }
-      </script>
-      <script :type={Phoenix.LiveView.ColocatedHook} name=".OracleScroll">
-        export default {
-          mounted() { this.scrollToBottom() },
-          updated() { this.scrollToBottom() },
-          scrollToBottom() {
-            this.el.scrollTop = this.el.scrollHeight
-          }
-        }
-      </script>
-    </div>
-    """
-  end
-
-  defp format_oracle_response(notes) do
-    answer =
-      case String.split(notes, "Answer:\n", parts: 2) do
-        [_before, answer] -> String.trim(answer)
-        _ -> notes
-      end
-
-    answer
-    |> split_oracle_blocks()
-    |> Enum.map(&render_oracle_block/1)
-    |> Enum.join()
-    |> Phoenix.HTML.raw()
-  end
-
-  defp split_oracle_blocks(text) do
-    parts = Regex.split(~r/```(\w*)\n(.*?)```/s, text, include_captures: true)
-
-    Enum.flat_map(parts, fn part ->
-      case Regex.run(~r/\A```(\w*)\n(.*?)```\z/s, part) do
-        [_, lang, code] -> [{:code, lang, code}]
-        _ -> [{:text, part}]
-      end
-    end)
-  end
-
-  defp render_oracle_block({:code, _lang, code}) do
-    escaped = Phoenix.HTML.html_escape(String.trim_trailing(code))
-
-    "<div class=\"oracle-code-block\"><pre><code>" <>
-      Phoenix.HTML.safe_to_string(escaped) <>
-      "</code></pre></div>"
-  end
-
-  defp render_oracle_block({:text, text}) do
-    text
-    |> Phoenix.HTML.html_escape()
-    |> Phoenix.HTML.safe_to_string()
-    |> highlight_bold()
-    |> highlight_inline_code()
-    |> highlight_file_paths()
-    |> highlight_numbered_lists()
-    |> String.replace("\n", "<br>")
-  end
-
-  defp highlight_bold(text) do
-    Regex.replace(~r/\*\*(.+?)\*\*/, text, "<strong style=\"color: var(--text);\">\\1</strong>")
-  end
-
-  defp highlight_inline_code(text) do
-    Regex.replace(
-      ~r/`([^`]+?)`/,
-      text,
-      "<code style=\"color: var(--accent); background: var(--surface); padding: 1px 4px; border-radius: 3px;\">\\1</code>"
-    )
-  end
-
-  @file_path_regex ~r/(?<![<&\w\/])([a-zA-Z_][a-zA-Z0-9_.\/\-]*\.[a-zA-Z]{1,6}(?::\d+)?)/
-
-  defp highlight_file_paths(text) do
-    Regex.replace(
-      @file_path_regex,
-      text,
-      "<span class=\"oracle-file-path\">\\1</span>"
-    )
-  end
-
-  defp highlight_numbered_lists(text) do
-    Regex.replace(
-      ~r/(\d+)\. /,
-      text,
-      "<span style=\"color: var(--accent);\">\\1.</span> "
-    )
-  end
-
   # ── Recipe List ──────────────────────────────────────────
 
   attr :recipes, :list, required: true
@@ -3150,7 +2651,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     ~H"""
     <div class="flex items-center gap-3">
       <button
-        :for={{tab, label} <- [workbench: "workbench", oracle: "oracle", recipes: "recurring"]}
+        :for={{tab, label} <- [workbench: "workbench", recipes: "recurring"]}
         phx-click="switch-tab"
         phx-value-tab={tab}
         class="cursor-pointer"

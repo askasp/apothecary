@@ -14,6 +14,7 @@ defmodule Apothecary.MCP.Server do
   component(Apothecary.MCP.Tools.ListTasks)
   component(Apothecary.MCP.Tools.GetTask)
   component(Apothecary.MCP.Tools.CreateTask)
+  component(Apothecary.MCP.Tools.ClaimTask)
   component(Apothecary.MCP.Tools.CompleteTask)
   component(Apothecary.MCP.Tools.EditTask)
   component(Apothecary.MCP.Tools.DeleteTask)

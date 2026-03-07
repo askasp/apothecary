@@ -884,3 +884,90 @@ details[open] > summary .merge-arrow {
 .theme-transitioning *::after {
   transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease !important;
 }
+
+/* ── Resize handle ────────────────────────────────────── */
+
+.resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+  position: relative;
+}
+
+.resize-handle:hover,
+.resize-handle.dragging {
+  background: var(--accent);
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  right: -4px;
+}
+
+/* ── Chat bottom input ────────────────────────────────── */
+
+.chat-bottom-input {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  outline: none;
+  min-width: 0;
+  flex: 1;
+}
+
+.chat-bottom-input::placeholder {
+  color: var(--muted);
+}
+
+/* ── Branch panel compact cards ───────────────────────── */
+
+.branch-card {
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.branch-card--selected {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.branch-progress {
+  display: flex;
+  gap: 1px;
+  align-items: center;
+}
+
+.branch-progress-block {
+  width: 8px;
+  height: 10px;
+  border-radius: 1px;
+}
+
+/* ── Detail panel: active task highlight ────────────────── */
+
+.detail-active-task {
+  background: color-mix(in srgb, var(--concocting) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--concocting) 25%, transparent);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+/* ── Detail panel: brewer activity log ──────────────────── */
+
+.detail-brewer-log {
+  max-height: 240px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+
+.detail-brewer-log::-webkit-scrollbar { width: 4px; }
+.detail-brewer-log::-webkit-scrollbar-track { background: transparent; }
+.detail-brewer-log::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
