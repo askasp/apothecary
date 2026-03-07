@@ -11,7 +11,7 @@ Silent screen recording, ~5-6 minutes total. Record segment by segment, merge la
 - `demo/title-cards.html` open in a separate browser window, fullscreen (`f` key)
 - Notifications off (Do Not Disturb)
 
-**Narrative arc:** Show the full lifecycle of ONE concoction first (create, watch, preview, merge) so the viewer understands the flow. Then blow it up to THREE in parallel — the contrast makes the parallelism land harder.
+**Narrative arc:** Start by previewing main to establish a baseline. Then create a single worktree with some fixes, preview the branch, and merge it back — showing the full lifecycle. Then scale up by creating multiple worktrees in parallel.
 
 ## Recording Workflow
 
@@ -58,30 +58,29 @@ For each segment:
 
 ---
 
-## Segment 4 — Preview the App (Before)
+## Segment 4 — Preview Main
 
-**Title card:** "Preview the app" / "The 'before' state"
+**Title card:** "Preview main" / "The starting point"
 
 **Note:** This establishes the baseline the viewer will compare against later.
 
 1. Cmd+Tab to dashboard.
 2. Click **main** in the tree panel to select it.
-3. In the detail pane, click the preview link — the inline preview opens, filling the detail pane with an iframe of the running app.
+3. Click the preview link — the inline preview opens in the right panel.
 4. Quick scan of the app — scroll around, show a couple of pages (2-3 seconds).
 5. Establish the "before" state. This is what the agents will be changing.
-6. Press Escape to close the inline preview and return to the detail view.
 
 ---
 
-## Segment 5 — Create a Concoction
+## Segment 5 — Create a Worktree
 
-**Title card:** "Create a concoction"
+**Title card:** "Create a worktree"
 
-1. Cmd+Tab to dashboard workbench.
-2. Click the "What shall we concoct?" textarea.
-3. Type: "Add a dark mode toggle with a sun/moon icon that persists preference to localStorage"
-4. Hit send. Concoction card appears.
-5. Pause briefly so viewer sees the single concoction.
+1. Cmd+Tab to dashboard.
+2. Click the input bar.
+3. Type: "Fix the landing page hero section — update the headline text, improve spacing, and add a call-to-action button"
+4. Hit send. Worktree appears in the queued group.
+5. Pause briefly so viewer sees the worktree.
 
 ---
 
@@ -90,70 +89,68 @@ For each segment:
 **Title card:** "Watch it work" / "One agent, full lifecycle"
 
 1. Cmd+Tab to dashboard.
-2. Click the **Concoct** button (or press `s`). Cauldron animates.
-3. Watch the card move from STOCKROOM to CONCOCTING as the agent claims it.
-4. Activity ticker lights up — dot goes green.
-5. Click the CONCOCTING card to open the detail drawer.
+2. Click the **Start** button (or press `s`). Swarm activates.
+3. Watch the worktree move from queued to brewing as the agent claims it.
+4. Agent status dot goes green.
+5. Click the brewing worktree to see the detail panel.
 6. Show agent output streaming in real-time.
-7. **Key moment:** ingredients appear as the agent self-decomposes the task. Checkboxes populate, progress bar moves.
+7. **Key moment:** tasks appear as the agent self-decomposes the work. Checkboxes populate, progress bar moves.
 8. Let it run to completion. Speed up waiting parts in post (2-4x).
 
 ---
 
-## Segment 7 — Preview the Change
+## Segment 7 — Preview the Branch
 
-**Title card:** "Preview the change" / "Inline preview"
+**Title card:** "Preview the branch" / "See the changes live"
 
 1. Cmd+Tab to dashboard.
 2. The worktree should now be visible in the tree panel.
 3. Click the worktree to select it in the detail pane.
-4. Click the preview link — inline preview opens showing the dark mode toggle change.
-5. **Show the actual change.** Toggle dark mode on/off. This is the first payoff.
-6. Press Escape to close the inline preview.
+4. Click the preview link — inline preview opens showing the changes.
+5. **Show the actual change.** Compare to what main looked like. This is the first payoff.
 
 ---
 
-## Segment 8 — Merge & See the Result
+## Segment 8 — Merge into Main
 
-**Title card:** "Merge & see the result"
+**Title card:** "Merge into main"
 
 1. Cmd+Tab to dashboard.
-2. Select the completed concoction. Show the PR in the detail drawer.
-3. Merge it. Card slides to BOTTLED.
-4. Click **main** in the tree panel. Open the inline preview.
-5. The app now has the dark mode toggle merged into main.
-6. Show the updated app briefly. First "after" moment.
-7. Press Escape to close preview.
+2. Select the completed worktree. Show the PR in the detail panel.
+3. Merge it (press `m`). Worktree moves to bottled.
+4. Click **main** in the tree panel. The preview updates.
+5. The app now has the fixes merged into main.
+6. Show the updated app briefly. The "after" moment.
 
 ---
 
-## Segment 9 — Now, Three at Once
+## Segment 9 — Create Multiple Worktrees
 
-**Title card:** "Now, three at once" / "Parallel agents, parallel previews"
+**Title card:** "Now, scale it up" / "Multiple agents in parallel"
 
 **Note:** The viewer now understands the full lifecycle. Time to show it scales.
 
-1. Cmd+Tab to dashboard workbench.
-2. Create three concoctions in quick succession:
+1. Cmd+Tab to dashboard.
+2. Create several worktrees in quick succession:
+   - "Add a dark mode toggle with a sun/moon icon that persists preference to localStorage"
    - "Add a footer component with links to GitHub and docs"
-   - "Add a hero section with animated gradient background"
    - "Add a testimonials carousel with auto-rotation"
-3. Click **Concoct**. Scale to 3 alchemists so all three run in parallel.
-4. Watch all three cards move to CONCOCTING simultaneously.
-5. Briefly peek at each detail drawer — three agents working at the same time.
+3. Scale to 3 agents so all three run in parallel (press `+`).
+4. Watch all three worktrees move to brewing simultaneously.
+5. Briefly peek at each detail panel — three agents working at the same time.
 6. Let them run. Speed up waiting parts in post (2-4x).
 
 ---
 
-## Segment 10 — Preview Each Worktree
+## Segment 10 — Preview Each Branch
 
-**Title card:** "Preview each worktree" / "Inline, one by one"
+**Title card:** "Preview each branch" / "One by one"
 
 1. Cmd+Tab to dashboard.
 2. Three worktrees should now be visible in the tree panel.
-3. Click the first worktree. Open inline preview — see the footer.
-4. Press Escape. Click the second worktree. Open preview — see the hero section.
-5. Press Escape. Click the third worktree. Open preview — see the testimonials carousel.
+3. Click the first worktree. Preview shows the dark mode toggle.
+4. Click the second worktree. Preview shows the footer.
+5. Click the third worktree. Preview shows the testimonials carousel.
 6. Three agents, three features, all previewable inline.
 
 ---
@@ -163,31 +160,17 @@ For each segment:
 **Title card:** "Merge all" / "Everything combined"
 
 1. Cmd+Tab to dashboard.
-2. Merge all three concoctions one by one. Cards slide to BOTTLED.
-3. **Key moment:** Click **main** in the tree panel. Open the inline preview.
-4. The app now has everything — dark mode, footer, hero, testimonials. Four features total.
+2. Merge all three worktrees one by one. They move to bottled.
+3. **Key moment:** Click **main** in the tree panel. Preview updates.
+4. The app now has everything — dark mode, footer, testimonials, plus the earlier fixes.
 5. Show the fully updated app. The "after" state with all changes combined.
 6. This is the big payoff.
 
 ---
 
-## Segment 12 — Ask the Oracle
+## Segment 12 — Recurring Worktrees
 
-**Title card:** "Ask the Oracle" / "Codebase Q&A, powered by agents"
-
-1. Cmd+Tab to dashboard workbench.
-2. Type a question starting with `?`: "? How does the authentication system work?"
-3. Hit send. A question concoction appears with a pulsing amber indicator.
-4. Press `o` to switch to the Oracle tab — the question is listed.
-5. Wait (or speed up in post) for the agent to analyze the codebase and produce an answer.
-6. Answer appears in the Oracle tab. Click to expand and show the detailed response.
-7. Pause so the viewer can read the first few lines.
-
----
-
-## Segment 13 — Recurring Concoctions
-
-**Title card:** "Recurring concoctions" / "Scheduled work on autopilot"
+**Title card:** "Recurring worktrees" / "Scheduled work on autopilot"
 
 1. Cmd+Tab to dashboard.
 2. Press `e` to switch to the Recipes tab.
@@ -199,7 +182,7 @@ For each segment:
 
 ---
 
-## Segment 14 — Outro
+## Segment 13 — Outro
 
 **Title card:** "Apothecary" / "github.com/askasp/apothecary"
 
@@ -226,15 +209,14 @@ If a segment has dead time while agents work, cut it or speed it up in iMovie/kd
 ### Key moments to keep at 1x speed
 
 - Project selection
-- Main preview opening inline (the "before")
-- Single concoction creation and lifecycle
-- First inline preview — the dark mode toggle payoff
+- Main preview opening inline (the baseline)
+- Single worktree creation and lifecycle
+- First branch preview — comparing to main
 - First merge and seeing the result on main
-- Creating three concoctions in rapid succession
-- All three cards moving to CONCOCTING simultaneously
-- Each worktree inline preview loading
-- Merging all three and seeing the combined result on main
-- Oracle question being asked and answer appearing
+- Creating multiple worktrees in rapid succession
+- All worktrees moving to brewing simultaneously
+- Each branch preview loading
+- Merging all and seeing the combined result on main
 - Recipe creation
 
 ### Export
