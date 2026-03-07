@@ -2284,6 +2284,8 @@ defmodule ApothecaryWeb.DashboardComponents do
             <div style="color: var(--accent);" class="mb-1">navigation</div>
             <.hk key="j/k" desc="next/prev worktree" />
             <.hk key="h/l" desc="switch panes" />
+            <.hk key="^h/^l" desc="focus left/right panel" />
+            <.hk key="^j" desc="navigate down (always)" />
             <.hk key="g/G" desc="first/last worktree" />
             <.hk key="1-4" desc="jump to lane" />
             <.hk key="enter" desc="inspect worktree" />
@@ -2304,6 +2306,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <.hk key="s" desc="start/stop brewing" />
             <.hk key="+/-" desc="brewer/oracle count" />
             <.hk key="c" desc="focus input" />
+            <.hk key="n" desc="new worktree" />
             <.hk key="a" desc="add task" />
             <.hk key="d" desc="view diff" />
             <.hk key="t" desc="open terminal" />
@@ -2315,12 +2318,12 @@ defmodule ApothecaryWeb.DashboardComponents do
           <div>
             <div style="color: var(--accent);" class="mb-1">global</div>
             <.hk key="R" desc="requeue orphans" />
-            <.hk key="D" desc="delete worktree" />
+            <.hk key="D" desc="toggle dev server" />
           </div>
 
           <div :if={@has_selected_task}>
             <div style="color: var(--accent);" class="mb-1">detail view</div>
-            <.hk key="c" desc="create PR" />
+            <.hk key="c" desc="ask question" />
             <.hk key="m" desc="merge" />
             <.hk key="r" desc="requeue" />
             <.hk key="x" desc="close worktree" />

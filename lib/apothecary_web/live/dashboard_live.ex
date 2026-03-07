@@ -574,24 +574,36 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  # Ctrl+J/K/H/L always work for navigation, even when an input has focus
-  def handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
-      when key in ["j", "h", "l"] do
+  # Ctrl+H/L always focus left/right pane (neovim-style panel switching)
+  def handle_event("hotkey", %{"ctrlKey" => true, "key" => "h"}, socket) do
+    {:noreply,
+     socket
+     |> assign(:focused_pane, :tree)
+     |> assign(:input_focused, false)
+     |> push_event("blur-input", %{})}
+  end
+
+  def handle_event("hotkey", %{"ctrlKey" => true, "key" => "l"}, socket) do
+    {:noreply, assign(socket, :focused_pane, :detail)}
+  end
+
+  # Ctrl+J always works for navigation, even when an input has focus
+  def handle_event("hotkey", %{"ctrlKey" => true, "key" => "j"}, socket) do
     cond do
       socket.assigns.loading_action != nil ->
         {:noreply, socket}
 
-      socket.assigns.show_project_switcher and key == "j" ->
-        {:noreply, handle_switcher_hotkey(key, socket)}
+      socket.assigns.show_project_switcher ->
+        {:noreply, handle_switcher_hotkey("j", socket)}
 
       socket.assigns.diff_view != nil ->
-        {:noreply, handle_diff_hotkey(key, socket)}
+        {:noreply, handle_diff_hotkey("j", socket)}
 
-      socket.assigns.active_tab == :oracle and key == "j" ->
-        {:noreply, handle_oracle_hotkey(key, socket)}
+      socket.assigns.active_tab == :oracle ->
+        {:noreply, handle_oracle_hotkey("j", socket)}
 
       true ->
-        {:noreply, handle_hotkey(key, socket)}
+        {:noreply, handle_hotkey("j", socket)}
     end
   end
 
@@ -615,7 +627,7 @@ defmodule ApothecaryWeb.DashboardLive do
       socket.assigns.pending_action != nil ->
         {:noreply, handle_pending_action(key, socket)}
 
-      socket.assigns.active_tab == :oracle and key in ["j", "k", "Enter", "n", "d"] ->
+      socket.assigns.active_tab == :oracle and key in ["j", "k", "Enter", "d"] ->
         {:noreply, handle_oracle_hotkey(key, socket)}
 
       true ->
@@ -1888,9 +1900,6 @@ defmodule ApothecaryWeb.DashboardLive do
       else: socket
   end
 
-  defp handle_oracle_hotkey("n", socket) do
-    push_event(socket, "focus-oracle-input", %{})
-  end
 
   defp handle_oracle_hotkey("d", socket) do
     if id = socket.assigns.selected_question_id do
@@ -2532,6 +2541,15 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:collapsed_done, false)
     |> assign(:card_ids, new_card_ids)
     |> jump_to_lane(~w(done))
+  end
+
+  # n = new worktree: focus primary input in create mode
+  defp handle_hotkey("n", socket) do
+    socket
+    |> assign(:selected_card, -1)
+    |> assign(:adding_task_to, nil)
+    |> assign(:active_tab, :workbench)
+    |> push_event("focus-primary-input", %{})
   end
 
   # Tab switching: w=workbench, e=recipes, o=oracle
