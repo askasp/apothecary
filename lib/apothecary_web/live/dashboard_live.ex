@@ -2131,6 +2131,10 @@ defmodule ApothecaryWeb.DashboardLive do
         socket
         |> assign(:pending_action, nil)
         |> clear_flash()
+        |> put_flash(:info, "Cancelled")
+
+      socket.assigns.editing_recipe_id ->
+        assign(socket, :editing_recipe_id, nil)
 
       socket.assigns.editing_field ->
         assign(socket, :editing_field, nil)

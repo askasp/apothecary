@@ -2420,6 +2420,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <.hk key="g/G" desc="first/last branch" />
             <.hk key="1-4" desc="jump to lane" />
             <.hk key="enter" desc="focus branch" />
+            <.hk key="w" desc="back to branches" />
             <.hk key="esc" desc="normal mode / back" />
             <.hk key="⌘k" desc="switch project" />
           </div>
@@ -2430,6 +2431,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <.hk key="c / /" desc="chat mode (message brewer)" />
             <.hk key="n" desc="focus input" />
             <.hk key="a" desc="task mode (add to branch)" />
+            <.hk key="+ (in chat)" desc="switch to task mode" />
             <.hk key="?text" desc="ask question" />
           </div>
 
