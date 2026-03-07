@@ -964,6 +964,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :selected_card, :integer, default: 0
   attr :card_ids, :list, default: []
   attr :collapsed_done, :boolean, default: true
+  attr :collapsed_discarded, :boolean, default: true
   attr :adding_task_to, :string, default: nil
   attr :search_mode, :boolean, default: false
   attr :search_query, :string, default: ""
@@ -975,6 +976,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     ready = assigns.worktrees_by_status["ready"] || []
     blocked = assigns.worktrees_by_status["blocked"] || []
     done = assigns.worktrees_by_status["done"] || []
+    discarded = assigns.worktrees_by_status["discarded"] || []
 
     brewing = running
     assaying = pr
@@ -984,7 +986,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     # Apply search filter
     query = String.downcase(assigns.search_query || "")
 
-    {brewing, assaying, queued, bottled} =
+    {brewing, assaying, queued, bottled, discarded} =
       if query != "" do
         f = fn entries ->
           Enum.filter(entries, fn e ->
@@ -993,9 +995,9 @@ defmodule ApothecaryWeb.DashboardComponents do
           end)
         end
 
-        {f.(brewing), f.(assaying), f.(queued), f.(bottled)}
+        {f.(brewing), f.(assaying), f.(queued), f.(bottled), f.(discarded)}
       else
-        {brewing, assaying, queued, bottled}
+        {brewing, assaying, queued, bottled, discarded}
       end
 
     assigns =
@@ -1004,8 +1006,9 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> assign(:assaying, assaying)
       |> assign(:queued, queued)
       |> assign(:bottled, bottled)
+      |> assign(:discarded, discarded)
 
-    total_count = length(brewing) + length(assaying) + length(queued) + length(bottled)
+    total_count = length(brewing) + length(assaying) + length(queued) + length(bottled) + length(discarded)
 
     # Count idle agents
     idle_count =
@@ -1136,9 +1139,35 @@ defmodule ApothecaryWeb.DashboardComponents do
         />
       <% end %>
 
+      <%!-- Discarded group (collapsed by default) --%>
+      <%= if @discarded != [] do %>
+        <div
+          class="cursor-pointer py-1 px-1"
+          phx-click="toggle-discarded-collapse"
+          style="font-size: var(--font-size-sm);"
+        >
+          <span style="color: var(--dim);">
+            {if @collapsed_discarded, do: "▸", else: "▾"} discarded ({length(@discarded)})
+          </span>
+        </div>
+        <.tree_group
+          :if={!@collapsed_discarded}
+          label={nil}
+          count={0}
+          color="var(--dim)"
+          entries={@discarded}
+          dot="✕"
+          dot_class=""
+          title_color="var(--dim)"
+          card_ids={@card_ids}
+          selected_card={@selected_card}
+          adding_task_to={@adding_task_to}
+        />
+      <% end %>
+
       <%!-- Empty state --%>
       <div
-        :if={@brewing == [] && @assaying == [] && @queued == [] && @bottled == []}
+        :if={@brewing == [] && @assaying == [] && @queued == [] && @bottled == [] && @discarded == []}
         class="py-6"
         style="color: var(--muted); font-size: var(--font-size-sm);"
       >
@@ -1584,13 +1613,19 @@ defmodule ApothecaryWeb.DashboardComponents do
             <button phx-click="confirm-merge" class="action-pill">confirm</button>
             <button phx-click="cancel-merge" class="action-text">cancel</button>
           <% else %>
+            <%= if @task.status == "merged" do %>
+              <span style="color: var(--bottled);">merged</span>
+            <% end %>
+            <%= if @task.status == "cancelled" do %>
+              <span style="color: var(--dim);">discarded</span>
+            <% end %>
             <%= if @task.status in ["brew_done", "done", "closed"] and is_nil(@pr_url) do %>
               <span class="action-pill" phx-click="promote-to-assaying">c create-pr</span>
               <span class="action-pill" phx-click="local-merge">g git-merge</span>
               <span class="action-pill" phx-click="show-diff">d diff</span>
               <span class="action-pill" phx-click="close-task">x close</span>
             <% end %>
-            <span :if={@pr_url} class="action-pill" phx-click="merge-pr">m merge</span>
+            <span :if={@pr_url && @task.status not in ["merged", "cancelled"]} class="action-pill" phx-click="merge-pr">m merge</span>
           <% end %>
         <% end %>
       </div>
@@ -2760,7 +2795,8 @@ defmodule ApothecaryWeb.DashboardComponents do
     case task.status do
       s when s in ["in_progress", "claimed"] -> "brewing"
       s when s in ["brew_done", "pr_open", "revision_needed"] -> "reviewing"
-      s when s in ["done", "closed", "merged"] -> "bottled"
+      "merged" -> "bottled"
+      s when s in ["done", "closed", "cancelled"] -> "discarded"
       _ -> "queued"
     end
   end
@@ -2768,12 +2804,14 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp group_color("brewing"), do: "var(--concocting)"
   defp group_color("reviewing"), do: "var(--assaying)"
   defp group_color("bottled"), do: "var(--bottled)"
+  defp group_color("discarded"), do: "var(--dim)"
   defp group_color("queued"), do: "var(--muted)"
   defp group_color(_), do: "var(--dim)"
 
   defp group_dot("brewing"), do: "◉"
   defp group_dot("reviewing"), do: "◎"
   defp group_dot("bottled"), do: "●"
+  defp group_dot("discarded"), do: "✕"
   defp group_dot("queued"), do: "○"
   defp group_dot(_), do: "·"
 

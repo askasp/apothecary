@@ -14,7 +14,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @pubsub Apothecary.PubSub
 
-  @group_order ~w(running ready blocked pr done)
+  @group_order ~w(running ready blocked pr done discarded)
 
   @impl true
   def mount(_params, _session, socket) do
@@ -52,6 +52,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:has_preview_config, false)
       |> assign(:has_project_preview_config, false)
       |> assign(:collapsed_done, true)
+      |> assign(:collapsed_discarded, true)
       |> assign(:selected_card, -1)
       # Panel state
       |> assign(:selected_task_id, nil)
@@ -220,7 +221,11 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:worktrees_by_status, worktrees_by_status)
     |> assign(
       :card_ids,
-      build_card_ids(worktrees_by_status, socket.assigns[:collapsed_done] != false)
+      build_card_ids(
+        worktrees_by_status,
+        socket.assigns[:collapsed_done] != false,
+        socket.assigns[:collapsed_discarded] != false
+      )
     )
     |> assign(:known_task_ids, extract_task_ids(task_state.tasks))
     |> assign(:project_files, load_project_files(project))
@@ -817,8 +822,47 @@ defmodule ApothecaryWeb.DashboardLive do
       socket
       |> assign(:collapsed_done, new_collapsed)
       |> then(fn s ->
-        new_card_ids = build_card_ids(s.assigns.worktrees_by_status, new_collapsed)
+        new_card_ids =
+          build_card_ids(
+            s.assigns.worktrees_by_status,
+            new_collapsed,
+            s.assigns[:collapsed_discarded] != false
+          )
+
         # Preserve selected card position
+        old_id = Enum.at(s.assigns.card_ids, s.assigns.selected_card)
+
+        idx =
+          if old_id do
+            Enum.find_index(new_card_ids, &(&1 == old_id)) ||
+              min(s.assigns.selected_card, max(length(new_card_ids) - 1, 0))
+          else
+            min(s.assigns.selected_card, max(length(new_card_ids) - 1, 0))
+          end
+
+        s
+        |> assign(:card_ids, new_card_ids)
+        |> assign(:selected_card, idx)
+      end)
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("toggle-discarded-collapse", _params, socket) do
+    new_collapsed = !socket.assigns.collapsed_discarded
+
+    socket =
+      socket
+      |> assign(:collapsed_discarded, new_collapsed)
+      |> then(fn s ->
+        new_card_ids =
+          build_card_ids(
+            s.assigns.worktrees_by_status,
+            s.assigns.collapsed_done,
+            new_collapsed
+          )
+
         old_id = Enum.at(s.assigns.card_ids, s.assigns.selected_card)
 
         idx =
@@ -2435,18 +2479,37 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  # Lane jumps: 1=queued, 2=brewing, 3=reviewing, 4=bottled
+  # Lane jumps: 1=queued, 2=brewing, 3=reviewing, 4=bottled, 5=discarded
   defp handle_hotkey("1", socket), do: jump_to_lane(socket, ~w(ready blocked))
   defp handle_hotkey("2", socket), do: jump_to_lane(socket, ~w(running))
   defp handle_hotkey("3", socket), do: jump_to_lane(socket, ~w(pr))
 
   defp handle_hotkey("4", socket) do
-    new_card_ids = build_card_ids(socket.assigns.worktrees_by_status, false)
+    new_card_ids =
+      build_card_ids(
+        socket.assigns.worktrees_by_status,
+        false,
+        socket.assigns[:collapsed_discarded] != false
+      )
 
     socket
     |> assign(:collapsed_done, false)
     |> assign(:card_ids, new_card_ids)
     |> jump_to_lane(~w(done))
+  end
+
+  defp handle_hotkey("5", socket) do
+    new_card_ids =
+      build_card_ids(
+        socket.assigns.worktrees_by_status,
+        socket.assigns[:collapsed_done] != false,
+        false
+      )
+
+    socket
+    |> assign(:collapsed_discarded, false)
+    |> assign(:card_ids, new_card_ids)
+    |> jump_to_lane(~w(discarded))
   end
 
   # Tab switching: w=workbench, e=recipes
@@ -3022,9 +3085,6 @@ defmodule ApothecaryWeb.DashboardLive do
         String.starts_with?(to_string(item.id), "wt-")
       end)
 
-    # Hide cancelled worktrees (PR closed without merge)
-    worktrees = Enum.reject(worktrees, &(&1.status == "cancelled"))
-
     tasks_by_wt =
       Enum.group_by(tasks, fn t ->
         t.worktree_id || t.parent
@@ -3052,7 +3112,8 @@ defmodule ApothecaryWeb.DashboardLive do
           wt.status in ["blocked", "merge_conflict"] -> "blocked"
           wt.status == "pr_open" -> "pr"
           wt.status == "revision_needed" -> "ready"
-          wt.status in ["done", "closed", "merged"] -> "done"
+          wt.status == "merged" -> "done"
+          wt.status in ["done", "closed", "cancelled"] -> "discarded"
           true -> "ready"
         end
       end)
@@ -3318,7 +3379,7 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  defp build_card_ids(worktrees_by_status, collapsed_done) do
+  defp build_card_ids(worktrees_by_status, collapsed_done, collapsed_discarded) do
     sort_by_priority = fn entries ->
       entries
       |> Enum.sort_by(fn e -> e.worktree.priority || 99 end)
@@ -3343,13 +3404,26 @@ defmodule ApothecaryWeb.DashboardLive do
         |> Enum.map(fn e -> e.worktree.id end)
       end
 
-    brewing ++ assaying ++ stockroom ++ done
+    discarded =
+      if collapsed_discarded do
+        []
+      else
+        (worktrees_by_status["discarded"] || [])
+        |> Enum.map(fn e -> e.worktree.id end)
+      end
+
+    brewing ++ assaying ++ stockroom ++ done ++ discarded
   end
 
   defp rebuild_card_ids(socket, worktrees_by_status) do
     old_card_ids = socket.assigns.card_ids
     old_selected_id = Enum.at(old_card_ids, socket.assigns.selected_card)
-    new_card_ids = build_card_ids(worktrees_by_status, socket.assigns.collapsed_done)
+    new_card_ids =
+      build_card_ids(
+        worktrees_by_status,
+        socket.assigns.collapsed_done,
+        socket.assigns[:collapsed_discarded] != false
+      )
 
     idx =
       if old_selected_id do
@@ -3542,6 +3616,7 @@ defmodule ApothecaryWeb.DashboardLive do
                       selected_card={@selected_card}
                       card_ids={@card_ids}
                       collapsed_done={@collapsed_done}
+                      collapsed_discarded={@collapsed_discarded}
                       adding_task_to={@adding_task_to}
                       search_mode={@search_mode}
                       search_query={@search_query}

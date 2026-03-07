@@ -337,10 +337,10 @@ defmodule Apothecary.Worktrees do
     update_worktree(id, %{status: "revision_needed", assigned_brewer_id: nil})
   end
 
-  @doc "Clean up a merged worktree from disk and set status to done."
+  @doc "Clean up a merged worktree from disk and set status to merged."
   def cleanup_merged_worktree(id) do
     # Update status FIRST so the card moves to "bottled" even if cleanup fails
-    update_worktree(id, %{status: "done", assigned_brewer_id: nil})
+    update_worktree(id, %{status: "merged", assigned_brewer_id: nil})
 
     # Best-effort cleanup — don't let failures leave status stuck in pr_open
     try do
