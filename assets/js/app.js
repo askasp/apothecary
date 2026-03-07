@@ -83,10 +83,12 @@ let Hooks = {
           }
         }
 
-        // Ctrl+H/J/K/L — vim-style navigation even when input focused
-        // Ctrl+K/P / Cmd+K opens project switcher
+        // Ctrl+H/J/K/L — section navigation (push directly to bypass Mac browser quirks)
+        // Ctrl+P / Cmd+K opens project switcher
         if ((e.ctrlKey || e.metaKey) && ["h", "j", "k", "l", "p"].includes(e.key)) {
           e.preventDefault()
+          e.stopPropagation()
+          this.pushEvent("hotkey", {key: e.key, ctrlKey: true, metaKey: e.metaKey})
           return
         }
 

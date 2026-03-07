@@ -2431,7 +2431,8 @@ defmodule ApothecaryWeb.DashboardComponents do
             <div style="color: var(--accent);" class="mb-1">navigation</div>
             <.hk key="j/k" desc="next/prev branch" />
             <.hk key="h/l" desc="focus branches/detail" />
-            <.hk key="^hjkl" desc="navigate (works in input)" />
+            <.hk key="^h/l" desc="focus branches/detail (from input)" />
+            <.hk key="^j/k" desc="cycle sections: tree → detail → input" />
             <.hk key="g/G" desc="first/last branch" />
             <.hk key="1-4" desc="jump to lane" />
             <.hk key="enter" desc="focus branch" />

@@ -588,7 +588,9 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  # Ctrl+H/J/K/L always work for navigation, even when an input has focus
+  # Ctrl+H/J/K/L — section navigation (works even when input has focus)
+  # Ctrl+H/L = switch panels (tree ↔ detail)
+  # Ctrl+J/K = cycle sections (tree → detail → input → tree)
   def handle_event("hotkey", %{"ctrlKey" => true, "key" => key}, socket)
       when key in ["h", "j", "k", "l"] do
     cond do
@@ -601,8 +603,56 @@ defmodule ApothecaryWeb.DashboardLive do
       socket.assigns.diff_view != nil ->
         {:noreply, handle_diff_hotkey(key, socket)}
 
-      true ->
-        {:noreply, handle_hotkey(key, socket)}
+      key == "h" ->
+        {:noreply, assign(socket, :focused_pane, :tree)}
+
+      key == "l" ->
+        {:noreply, assign(socket, :focused_pane, :detail)}
+
+      key == "j" ->
+        # Cycle forward: tree → detail → input → tree
+        socket =
+          cond do
+            socket.assigns.input_focused ->
+              socket
+              |> assign(:input_focused, false)
+              |> assign(:focused_pane, :tree)
+              |> push_event("blur-input", %{})
+
+            socket.assigns.focused_pane == :tree ->
+              assign(socket, :focused_pane, :detail)
+
+            socket.assigns.focused_pane == :detail ->
+              socket
+              |> assign(:input_focused, true)
+              |> push_event("focus-primary-input", %{})
+
+            true ->
+              assign(socket, :focused_pane, :tree)
+          end
+
+        {:noreply, socket}
+
+      key == "k" ->
+        # Cycle backward: input → detail → tree → input
+        socket =
+          cond do
+            socket.assigns.input_focused ->
+              socket
+              |> assign(:input_focused, false)
+              |> assign(:focused_pane, :detail)
+              |> push_event("blur-input", %{})
+
+            socket.assigns.focused_pane == :detail ->
+              assign(socket, :focused_pane, :tree)
+
+            true ->
+              socket
+              |> assign(:input_focused, true)
+              |> push_event("focus-primary-input", %{})
+          end
+
+        {:noreply, socket}
     end
   end
 
