@@ -927,7 +927,10 @@ defmodule ApothecaryWeb.DashboardComponents do
       <div class="flex items-center gap-2">
         <span
           :if={@mode}
+          id="input-mode-badge"
           style={"background: color-mix(in srgb, #{@mode_color} 20%, var(--surface)); color: #{@mode_color}; font-size: var(--font-size-xxs); padding: 2px 6px; border-radius: 4px; font-weight: 600; white-space: nowrap;"}
+          data-server-mode={@mode}
+          data-server-color={@mode_color}
         >
           {@mode}
         </span>
@@ -942,6 +945,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           placeholder={@placeholder}
           data-wt-id={@selected_card_id}
           data-refocus={if @adding_task_to, do: "true", else: "false"}
+          data-server-mode={@mode}
         />
         <span style="color: var(--muted); font-size: var(--font-size-xs);">/</span>
       </div>
@@ -2437,9 +2441,9 @@ defmodule ApothecaryWeb.DashboardComponents do
 
           <div>
             <div style="color: var(--accent);" class="mb-1">input (insert mode)</div>
-            <.hk key="c / /" desc="focus chat input" />
+            <.hk key="c / /" desc="chat mode (message brewer)" />
             <.hk key="n" desc="new task/worktree" />
-            <.hk key="a" desc="add task to branch" />
+            <.hk key="a" desc="task mode (add to branch)" />
             <.hk key="?text" desc="ask question" />
           </div>
 

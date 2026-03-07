@@ -2233,8 +2233,9 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("c", socket) do
-    # Focus chat input at the bottom
+    # Focus chat input in chat mode (clear task-add mode)
     socket
+    |> assign(:adding_task_to, nil)
     |> assign(:focused_pane, :detail)
     |> push_event("focus-primary-input", %{})
   end
@@ -2252,8 +2253,11 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("a", socket) do
-    # Focus chat input to add task to focused worktree
+    # Focus chat input in task-add mode for focused worktree
+    wt_id = socket.assigns.selected_task_id
+
     socket
+    |> then(fn s -> if wt_id, do: assign(s, :adding_task_to, wt_id), else: s end)
     |> assign(:focused_pane, :detail)
     |> push_event("focus-primary-input", %{})
   end

@@ -649,14 +649,41 @@ let Hooks = {
           if (text) {
             this.pushEvent("submit-input", { text })
             this.el.value = ""
+            this.updateModeBadge("")
           }
         }
+      })
+      this.el.addEventListener("input", () => {
+        this.updateModeBadge(this.el.value)
       })
     },
     updated() {
       // Re-focus if server re-renders while adding tasks
       if (this.el.dataset.refocus === "true") {
         this.el.focus()
+      }
+    },
+    updateModeBadge(value) {
+      const badge = document.getElementById("input-mode-badge")
+      if (!badge) return
+      const serverMode = this.el.dataset.serverMode
+      // Override badge when user types + or ? prefix
+      if (serverMode === "chat" && value.startsWith("+")) {
+        const taskColor = getComputedStyle(document.documentElement).getPropertyValue("--queued").trim() || "#f59e0b"
+        badge.textContent = "task"
+        badge.style.color = taskColor
+        badge.style.background = `color-mix(in srgb, ${taskColor} 20%, var(--surface))`
+      } else if (value.startsWith("?")) {
+        const qColor = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#818cf8"
+        badge.textContent = "question"
+        badge.style.color = qColor
+        badge.style.background = `color-mix(in srgb, ${qColor} 20%, var(--surface))`
+      } else {
+        // Restore server mode
+        const color = badge.dataset.serverColor
+        badge.textContent = badge.dataset.serverMode
+        badge.style.color = color
+        badge.style.background = `color-mix(in srgb, ${color} 20%, var(--surface))`
       }
     }
   },
