@@ -930,20 +930,12 @@ details[open] > summary .merge-arrow {
 /* ── Branch panel compact cards ───────────────────────── */
 
 .branch-card {
-  padding: 6px 12px;
+  padding: 4px 12px;
   cursor: pointer;
-  border-left: 2px solid transparent;
-  transition: background 0.06s ease;
-}
-
-.branch-card:hover {
-  background: var(--surface);
 }
 
 .branch-card--selected {
-  background: var(--surface);
-  border-left-color: var(--accent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .branch-progress {
@@ -957,3 +949,25 @@ details[open] > summary .merge-arrow {
   height: 10px;
   border-radius: 1px;
 }
+
+/* ── Detail panel: active task highlight ────────────────── */
+
+.detail-active-task {
+  background: color-mix(in srgb, var(--concocting) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--concocting) 25%, transparent);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+/* ── Detail panel: brewer activity log ──────────────────── */
+
+.detail-brewer-log {
+  max-height: 240px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+
+.detail-brewer-log::-webkit-scrollbar { width: 4px; }
+.detail-brewer-log::-webkit-scrollbar-track { background: transparent; }
+.detail-brewer-log::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }

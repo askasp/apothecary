@@ -42,9 +42,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:projects, projects)
       |> assign(:current_project, nil)
       |> assign(:swarm_status, :paused)
-      |> assign(:oracle_status, :paused)
       |> assign(:target_count, 1)
-      |> assign(:oracle_target_count, 0)
       |> assign(:active_count, 0)
       |> assign(:agents, agents)
       |> assign(:dispatcher_projects, dispatcher_status[:projects] || %{})
@@ -105,8 +103,6 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:search_query, "")
       # Preview help
       |> assign(:show_preview_help, false)
-      # Oracle state
-      |> assign(:selected_question_id, nil)
       # Theme (actual value set from client via ThemePersist hook)
       |> assign(:theme, "studio")
       # Load state (will be refined in handle_params)
@@ -180,9 +176,7 @@ defmodule ApothecaryWeb.DashboardLive do
   defp apply_swarm_state(socket, nil) do
     socket
     |> assign(:swarm_status, :paused)
-    |> assign(:oracle_status, :paused)
     |> assign(:target_count, 1)
-    |> assign(:oracle_target_count, 0)
     |> assign(:active_count, 0)
   end
 
@@ -191,9 +185,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
     socket
     |> assign(:swarm_status, project_status.status)
-    |> assign(:oracle_status, project_status[:oracle_status] || :paused)
     |> assign(:target_count, max(project_status.target_count, 1))
-    |> assign(:oracle_target_count, project_status[:oracle_target_count] || 0)
     |> assign(:active_count, project_status.active_count)
   end
 
@@ -314,9 +306,7 @@ defmodule ApothecaryWeb.DashboardLive do
     socket =
       socket
       |> assign(:swarm_status, project_status.status)
-      |> assign(:oracle_status, project_status[:oracle_status] || :paused)
       |> assign(:target_count, max(project_status.target_count, 1))
-      |> assign(:oracle_target_count, project_status[:oracle_target_count] || 0)
       |> assign(:active_count, project_status.active_count)
       |> assign(:agents, agents)
       |> assign(:dispatcher_projects, status[:projects] || %{})
@@ -387,14 +377,38 @@ defmodule ApothecaryWeb.DashboardLive do
   def handle_info({:agent_output, agent_id, lines}, socket) do
     working_agent = socket.assigns[:working_agent]
 
-    if working_agent && working_agent.id == agent_id do
-      output =
-        (socket.assigns.agent_output ++ lines)
-        |> Enum.take(-200)
+    cond do
+      # Already matched — append output
+      working_agent && working_agent.id == agent_id ->
+        output =
+          (socket.assigns.agent_output ++ lines)
+          |> Enum.take(-200)
 
-      {:noreply, assign(socket, :agent_output, output)}
-    else
-      {:noreply, socket}
+        {:noreply, assign(socket, :agent_output, output)}
+
+      # Not matched yet — try to match this agent to the selected worktree
+      is_nil(working_agent) && socket.assigns[:selected_task_id] ->
+        agent =
+          socket.assigns.agents
+          |> Enum.find(fn a ->
+            a.id == agent_id &&
+              a.current_worktree &&
+              to_string(a.current_worktree.id) == to_string(socket.assigns.selected_task_id)
+          end)
+
+        if agent do
+          output = (socket.assigns.agent_output ++ lines) |> Enum.take(-200)
+
+          {:noreply,
+           socket
+           |> assign(:working_agent, agent)
+           |> assign(:agent_output, output)}
+        else
+          {:noreply, socket}
+        end
+
+      true ->
+        {:noreply, socket}
     end
   end
 
@@ -587,9 +601,6 @@ defmodule ApothecaryWeb.DashboardLive do
       socket.assigns.diff_view != nil ->
         {:noreply, handle_diff_hotkey(key, socket)}
 
-      socket.assigns.active_tab == :oracle and key == "j" ->
-        {:noreply, handle_oracle_hotkey(key, socket)}
-
       true ->
         {:noreply, handle_hotkey(key, socket)}
     end
@@ -614,9 +625,6 @@ defmodule ApothecaryWeb.DashboardLive do
 
       socket.assigns.pending_action != nil ->
         {:noreply, handle_pending_action(key, socket)}
-
-      socket.assigns.active_tab == :oracle and key in ["j", "k", "Enter", "n", "d"] ->
-        {:noreply, handle_oracle_hotkey(key, socket)}
 
       true ->
         {:noreply, handle_hotkey(key, socket)}
@@ -915,7 +923,12 @@ defmodule ApothecaryWeb.DashboardLive do
          |> push_event("blur-input", %{})}
       else
         # No match — create a new worktree
-        socket = assign(socket, :search_query, "")
+        socket =
+          socket
+          |> assign(:search_query, "")
+          |> assign(:input_focused, false)
+          |> push_event("blur-input", %{})
+
         create_from_input(query, socket)
       end
     end
@@ -940,6 +953,16 @@ defmodule ApothecaryWeb.DashboardLive do
   # Preview controls
   @impl true
   def handle_event("start-dev", %{"id" => wt_id}, socket) do
+    # Re-check config existence (file may have been added since selection)
+    has_config =
+      try do
+        DevServer.has_config?(wt_id)
+      catch
+        :exit, _ -> false
+      end
+
+    socket = assign(socket, :has_preview_config, has_config)
+
     case DevServer.start_server(wt_id) do
       {:ok, _base_port} ->
         {:noreply, put_flash(socket, :info, "Preview starting for #{wt_id}")}
@@ -967,6 +990,9 @@ defmodule ApothecaryWeb.DashboardLive do
     project = socket.assigns.current_project
 
     if project do
+      # Re-check config existence (file may have been added since page load)
+      socket = assign(socket, :has_project_preview_config, DevServer.has_config_for_path?(project.path))
+
       case DevServer.start_project_server(project.id, project.path) do
         {:ok, _base_port} ->
           {:noreply, put_flash(socket, :info, "Starting dev server for #{project.name}")}
@@ -1037,6 +1063,14 @@ defmodule ApothecaryWeb.DashboardLive do
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed to close: #{inspect(reason)}")}
+    end
+  end
+
+  @impl true
+  def handle_event("show-diff", _params, socket) do
+    case selected_worktree(socket) do
+      nil -> {:noreply, socket}
+      wt -> {:noreply, start_diff_fetch(socket, wt)}
     end
   end
 
@@ -1438,10 +1472,11 @@ defmodule ApothecaryWeb.DashboardLive do
       text == "" ->
         {:noreply, socket}
 
-      socket.assigns.working_agent ->
-        send_to_agent(text, socket)
+      # ? prefix asks a question in the focused worktree's context
+      String.starts_with?(text, "?") ->
+        create_question_for_worktree(text, socket)
 
-      # Task-add mode: create task in focused worktree
+      # Task-add mode: create task in focused worktree (takes priority over agent)
       socket.assigns.adding_task_to ->
         wt_id = socket.assigns.adding_task_to
 
@@ -1453,8 +1488,29 @@ defmodule ApothecaryWeb.DashboardLive do
             {:noreply, put_flash(socket, :error, "Failed to add task")}
         end
 
-      # Chat input with a focused worktree: add task to it (or ? for question)
-      socket.assigns.selected_task_id && not String.starts_with?(text, "?") ->
+      # Active agent with + prefix: force task creation
+      socket.assigns.working_agent && String.starts_with?(text, "+") ->
+        task_text = text |> String.trim_leading("+") |> String.trim()
+        wt_id = socket.assigns.selected_task_id
+
+        if task_text != "" && wt_id do
+          case Worktrees.create_task(%{title: task_text, worktree_id: wt_id, priority: 3}) do
+            {:ok, item} when not is_nil(item) ->
+              {:noreply, put_flash(socket, :info, "Task queued: #{item.title}")}
+
+            _ ->
+              {:noreply, put_flash(socket, :error, "Failed to queue task")}
+          end
+        else
+          {:noreply, socket}
+        end
+
+      # Active agent: send as instruction to brewer
+      socket.assigns.working_agent ->
+        send_to_agent(text, socket)
+
+      # Chat input with a focused worktree: add task
+      socket.assigns.selected_task_id ->
         wt_id = socket.assigns.selected_task_id
 
         case Worktrees.create_task(%{title: text, worktree_id: wt_id, priority: 3}) do
@@ -1482,40 +1538,6 @@ defmodule ApothecaryWeb.DashboardLive do
   def handle_event("set-theme", %{"theme" => theme}, socket)
       when theme in ~w(moonlight studio daylight) do
     {:noreply, assign(socket, :theme, theme)}
-  end
-
-  # --- Oracle event handlers ---
-
-  @impl true
-  def handle_event("oracle-ask", %{"text" => text}, socket) do
-    text = String.trim(text)
-
-    if text == "" do
-      {:noreply, socket}
-    else
-      create_question(text, socket)
-    end
-  end
-
-  @impl true
-  def handle_event("select-question", %{"id" => id}, socket) do
-    {:noreply, assign(socket, :selected_question_id, id)}
-  end
-
-  @impl true
-  def handle_event("delete-question", %{"id" => id}, socket) do
-    case Worktrees.close(id) do
-      {:ok, _} ->
-        new_selected =
-          if socket.assigns.selected_question_id == id,
-            do: nil,
-            else: socket.assigns.selected_question_id
-
-        {:noreply, assign(socket, :selected_question_id, new_selected)}
-
-      {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to delete question")}
-    end
   end
 
   # --- Project event handlers ---
@@ -1605,28 +1627,6 @@ defmodule ApothecaryWeb.DashboardLive do
     end
 
     {:noreply, assign(socket, :target_count, count)}
-  end
-
-  @impl true
-  def handle_event("increment-oracles", _params, socket) do
-    count = min(socket.assigns.oracle_target_count + 1, 5)
-
-    if socket.assigns.current_project do
-      Dispatcher.set_oracle_count(socket.assigns.current_project.id, count)
-    end
-
-    {:noreply, assign(socket, :oracle_target_count, count)}
-  end
-
-  @impl true
-  def handle_event("decrement-oracles", _params, socket) do
-    count = max(socket.assigns.oracle_target_count - 1, 0)
-
-    if socket.assigns.current_project do
-      Dispatcher.set_oracle_count(socket.assigns.current_project.id, count)
-    end
-
-    {:noreply, assign(socket, :oracle_target_count, count)}
   end
 
   @impl true
@@ -1880,66 +1880,6 @@ defmodule ApothecaryWeb.DashboardLive do
 
   # --- Oracle hotkey handlers ---
 
-  defp handle_oracle_hotkey("j", socket) do
-    sorted = oracle_sorted_questions(socket)
-    current_idx = oracle_selected_index(sorted, socket.assigns.selected_question_id)
-    max_idx = length(sorted) - 1
-
-    if current_idx >= max_idx do
-      # Past last question — focus the input
-      push_event(socket, "focus-oracle-input", %{})
-    else
-      new_idx = current_idx + 1
-      new_id = if q = Enum.at(sorted, new_idx), do: q.id, else: nil
-      assign(socket, :selected_question_id, new_id)
-    end
-  end
-
-  defp handle_oracle_hotkey("k", socket) do
-    sorted = oracle_sorted_questions(socket)
-    current_idx = oracle_selected_index(sorted, socket.assigns.selected_question_id)
-    new_idx = max(current_idx - 1, 0)
-    new_id = if q = Enum.at(sorted, new_idx), do: q.id, else: nil
-    assign(socket, :selected_question_id, new_id)
-  end
-
-  defp handle_oracle_hotkey("Enter", socket) do
-    sorted = oracle_sorted_questions(socket)
-    current_idx = oracle_selected_index(sorted, socket.assigns.selected_question_id)
-
-    if q = Enum.at(sorted, current_idx),
-      do: assign(socket, :selected_question_id, q.id),
-      else: socket
-  end
-
-  defp handle_oracle_hotkey("n", socket) do
-    push_event(socket, "focus-oracle-input", %{})
-  end
-
-  defp handle_oracle_hotkey("d", socket) do
-    if id = socket.assigns.selected_question_id do
-      case Worktrees.close(id) do
-        {:ok, _} -> assign(socket, :selected_question_id, nil)
-        {:error, _} -> put_flash(socket, :error, "Failed to delete")
-      end
-    else
-      socket
-    end
-  end
-
-  defp handle_oracle_hotkey(_key, socket), do: socket
-
-  defp oracle_sorted_questions(socket) do
-    Enum.sort_by(socket.assigns.questions, fn q -> q.created_at || "" end, :desc)
-  end
-
-  defp oracle_selected_index(sorted, nil) when length(sorted) > 0, do: 0
-  defp oracle_selected_index(_sorted, nil), do: 0
-
-  defp oracle_selected_index(sorted, id) do
-    Enum.find_index(sorted, fn q -> q.id == id end) || 0
-  end
-
   # --- Project switcher hotkeys ---
 
   defp handle_switcher_hotkey(key, socket) when key in ["j", "Tab", "ArrowDown"] do
@@ -2108,7 +2048,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
         socket
         |> assign(:selected_card, idx)
-        |> assign(:adding_task_to, worktree_id_at(socket.assigns.card_ids, idx))
+        |> maybe_update_adding_task(idx)
         |> push_event("scroll-to-selected", %{})
     end
   end
@@ -2131,7 +2071,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
         socket
         |> assign(:selected_card, idx)
-        |> assign(:adding_task_to, worktree_id_at(socket.assigns.card_ids, idx))
+        |> maybe_update_adding_task(idx)
         |> push_event("scroll-to-selected", %{})
     end
   end
@@ -2191,8 +2131,8 @@ defmodule ApothecaryWeb.DashboardLive do
         socket
       end
     else
-      # Move focus to right panel (branch list)
-      assign(socket, :focused_pane, :tree)
+      # Move focus to detail panel (right)
+      assign(socket, :focused_pane, :detail)
     end
   end
 
@@ -2200,8 +2140,8 @@ defmodule ApothecaryWeb.DashboardLive do
     if is_nil(socket.assigns.current_project) do
       socket
     else
-      # Move focus to left panel (detail)
-      assign(socket, :focused_pane, :detail)
+      # Move focus to branch panel (left)
+      assign(socket, :focused_pane, :tree)
     end
   end
 
@@ -2280,19 +2220,11 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey(key, socket) when key in ["+", "="] do
-    if socket.assigns.active_tab == :oracle do
-      handle_oracle_increment(socket)
-    else
-      handle_brewer_increment(socket)
-    end
+    handle_brewer_increment(socket)
   end
 
   defp handle_hotkey("-", socket) do
-    if socket.assigns.active_tab == :oracle do
-      handle_oracle_decrement(socket)
-    else
-      handle_brewer_decrement(socket)
-    end
+    handle_brewer_decrement(socket)
   end
 
   defp handle_hotkey("R", socket) do
@@ -2366,35 +2298,48 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("p", socket) do
-    # Resolve the effective worktree ID: prefer open detail panel, then focused card
-    effective_wt_id =
-      socket.assigns.selected_task_id ||
-        Enum.at(socket.assigns.card_ids, socket.assigns.selected_card)
+    # Target: open worktree detail panel → that worktree, otherwise → project main
+    selected = socket.assigns.selected_task_id
+    selected_is_wt = selected && String.starts_with?(to_string(selected), "wt-")
+
+    {target_id, target_type} =
+      if selected_is_wt do
+        {selected, :worktree}
+      else
+        case socket.assigns.current_project do
+          %{id: id} -> {id, :project}
+          _ -> {nil, nil}
+        end
+      end
+
+    server = target_id && socket.assigns.dev_servers[target_id]
 
     cond do
       # Toggle preview if already open
       socket.assigns.show_preview ->
         socket |> assign(:show_preview, false) |> assign(:preview_port, nil)
 
-      # Open preview for effective worktree's dev server
-      effective_wt_id &&
-          match?(
-            %{status: :running, ports: [_ | _]},
-            socket.assigns.dev_servers[effective_wt_id]
-          ) ->
-        %{ports: ports} = socket.assigns.dev_servers[effective_wt_id]
+      # Server already running — show preview
+      match?(%{status: :running, ports: [_ | _]}, server) ->
+        %{ports: ports} = server
         port = if length(ports) == 1, do: hd(ports).port, else: nil
         socket |> assign(:show_preview, true) |> assign(:preview_port, port)
 
-      # Open preview for main project dev server
-      socket.assigns.current_project &&
-          match?(
-            %{status: :running, ports: [_ | _]},
-            socket.assigns.dev_servers[socket.assigns.current_project.id]
-          ) ->
-        %{ports: ports} = socket.assigns.dev_servers[socket.assigns.current_project.id]
-        port = if length(ports) == 1, do: hd(ports).port, else: nil
-        socket |> assign(:show_preview, true) |> assign(:preview_port, port)
+      # Worktree detail open with config — start its server
+      target_type == :worktree &&
+          (try do
+             DevServer.has_config?(target_id)
+           catch
+             :exit, _ -> false
+           end) ->
+        DevServer.start_server(target_id)
+        socket
+
+      # No worktree detail open, project has config — start main server
+      target_type == :project && socket.assigns.has_project_preview_config ->
+        project = socket.assigns.current_project
+        DevServer.start_project_server(project.id, project.path)
+        socket
 
       socket.assigns.current_project ->
         assign(socket, :show_preview_help, !socket.assigns.show_preview_help)
@@ -2404,16 +2349,7 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  defp handle_hotkey("Tab", socket) do
-    cond do
-      socket.assigns.active_tab == :oracle ->
-        # Cycle focus to oracle input
-        push_event(socket, "focus-oracle-input", %{})
-
-      true ->
-        socket
-    end
-  end
+  defp handle_hotkey("Tab", socket), do: socket
 
   defp handle_hotkey("ArrowUp", socket) do
     if socket.assigns.selected_task_id do
@@ -2518,10 +2454,16 @@ defmodule ApothecaryWeb.DashboardLive do
     |> jump_to_lane(~w(done))
   end
 
-  # Tab switching: w=workbench, e=recipes, o=oracle
+  # Tab switching: w=workbench, e=recipes
   defp handle_hotkey("w", socket), do: assign(socket, :focused_pane, :tree)
   defp handle_hotkey("e", socket), do: assign(socket, :active_tab, :recipes)
-  defp handle_hotkey("o", socket), do: assign(socket, :active_tab, :oracle)
+
+  defp handle_hotkey("n", socket) do
+    # Focus branch search input for new branch / search
+    socket
+    |> assign(:focused_pane, :tree)
+    |> push_event("focus-element", %{selector: "#tree-search-input"})
+  end
 
   defp handle_hotkey("J", socket) do
     # Reorder: move selected worktree down in priority
@@ -2586,30 +2528,6 @@ defmodule ApothecaryWeb.DashboardLive do
         else
           socket
         end
-    end
-  end
-
-  defp handle_oracle_increment(socket) do
-    case socket.assigns.current_project do
-      nil ->
-        socket
-
-      project ->
-        count = min(socket.assigns.oracle_target_count + 1, 5)
-        Dispatcher.set_oracle_count(project.id, count)
-        assign(socket, :oracle_target_count, count)
-    end
-  end
-
-  defp handle_oracle_decrement(socket) do
-    case socket.assigns.current_project do
-      nil ->
-        socket
-
-      project ->
-        count = max(socket.assigns.oracle_target_count - 1, 0)
-        Dispatcher.set_oracle_count(project.id, count)
-        assign(socket, :oracle_target_count, count)
     end
   end
 
@@ -2865,50 +2783,45 @@ defmodule ApothecaryWeb.DashboardLive do
   # --- Input handlers ---
 
   defp create_from_input(text, socket) do
-    # Detect question prefix: "? question text" or "? #wt-xxx question text"
-    if String.starts_with?(text, "?") do
-      question_text = text |> String.trim_leading("?") |> String.trim()
-
-      # Extract optional worktree reference: "? #wt-abc123 question"
-      {question_text, worktree_ref} =
-        case Regex.run(~r/^#(wt-[a-z0-9]+)\s*(.*)$/s, question_text) do
-          [_, wt_id, rest] -> {String.trim(rest), wt_id}
-          _ -> {question_text, nil}
-        end
-
-      create_question(question_text, socket, worktree_ref)
-    else
-      create_task_from_input(text, socket)
-    end
+    create_task_from_input(text, socket)
   end
 
-  defp create_question(text, socket, worktree_ref \\ nil) do
-    project_id =
-      if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
+  defp create_question_for_worktree(text, socket) do
+    question_text = text |> String.trim_leading("?") |> String.trim()
 
-    attrs = %{
-      title: text,
-      kind: "question",
-      priority: 2,
-      project_id: project_id
-    }
+    if question_text == "" do
+      {:noreply, socket}
+    else
+      # Use the focused worktree as context
+      worktree_id = socket.assigns.adding_task_to || socket.assigns.selected_task_id
+      project_id =
+        if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
 
-    attrs =
-      if worktree_ref, do: Map.put(attrs, :parent_worktree_id, worktree_ref), else: attrs
+      attrs = %{
+        title: question_text,
+        kind: "question",
+        priority: 2,
+        project_id: project_id
+      }
 
-    case Worktrees.create_worktree(attrs) do
-      {:ok, item} when not is_nil(item) ->
-        {:noreply,
-         socket
-         |> assign(:active_tab, :oracle)
-         |> assign(:selected_question_id, item.id)
-         |> put_flash(:info, "Question submitted")}
+      attrs =
+        if worktree_id, do: Map.put(attrs, :parent_worktree_id, worktree_id), else: attrs
 
-      {:ok, nil} ->
-        {:noreply, put_flash(socket, :error, "Failed to submit question")}
+      case Worktrees.create_worktree(attrs) do
+        {:ok, item} when not is_nil(item) ->
+          # Dispatch immediately with a one-off brewer
+          if project_id do
+            Dispatcher.dispatch_question(project_id, item.id)
+          end
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
+          {:noreply, put_flash(socket, :info, "Question submitted")}
+
+        {:ok, nil} ->
+          {:noreply, put_flash(socket, :error, "Failed to submit question")}
+
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
+      end
     end
   end
 
@@ -2955,7 +2868,7 @@ defmodule ApothecaryWeb.DashboardLive do
         {:ok, item} when not is_nil(item) ->
           {:noreply,
            socket
-           |> assign(:adding_task_to, item.id)
+           |> select_task(item.id)
            |> put_flash(:info, "Worktree created: #{item.id} — add tasks below")}
 
         {:ok, nil} ->
@@ -2972,7 +2885,14 @@ defmodule ApothecaryWeb.DashboardLive do
 
     if agent && agent.pid do
       Brewer.send_instruction(agent.pid, text)
-      {:noreply, put_flash(socket, :info, "Sent to brewer-#{agent.id}")}
+
+      # Show user message in the activity stream
+      user_line = "▸ you: #{text}"
+      output = (socket.assigns.agent_output ++ [user_line]) |> Enum.take(-200)
+
+      {:noreply,
+       socket
+       |> assign(:agent_output, output)}
     else
       {:noreply, put_flash(socket, :error, "No active agent process")}
     end
@@ -3021,6 +2941,13 @@ defmodule ApothecaryWeb.DashboardLive do
         false
       end
 
+    # Refresh project-level preview config (file may have been added since load)
+    has_project_preview =
+      case socket.assigns[:current_project] do
+        %{path: path} -> DevServer.has_config_for_path?(path)
+        _ -> socket.assigns[:has_project_preview_config] || false
+      end
+
     wt_id = if String.starts_with?(to_string(id), "wt-"), do: id, else: nil
 
     socket
@@ -3034,6 +2961,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:show_preview, false)
     |> assign(:preview_port, nil)
     |> assign(:has_preview_config, has_preview)
+    |> assign(:has_project_preview_config, has_project_preview)
     |> assign(:adding_task_to, wt_id)
     |> assign(:page_title, "Task #{id}")
     |> sync_selected_card(id)
@@ -3164,6 +3092,15 @@ defmodule ApothecaryWeb.DashboardLive do
     case Enum.at(card_ids, idx) do
       nil -> nil
       id -> if String.starts_with?(to_string(id), "wt-"), do: id, else: nil
+    end
+  end
+
+  # Only move adding_task_to target if already in task-add mode (via 'a' hotkey)
+  defp maybe_update_adding_task(socket, idx) do
+    if socket.assigns.adding_task_to do
+      assign(socket, :adding_task_to, worktree_id_at(socket.assigns.card_ids, idx))
+    else
+      socket
     end
   end
 
@@ -3484,8 +3421,7 @@ defmodule ApothecaryWeb.DashboardLive do
         %{
           status: dispatcher_status.status,
           target_count: dispatcher_status.target_count,
-          active_count: dispatcher_status.active_count,
-          oracle_target_count: dispatcher_status[:oracle_target_count] || 0
+          active_count: dispatcher_status.active_count
         }
 
       project ->
@@ -3495,10 +3431,8 @@ defmodule ApothecaryWeb.DashboardLive do
           nil ->
             %{
               status: :paused,
-              oracle_status: :paused,
               target_count: 0,
-              active_count: 0,
-              oracle_target_count: 0
+              active_count: 0
             }
 
           ps ->
@@ -3509,7 +3443,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
   defp enrich_agents_with_pids(agents_map) do
     Enum.map(agents_map, fn {pid, agent_state} ->
-      %{agent_state | pid: pid}
+      Map.put(agent_state, :pid, pid)
     end)
   end
 
@@ -3571,15 +3505,6 @@ defmodule ApothecaryWeb.DashboardLive do
                   />
                 </div>
               </div>
-            <% @active_tab == :oracle -> %>
-              <.oracle_view
-                questions={@questions}
-                agents={@agents}
-                selected_question_id={@selected_question_id}
-                oracle_target_count={@oracle_target_count}
-                editing_setting={@editing_setting}
-                oracle_status={@oracle_status}
-              />
             <% @active_tab == :recipes -> %>
               <div class="h-full overflow-y-auto scroll-main">
                 <div class="max-w-[540px] mx-auto">
@@ -3592,13 +3517,51 @@ defmodule ApothecaryWeb.DashboardLive do
                 </div>
               </div>
             <% @active_tab == :workbench -> %>
-              <%!-- Split panel: focused branch left, branch list right --%>
+              <%!-- Split panel: branch list left, detail + preview right --%>
               <div class="flex h-full">
-                <%!-- Left panel: focused branch detail + chat input --%>
+                <%!-- Left panel: branch tree (hidden when preview open) --%>
+                <div
+                  :if={!@show_preview}
+                  id="branch-panel"
+                  class="h-full overflow-y-auto scroll-main flex-shrink-0 flex flex-col"
+                  style="width: 280px; min-width: 220px; max-width: 400px; border-right: 1px solid var(--border);"
+                  phx-click="focus-tree-pane"
+                >
+                  <div class="flex-1 overflow-y-auto scroll-main">
+                    <.settings_line
+                      target_count={@target_count}
+                      auto_pr={@auto_pr}
+                      swarm_status={@swarm_status}
+                      agents={@agents}
+                      dev_server={@dev_servers[@current_project && @current_project.id]}
+                      has_preview_config={@has_project_preview_config}
+                      project_id={@current_project && @current_project.id}
+                      editing_setting={@editing_setting}
+                      show_preview_help={@show_preview_help}
+                    />
+
+                    <.worktree_tree
+                      worktrees_by_status={@worktrees_by_status}
+                      agents={@agents}
+                      dev_servers={@dev_servers}
+                      selected_card={@selected_card}
+                      card_ids={@card_ids}
+                      collapsed_done={@collapsed_done}
+                      adding_task_to={@adding_task_to}
+                      search_mode={@search_mode}
+                      search_query={@search_query}
+                    />
+                  </div>
+                </div>
+
+                <%!-- Resize handle (hidden when preview open) --%>
+                <div :if={!@show_preview} id="resize-handle" phx-hook="ResizeHandle" class="resize-handle" />
+
+                <%!-- Middle panel: focused branch detail + chat input --%>
                 <div
                   id="detail-pane"
                   class="flex-1 flex flex-col h-full min-w-0"
-                  style={"#{if @focused_pane == :detail, do: "border-top: 2px solid var(--accent);", else: "border-top: 2px solid transparent;"}"}
+                  style="border-top: 2px solid transparent;"
                   phx-click="focus-detail-pane"
                 >
                   <div class="flex-1 overflow-y-auto scroll-main">
@@ -3614,6 +3577,7 @@ defmodule ApothecaryWeb.DashboardLive do
                         has_preview_config={@has_preview_config}
                         pending_action={@pending_action}
                         loading_action={@loading_action}
+                        worktree_questions={Enum.filter(@questions, fn q -> Map.get(q, :parent_worktree_id) == @selected_task_id end)}
                       />
                     <% else %>
                       <div
@@ -3655,52 +3619,25 @@ defmodule ApothecaryWeb.DashboardLive do
                     input_focused={@input_focused}
                     selected_card_id={@selected_card_id}
                     adding_task_to={@adding_task_to}
+                    working_agent={@working_agent}
                   />
                 </div>
 
-                <%!-- Resize handle --%>
-                <div id="resize-handle" phx-hook="ResizeHandle" class="resize-handle" />
-
-                <%!-- Right panel: branches or preview --%>
-                <div
-                  id="branch-panel"
-                  class="h-full overflow-y-auto scroll-main flex-shrink-0"
-                  style={"width: 480px; min-width: 320px; max-width: 700px; border-left: 1px solid var(--border); #{if @focused_pane == :tree, do: "border-top: 2px solid var(--accent);", else: "border-top: 2px solid transparent;"}"}
-                  phx-click="focus-tree-pane"
-                >
-                  <%= if @show_preview do %>
+                <%!-- Right panel: preview (only when open) --%>
+                <%= if @show_preview do %>
+                  <div
+                    id="preview-panel"
+                    class="h-full flex-shrink-0 flex flex-col"
+                    style="width: 55%; min-width: 400px; border-left: 1px solid var(--border);"
+                  >
                     <.preview_panel
                       port={@preview_port}
                       dev_servers={@dev_servers}
                       current_project={@current_project}
                       show_logs={@show_preview_logs}
                     />
-                  <% else %>
-                    <.settings_line
-                      target_count={@target_count}
-                      auto_pr={@auto_pr}
-                      swarm_status={@swarm_status}
-                      agents={@agents}
-                      dev_server={@dev_servers[@current_project && @current_project.id]}
-                      has_preview_config={@has_project_preview_config}
-                      project_id={@current_project && @current_project.id}
-                      editing_setting={@editing_setting}
-                      show_preview_help={@show_preview_help}
-                    />
-
-                    <.worktree_tree
-                      worktrees_by_status={@worktrees_by_status}
-                      agents={@agents}
-                      dev_servers={@dev_servers}
-                      selected_card={@selected_card}
-                      card_ids={@card_ids}
-                      collapsed_done={@collapsed_done}
-                      adding_task_to={@adding_task_to}
-                      search_mode={@search_mode}
-                      search_query={@search_query}
-                    />
-                  <% end %>
-                </div>
+                  </div>
+                <% end %>
               </div>
             <% true -> %>
           <% end %>
@@ -3718,7 +3655,6 @@ defmodule ApothecaryWeb.DashboardLive do
           project_count={length(@projects)}
           questions={@questions}
           agents={@agents}
-          oracle_target_count={@oracle_target_count}
         />
       </div>
 

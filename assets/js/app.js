@@ -607,9 +607,9 @@ let Hooks = {
 
       this._onMove = (e) => {
         if (!this.dragging || !panel) return
-        const containerRect = panel.parentElement.getBoundingClientRect()
-        const newWidth = containerRect.right - e.clientX
-        const clamped = Math.max(320, Math.min(700, newWidth))
+        const panelRect = panel.getBoundingClientRect()
+        const newWidth = e.clientX - panelRect.left
+        const clamped = Math.max(220, Math.min(400, newWidth))
         panel.style.width = clamped + "px"
         localStorage.setItem("apothecary-branch-panel-width", clamped)
       }
@@ -626,10 +626,11 @@ let Hooks = {
       document.addEventListener("mousemove", this._onMove)
       document.addEventListener("mouseup", this._onUp)
 
-      // Restore saved width
+      // Restore saved width (clamped to new range)
       const saved = localStorage.getItem("apothecary-branch-panel-width")
       if (saved && panel) {
-        panel.style.width = saved + "px"
+        const w = Math.max(220, Math.min(400, parseInt(saved, 10)))
+        panel.style.width = w + "px"
       }
     },
     destroyed() {

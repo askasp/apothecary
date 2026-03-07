@@ -64,19 +64,28 @@ defmodule Apothecary.DevServer do
 
   @doc "Check if a path has a dev config (explicit or auto-detected)."
   def has_config_for_path?(path) do
-    case DevConfig.load(path) do
-      {:ok, _} ->
-        true
+    result =
+      case DevConfig.load(path) do
+        {:ok, _} ->
+          true
 
-      :not_found ->
-        case DevConfig.detect(path) do
-          {:ok, _} -> true
-          _ -> false
-        end
+        :not_found ->
+          case DevConfig.detect(path) do
+            {:ok, _} -> true
+            _ -> false
+          end
 
-      _ ->
-        false
+        _ ->
+          false
+      end
+
+    unless result do
+      config_path = Path.join(path, ".apothecary/preview.yml")
+      exists? = File.exists?(config_path)
+      Logger.debug("has_config_for_path?(#{path}): #{result}, file exists at #{config_path}: #{exists?}")
     end
+
+    result
   end
 
   # --- GenServer Callbacks ---

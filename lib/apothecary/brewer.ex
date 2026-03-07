@@ -774,12 +774,31 @@ defmodule Apothecary.Brewer do
     project_digest =
       if project_dir, do: Apothecary.ProjectDigest.generate(project_dir), else: ""
 
+    # Include parent worktree context if this question is scoped to a branch
+    parent_context =
+      case Map.get(worktree, :parent_worktree_id) do
+        nil -> ""
+        parent_id ->
+          case Apothecary.Worktrees.get_worktree(parent_id) do
+            {:ok, parent} ->
+              branch = Map.get(parent, :git_branch, nil)
+              path = Map.get(parent, :git_path, nil)
+
+              context = "\n## Worktree Context\nThis question is about worktree: #{parent.title}"
+              context = if branch, do: context <> "\nBranch: #{branch}", else: context
+              context = if path, do: context <> "\nWorktree path: #{path}", else: context
+              context
+            _ -> ""
+          end
+      end
+
     """
     You are a codebase expert answering a question about the project in: #{project_dir}
 
     ## Question
     #{worktree.title}
     #{if worktree.description && worktree.description != worktree.title, do: "\n#{worktree.description}", else: ""}
+    #{parent_context}
 
     ## Project Structure
     #{project_digest}
@@ -858,6 +877,7 @@ defmodule Apothecary.Brewer do
     - **worktree_status** — See your worktree overview and all tasks
     - **list_tasks** — List tasks (with optional status filter)
     - **create_task** — Create a sub-task (for decomposing complex work)
+    - **claim_task** — Claim a task before starting work (sets it to in_progress so the UI shows you're working on it)
     - **complete_task** — Mark a task as done
     - **add_notes** — Log progress notes (persists across restarts)
     - **get_task** — Get full details of a task
@@ -868,30 +888,28 @@ defmodule Apothecary.Brewer do
       ## Pre-Created Tasks
       #{task_list}
 
-      Work through each task in order. Use `complete_task` to mark each done.
+      Work through each task in order. **Always call `claim_task` before starting a task**, then `complete_task` when done.
       """
     else
       """
       ## Instructions
-      Assess the complexity of this work:
+      **Always create tasks before starting work** — even for simple changes, create at least one task so progress is visible in the UI.
 
-      **If the task is small and self-contained:**
-      1. Implement it directly
-      2. Run tests to verify
-      3. Use `complete_task` or `add_notes` to report what you did
-      4. Commit your changes
-
-      **If the task is complex (touches multiple files/systems):**
-      1. Use `create_task` to decompose into ordered sub-tasks
-      2. Use `add_dependency` to wire blocking relationships if needed
-      3. Work through each sub-task, using `complete_task` as you go
+      1. Use `create_task` to create task(s) for the work ahead
+      2. If the work is complex, decompose into multiple ordered sub-tasks and use `add_dependency` to wire blocking relationships if needed
+      3. **Call `claim_task` before starting each task**, then `complete_task` when done
       4. Commit after each logical piece of work
-      5. Run tests to verify everything works together
+      5. Run tests to verify everything works
       """
     end}
 
     **IMPORTANT:** Before starting work, call `worktree_status` to get the latest task list and notes.
     Tasks may have been added or updated since this prompt was generated.
+
+    ## Follow-up Instructions
+    You may receive additional messages via stdin while working. These are follow-up instructions from the user.
+    When you receive a follow-up that requires new work, **always create a task for it** using `create_task` before starting.
+    This ensures progress is tracked in the UI. Then claim and complete the task as usual.
 
     ## Rules
     - You are on a feature branch in a git worktree, NOT main
