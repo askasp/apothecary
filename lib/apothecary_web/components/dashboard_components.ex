@@ -2050,6 +2050,8 @@ defmodule ApothecaryWeb.DashboardComponents do
               <span>d diff</span>
               <span style="color: var(--border);">&middot;</span>
               <span>p preview</span>
+              <span style="color: var(--border);">&middot;</span>
+              <span>? help</span>
             <% end %>
           </div>
           <div class="flex items-center gap-2">
@@ -2081,6 +2083,8 @@ defmodule ApothecaryWeb.DashboardComponents do
               <span>n new</span>
               <span style="color: var(--border);">&middot;</span>
               <span>s brew</span>
+              <span style="color: var(--border);">&middot;</span>
+              <span>? help</span>
             <% end %>
           </div>
           <div class="flex items-center gap-2">

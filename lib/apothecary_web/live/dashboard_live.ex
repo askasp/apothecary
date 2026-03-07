@@ -1467,11 +1467,7 @@ defmodule ApothecaryWeb.DashboardLive do
       text == "" ->
         {:noreply, socket}
 
-      # ? prefix asks a question in the focused worktree's context
-      String.starts_with?(text, "?") ->
-        create_question_for_worktree(text, socket)
-
-      # Task-add mode: create task in focused worktree (takes priority over agent)
+      # Task-add mode: create task in focused worktree (takes priority over ? prefix)
       socket.assigns.adding_task_to ->
         wt_id = socket.assigns.adding_task_to
 
@@ -1503,6 +1499,10 @@ defmodule ApothecaryWeb.DashboardLive do
       # Active agent: send as instruction to brewer
       socket.assigns.working_agent ->
         send_to_agent(text, socket)
+
+      # ? prefix asks a question in the focused worktree's context
+      String.starts_with?(text, "?") && socket.assigns.selected_task_id ->
+        create_question_for_worktree(text, socket)
 
       # Chat input with a focused worktree: add task
       socket.assigns.selected_task_id ->
