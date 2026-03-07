@@ -1,5 +1,4 @@
-# Apothecary
-## A claude orchestration IDE
+# Apothecary - A claude orchestration IDE
 
 I tried running an entire [Gas Town](https://github.com/steveyegge/gastown). Turns out that's a lot. But an apothecary? That I can manage.
 
