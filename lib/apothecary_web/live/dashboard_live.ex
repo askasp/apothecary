@@ -604,10 +604,18 @@ defmodule ApothecaryWeb.DashboardLive do
         {:noreply, handle_diff_hotkey(key, socket)}
 
       key == "h" ->
-        {:noreply, assign(socket, :focused_pane, :tree)}
+        {:noreply,
+         socket
+         |> assign(:focused_pane, :tree)
+         |> assign(:input_focused, false)
+         |> push_event("blur-input", %{})}
 
       key == "l" ->
-        {:noreply, assign(socket, :focused_pane, :detail)}
+        {:noreply,
+         socket
+         |> assign(:focused_pane, :detail)
+         |> assign(:input_focused, false)
+         |> push_event("blur-input", %{})}
 
       key == "j" ->
         # Cycle forward: tree → detail → input → tree
