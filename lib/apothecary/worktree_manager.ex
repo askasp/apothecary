@@ -254,7 +254,7 @@ defmodule Apothecary.WorktreeManager do
     "worktree/#{safe_id}"
   end
 
-  defp branch_name_from_id(_worktree_id, title) do
+  defp branch_name_from_id(worktree_id, title) do
     slug =
       title
       |> String.downcase()
@@ -264,6 +264,12 @@ defmodule Apothecary.WorktreeManager do
       |> String.slice(0, 60)
       |> String.trim_trailing("-")
 
-    if slug == "", do: branch_name_from_id(title, nil), else: slug
+    if slug == "" do
+      branch_name_from_id(worktree_id, nil)
+    else
+      # Append short suffix from worktree ID to avoid branch name collisions
+      suffix = worktree_id |> String.replace("wt-", "") |> String.slice(0, 4)
+      "#{slug}-#{suffix}"
+    end
   end
 end
