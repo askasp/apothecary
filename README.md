@@ -73,17 +73,23 @@ mix phx.server
 To enable dev server previews for your project, add `.apothecary/preview.yml` to your repo:
 
 ```yaml
-command: "npm run dev"
-port_count: 2
-setup: "npm install"
-ports:
+command: "npm run dev"        # Required — the command to start the dev server
+setup: "npm install"          # Optional — runs once before the first start
+shutdown: "pkill -f vite"     # Optional — custom shutdown command (default: SIGTERM)
+base_port: 5173               # Optional — auto-detected from command if omitted
+port_count: 2                 # Required (unless ports list provided)
+ports:                        # Optional — names and offsets for allocated ports
   - name: web
     offset: 0
   - name: vite-hmr
     offset: 1
+env:                          # Optional — extra environment variables
+  NODE_ENV: development
 ```
 
-Apothecary injects a `BASE_PORT` env variable so your dev server knows which port to bind to.
+Apothecary injects a `BASE_PORT` env variable so your dev server knows which port to bind to. Ports are allocated automatically so multiple worktree previews can run side by side without conflicts.
+
+**Auto-detection:** If no `preview.yml` exists, Apothecary tries to detect your stack automatically — Phoenix projects get `mix phx.server`, Node projects get `npm run dev` (or `bun` if a lockfile is present). Add a `preview.yml` when you need custom ports, setup commands, or environment variables.
 
 ## What you can do with it
 
