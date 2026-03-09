@@ -2385,6 +2385,7 @@ defmodule ApothecaryWeb.DashboardComponents do
 
     ~H"""
     <div class="fixed inset-0 z-50 flex flex-col" style="background: var(--bg);">
+      <%!-- Header bar --%>
       <div
         class="flex items-center justify-between px-4 py-2 shrink-0"
         style="border-bottom: 1px solid var(--border);"
@@ -2422,38 +2423,74 @@ defmodule ApothecaryWeb.DashboardComponents do
         :if={!@diff.loading && !@diff.error && @diff.files != []}
         class="flex flex-1 overflow-hidden"
       >
+        <%!-- File list sidebar --%>
         <div
           id="diff-file-list"
-          class="w-64 shrink-0 overflow-y-auto"
+          class="w-72 shrink-0 overflow-y-auto"
           style="border-right: 1px solid var(--border); background: var(--surface);"
         >
-          <div class="section-header px-3 py-1" style="border-bottom: 1px solid var(--border);">
-            files ({length(@diff.files)})
+          <div
+            class="section-header px-3 py-1.5 flex items-center justify-between"
+            style="border-bottom: 1px solid var(--border);"
+          >
+            <span>files ({length(@diff.files)})</span>
+            <span style="color: var(--muted); font-size: var(--font-size-xxs);">
+              <span style="color: var(--accent);">+{Enum.sum(Enum.map(@diff.files, & &1.adds))}</span>
+              <span style="color: var(--error);">-{Enum.sum(Enum.map(@diff.files, & &1.dels))}</span>
+            </span>
           </div>
           <div
             :for={{file, idx} <- Enum.with_index(@diff.files)}
             data-diff-selected={if(idx == @diff.selected_file, do: "true")}
-            class="px-3 py-1 truncate cursor-default"
-            style={"font-size: var(--font-size-xs); #{if idx == @diff.selected_file, do: "background: var(--bg); color: var(--accent); border-left: 2px solid var(--accent);", else: "color: var(--dim); border-left: 2px solid transparent;"}"}
+            class="flex items-center gap-2 px-3 py-1.5 cursor-pointer"
+            style={"font-size: var(--font-size-xs); #{if idx == @diff.selected_file, do: "background: var(--bg); border-left: 2px solid var(--accent);", else: "border-left: 2px solid transparent;"}"}
+            phx-click="diff-select-file"
+            phx-value-idx={idx}
           >
-            {file.path}
+            <span class={["flex-1 truncate", idx == @diff.selected_file && "font-medium"]} style={"color: #{if idx == @diff.selected_file, do: "var(--text)", else: "var(--dim)"};"}>
+              {diff_file_name(file.path)}
+            </span>
+            <span class="shrink-0 tabular-nums" style="font-size: var(--font-size-xxs);">
+              <span :if={file.adds > 0} style="color: var(--accent);">+{file.adds}</span>
+              <span :if={file.dels > 0} class="ml-1" style="color: var(--error);">-{file.dels}</span>
+            </span>
           </div>
         </div>
 
+        <%!-- Diff content --%>
         <div class="flex-1 overflow-y-auto" id="diff-content-pane">
           <div :if={@current_file} style="font-size: var(--font-size-xs);">
             <div
-              class="sticky top-0 px-4 py-1"
-              style="background: var(--surface); border-bottom: 1px solid var(--border); color: var(--dim);"
+              class="sticky top-0 px-4 py-1.5 flex items-center justify-between"
+              style="background: var(--surface); border-bottom: 1px solid var(--border); z-index: 1;"
             >
-              {@current_file.path}
+              <span style="color: var(--text); font-weight: 500;">{@current_file.path}</span>
+              <span style="color: var(--muted); font-size: var(--font-size-xxs);">
+                <span style="color: var(--accent);">+{@current_file.adds}</span>
+                <span class="ml-1" style="color: var(--error);">-{@current_file.dels}</span>
+              </span>
             </div>
             <div
               :for={line <- @current_file.lines}
-              class="px-4 whitespace-pre"
-              style={diff_line_style(line.type)}
+              class="flex"
+              style={diff_line_bg(line.type)}
             >
-              {line.text}
+              <%!-- Line number gutter --%>
+              <div class="shrink-0 select-none text-right tabular-nums" style={"width: 90px; padding: 0 8px; color: var(--muted); opacity: 0.6; border-right: 1px solid #{if line.type == :hunk, do: "transparent", else: "var(--border)"};"}>
+                <%= if line.type == :hunk do %>
+                  <span style="color: var(--dim); font-style: italic;">{hunk_label(line.text)}</span>
+                <% else %>
+                  <span style="display: inline-block; width: 40px;">{line.old_line || ""}</span>
+                  <span style="display: inline-block; width: 40px;">{line.new_line || ""}</span>
+                <% end %>
+              </div>
+              <%!-- Change indicator --%>
+              <div class="shrink-0 text-center select-none" style="width: 20px;">
+                <span style={diff_indicator_style(line.type)}>{diff_indicator(line.type)}</span>
+              </div>
+              <%!-- Line content --%>
+              <div class="flex-1 whitespace-pre" style={diff_text_style(line.type)}>
+                {diff_line_content(line)}</div>
             </div>
           </div>
         </div>
@@ -2469,10 +2506,58 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
-  defp diff_line_style(:add), do: "background: rgba(90, 170, 154, 0.1); color: var(--accent);"
-  defp diff_line_style(:del), do: "background: rgba(196, 90, 90, 0.1); color: var(--error);"
-  defp diff_line_style(:hunk), do: "color: var(--dim); background: rgba(90, 122, 130, 0.1);"
-  defp diff_line_style(_), do: "color: var(--muted);"
+  defp diff_file_name(path) do
+    case String.split(path, "/") do
+      parts when length(parts) > 1 ->
+        dir = parts |> Enum.drop(-1) |> Enum.join("/")
+        file = List.last(parts)
+        "#{dir}/#{file}"
+
+      _ ->
+        path
+    end
+  end
+
+  defp diff_line_content(%{type: :hunk, text: text}) do
+    case Regex.run(~r/@@ .+? @@(.*)/, text) do
+      [_, context] -> String.trim(context)
+      _ -> ""
+    end
+  end
+
+  defp diff_line_content(%{type: type, text: text}) when type in [:add, :del] do
+    # Strip the leading +/- since we show it in the indicator column
+    String.slice(text, 1..-1//1)
+  end
+
+  defp diff_line_content(%{text: " " <> rest}), do: rest
+  defp diff_line_content(%{text: text}), do: text
+
+  defp hunk_label(text) do
+    case Regex.run(~r/@@ -(\d+),?\d* \+(\d+),?\d* @@/, text) do
+      [_, old, new] -> "#{old}:#{new}"
+      _ -> "..."
+    end
+  end
+
+  defp diff_indicator(:add), do: "+"
+  defp diff_indicator(:del), do: "-"
+  defp diff_indicator(:hunk), do: ""
+  defp diff_indicator(_), do: " "
+
+  defp diff_line_bg(:add), do: "background: rgba(90, 170, 154, 0.08);"
+  defp diff_line_bg(:del), do: "background: rgba(196, 90, 90, 0.08);"
+  defp diff_line_bg(:hunk), do: "background: rgba(90, 122, 130, 0.12);"
+  defp diff_line_bg(_), do: ""
+
+  defp diff_text_style(:add), do: "color: var(--accent);"
+  defp diff_text_style(:del), do: "color: var(--error);"
+  defp diff_text_style(:hunk), do: "color: var(--dim); font-style: italic;"
+  defp diff_text_style(_), do: "color: var(--text); opacity: 0.7;"
+
+  defp diff_indicator_style(:add), do: "color: var(--accent); font-weight: 700;"
+  defp diff_indicator_style(:del), do: "color: var(--error); font-weight: 700;"
+  defp diff_indicator_style(_), do: ""
 
   # ── Which-key Help Overlay ───────────────────────────────
 

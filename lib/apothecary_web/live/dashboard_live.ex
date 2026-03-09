@@ -1243,6 +1243,24 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("diff-select-file", %{"idx" => idx_str}, socket) do
+    idx = String.to_integer(idx_str)
+    diff = socket.assigns.diff_view
+
+    if diff do
+      max_idx = max(length(diff.files) - 1, 0)
+      idx = min(max(idx, 0), max_idx)
+
+      {:noreply,
+       socket
+       |> assign(:diff_view, %{diff | selected_file: idx})
+       |> push_event("scroll-to-diff-file", %{})}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
   def handle_event("merge-pr", _params, %{assigns: %{loading_action: la}} = socket)
       when la != nil,
       do: {:noreply, socket}
