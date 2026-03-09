@@ -599,7 +599,7 @@ let Hooks = {
   ResizeHandle: {
     mounted() {
       this.dragging = false
-      const panel = document.getElementById("branch-panel")
+      const panel = document.getElementById("worktree-panel")
 
       this.el.addEventListener("mousedown", (e) => {
         e.preventDefault()
@@ -615,7 +615,7 @@ let Hooks = {
         const newWidth = e.clientX - panelRect.left
         const clamped = Math.max(220, Math.min(400, newWidth))
         panel.style.width = clamped + "px"
-        localStorage.setItem("apothecary-branch-panel-width", clamped)
+        localStorage.setItem("apothecary-worktree-panel-width", clamped)
       }
 
       this._onUp = () => {
@@ -631,7 +631,7 @@ let Hooks = {
       document.addEventListener("mouseup", this._onUp)
 
       // Restore saved width (clamped to new range)
-      const saved = localStorage.getItem("apothecary-branch-panel-width")
+      const saved = localStorage.getItem("apothecary-worktree-panel-width")
       if (saved && panel) {
         const w = Math.max(220, Math.min(400, parseInt(saved, 10)))
         panel.style.width = w + "px"

@@ -99,8 +99,8 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:focused_pane, :tree)
       # Task inline input
       |> assign(:adding_task_to, nil)
-      # Branch creation mode
-      |> assign(:branch_mode, false)
+      # Worktree creation mode
+      |> assign(:worktree_mode, false)
       # Search mode
       |> assign(:search_mode, false)
       |> assign(:search_query, "")
@@ -1038,7 +1038,7 @@ defmodule ApothecaryWeb.DashboardLive do
          |> assign(:search_query, "")
          |> assign(:input_focused, false)
          |> push_event("blur-input", %{})
-         |> put_flash(:info, "No match. Press 'b' to create a branch.")}
+         |> put_flash(:info, "No match. Press 'b' to create a worktree.")}
       end
     end
   end
@@ -1608,8 +1608,8 @@ defmodule ApothecaryWeb.DashboardLive do
       text == "" && images == [] ->
         {:noreply, socket}
 
-      # Branch creation mode: create worktree with typed name
-      socket.assigns.branch_mode ->
+      # Worktree creation mode: create worktree with typed name
+      socket.assigns.worktree_mode ->
         project_id =
           if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
 
@@ -1621,12 +1621,12 @@ defmodule ApothecaryWeb.DashboardLive do
           {:ok, item} when not is_nil(item) ->
             {:noreply,
              socket
-             |> assign(:branch_mode, false)
+             |> assign(:worktree_mode, false)
              |> select_task(item.id)
-             |> put_flash(:info, "Branch created: #{text} — add tasks to start")}
+             |> put_flash(:info, "Worktree created: #{text} — add tasks to start")}
 
           _ ->
-            {:noreply, put_flash(socket, :error, "Failed to create branch")}
+            {:noreply, put_flash(socket, :error, "Failed to create worktree")}
         end
 
       # Task-add mode: create task in focused worktree (takes priority over ? prefix)
@@ -1684,7 +1684,7 @@ defmodule ApothecaryWeb.DashboardLive do
          put_flash(
            socket,
            :info,
-           "Press 'b' to create a branch, or select a worktree to add tasks"
+           "Press 'b' to create a worktree, or select one to add tasks"
          )}
     end
   end
@@ -2142,8 +2142,8 @@ defmodule ApothecaryWeb.DashboardLive do
 
   defp handle_hotkey("Escape", socket) do
     cond do
-      socket.assigns.branch_mode ->
-        assign(socket, :branch_mode, false)
+      socket.assigns.worktree_mode ->
+        assign(socket, :worktree_mode, false)
 
       socket.assigns.adding_task_to ->
         assign(socket, :adding_task_to, nil)
@@ -2310,7 +2310,7 @@ defmodule ApothecaryWeb.DashboardLive do
     if is_nil(socket.assigns.current_project) do
       socket
     else
-      # Move focus to branch panel (left)
+      # Move focus to worktree panel (left)
       assign(socket, :focused_pane, :tree)
     end
   end
@@ -2364,10 +2364,10 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("c", socket) do
-    # Focus chat input in chat mode (clear task-add and branch modes)
+    # Focus chat input in chat mode (clear task-add and worktree modes)
     socket
     |> assign(:adding_task_to, nil)
-    |> assign(:branch_mode, false)
+    |> assign(:worktree_mode, false)
     |> assign(:focused_pane, :detail)
     |> push_event("focus-primary-input", %{})
   end
@@ -2653,9 +2653,9 @@ defmodule ApothecaryWeb.DashboardLive do
   defp handle_hotkey("e", socket), do: assign(socket, :active_tab, :recipes)
 
   defp handle_hotkey("b", socket) do
-    # Enter branch creation mode and focus input
+    # Enter worktree creation mode and focus input
     socket
-    |> assign(:branch_mode, true)
+    |> assign(:worktree_mode, true)
     |> assign(:adding_task_to, nil)
     |> assign(:focused_pane, :detail)
     |> push_event("focus-primary-input", %{})
@@ -3662,12 +3662,12 @@ defmodule ApothecaryWeb.DashboardLive do
                 </div>
               </div>
             <% @active_tab == :workbench -> %>
-              <%!-- Split panel: branch list left, detail + preview right --%>
+              <%!-- Split panel: worktree list left, detail + preview right --%>
               <div class="flex h-full">
-                <%!-- Left panel: branch tree (hidden when preview open) --%>
+                <%!-- Left panel: worktree tree (hidden when preview open) --%>
                 <div
                   :if={!@show_preview}
-                  id="branch-panel"
+                  id="worktree-panel"
                   class="h-full overflow-y-auto scroll-main flex-shrink-0 flex flex-col"
                   style="width: 280px; min-width: 220px; max-width: 400px; border-right: 1px solid var(--border);"
                   phx-click="focus-tree-pane"
@@ -3708,7 +3708,7 @@ defmodule ApothecaryWeb.DashboardLive do
                   class="resize-handle"
                 />
 
-                <%!-- Middle panel: focused branch detail + chat input --%>
+                <%!-- Middle panel: focused worktree detail + chat input --%>
                 <div
                   id="detail-pane"
                   class="flex-1 flex flex-col h-full min-w-0"
@@ -3749,7 +3749,7 @@ defmodule ApothecaryWeb.DashboardLive do
                             <span>&#x25C7;</span>
                           </div>
                           <div class="mb-4" style="color: var(--dim);">
-                            select a branch to focus
+                            select a worktree to focus
                           </div>
                           <div class="mb-1" style="font-size: var(--font-size-xs);">
                             <span style="font-weight: 600;">j/k</span>
@@ -3773,7 +3773,7 @@ defmodule ApothecaryWeb.DashboardLive do
                     selected_card_id={@selected_card_id}
                     adding_task_to={@adding_task_to}
                     working_agent={@working_agent}
-                    branch_mode={@branch_mode}
+                    worktree_mode={@worktree_mode}
                   />
                 </div>
 

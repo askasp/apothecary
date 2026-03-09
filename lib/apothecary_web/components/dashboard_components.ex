@@ -771,7 +771,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           </div>
           <div style="color: var(--muted); margin-bottom: 6px;">
             add <span style="color: var(--text);">.apothecary/preview.yml</span>
-            to your project root to spin up a dev server for main and each worktree branch:
+            to your project root to spin up a dev server for main and each worktree:
           </div>
           <div class="oracle-code-block" style="font-size: var(--font-size-xs);">
             <pre><code style="color: var(--dim);">{"# .apothecary/preview.yml\ncommand: \"npm run dev\"\nport_count: 1\n# optional:\n# setup: \"npm install\"\n# base_port: 3000"}</code></pre>
@@ -895,14 +895,14 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :selected_card_id, :string, default: nil
   attr :adding_task_to, :string, default: nil
   attr :working_agent, :map, default: nil
-  attr :branch_mode, :boolean, default: false
+  attr :worktree_mode, :boolean, default: false
 
   def chat_input(assigns) do
     # Determine current input mode for placeholder and badge
     {mode, mode_color, placeholder} =
       cond do
-        assigns.branch_mode ->
-          {"branch", "var(--reviewing)", "branch name · esc cancel"}
+        assigns.worktree_mode ->
+          {"worktree", "var(--reviewing)", "worktree name · esc cancel"}
 
         assigns.adding_task_to ->
           {"task", "var(--queued)", "add task to queue · ?question · esc cancel"}
@@ -914,7 +914,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           {"task", "var(--queued)", "task to queue · ?question to ask"}
 
         true ->
-          {nil, nil, "b new branch · select a branch to add tasks"}
+          {nil, nil, "b new worktree · select a worktree to add tasks"}
       end
 
     assigns =
@@ -1172,7 +1172,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
-  # Tree group component — compact card list for branch panel
+  # Tree group component — compact card list for worktree panel
   attr :label, :any, default: nil
   attr :count, :integer, default: 0
   attr :color, :string, required: true
@@ -1199,7 +1199,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           done_count = Enum.count(tasks, &(&1.status in ["done", "closed"]))
           total_count = length(tasks) %>
           <div
-            class={"branch-card #{if selected?, do: "branch-card--selected"}"}
+            class={"worktree-card #{if selected?, do: "worktree-card--selected"}"}
             style={
               if selected?,
                 do: "border-left: 2px solid #{@color};",
@@ -1223,7 +1223,7 @@ defmodule ApothecaryWeb.DashboardComponents do
               <span style="color: var(--muted); font-size: var(--font-size-xs); min-width: 12px;">
                 {card_num}
               </span>
-              <%!-- Branch name --%>
+              <%!-- Worktree name --%>
               <span class="truncate" style={"color: #{@title_color}; font-weight: 500;"}>
                 {wt.git_branch || wt.title || wt.id}
               </span>
@@ -1233,10 +1233,10 @@ defmodule ApothecaryWeb.DashboardComponents do
                 style="font-size: var(--font-size-xs); color: var(--muted);"
               >
                 <span :if={total_count > 0}>{done_count}/{total_count}</span>
-                <span :if={total_count > 0} class="branch-progress">
+                <span :if={total_count > 0} class="worktree-progress">
                   <%= for i <- 0..min(total_count - 1, 15) do %>
                     <span
-                      class="branch-progress-block"
+                      class="worktree-progress-block"
                       style={"background: #{if i < done_count, do: @color, else: "var(--border)"}; opacity: #{if i < done_count, do: "1", else: "0.4"};"}
                     />
                   <% end %>
@@ -2437,24 +2437,24 @@ defmodule ApothecaryWeb.DashboardComponents do
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4" style="font-size: var(--font-size-sm);">
           <div>
             <div style="color: var(--accent);" class="mb-1">navigation</div>
-            <.hk key="j/k" desc="next/prev branch" />
-            <.hk key="h/l" desc="focus branches/detail" />
-            <.hk key="^h/l" desc="focus branches/detail (from input)" />
+            <.hk key="j/k" desc="next/prev worktree" />
+            <.hk key="h/l" desc="focus worktrees/detail" />
+            <.hk key="^h/l" desc="focus worktrees/detail (from input)" />
             <.hk key="^j/k" desc="cycle sections: tree → detail → input" />
-            <.hk key="g/G" desc="first/last branch" />
+            <.hk key="g/G" desc="first/last worktree" />
             <.hk key="1-4" desc="jump to lane" />
-            <.hk key="enter" desc="focus branch" />
-            <.hk key="w" desc="back to branches" />
+            <.hk key="enter" desc="focus worktree" />
+            <.hk key="w" desc="back to worktrees" />
             <.hk key="esc" desc="normal mode / back" />
             <.hk key="⌘k" desc="switch project" />
           </div>
 
           <div>
             <div style="color: var(--accent);" class="mb-1">input (insert mode)</div>
-            <.hk key="b" desc="new branch" />
+            <.hk key="b" desc="new worktree" />
             <.hk key="c / /" desc="chat mode (message brewer)" />
             <.hk key="n" desc="focus input" />
-            <.hk key="a" desc="task mode (add to branch)" />
+            <.hk key="a" desc="task mode (add to worktree)" />
             <.hk key="+ (in chat)" desc="switch to task mode" />
             <.hk key="?text" desc="ask question" />
           </div>

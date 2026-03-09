@@ -927,24 +927,24 @@ details[open] > summary .merge-arrow {
   color: var(--muted);
 }
 
-/* ── Branch panel compact cards ───────────────────────── */
+/* ── Worktree panel compact cards ─────────────────────── */
 
-.branch-card {
+.worktree-card {
   padding: 4px 12px;
   cursor: pointer;
 }
 
-.branch-card--selected {
+.worktree-card--selected {
   background: rgba(255, 255, 255, 0.04);
 }
 
-.branch-progress {
+.worktree-progress {
   display: flex;
   gap: 1px;
   align-items: center;
 }
 
-.branch-progress-block {
+.worktree-progress-block {
   width: 8px;
   height: 10px;
   border-radius: 1px;

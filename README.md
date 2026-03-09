@@ -103,7 +103,7 @@ Select a worktree that's being brewed and type into the input bar — it goes st
 
 ### Preview what agents built before merging
 
-Drop a `.apothecary/preview.yml` in your repo and any worktree can spin up a live dev server right in its branch. Apothecary allocates ports so multiple previews don't conflict. You get an inline preview right in the dashboard — see what the agent built without leaving the browser.
+Drop a `.apothecary/preview.yml` in your repo and any worktree can spin up a live dev server right in its worktree. Apothecary allocates ports so multiple previews don't conflict. You get an inline preview right in the dashboard — see what the agent built without leaving the browser.
 
 ### Review diffs without leaving the dashboard
 
@@ -158,15 +158,15 @@ The whole UI is keyboard-navigable with vim-like modes (normal, insert, detail).
 
 | Key | What it does |
 |-----|-------------|
-| `j` / `k` | Next/prev branch |
-| `h` / `l` | Focus branches/detail panel |
-| `g` / `G` | First/last branch |
-| `Enter` | Focus branch detail |
+| `j` / `k` | Next/prev worktree |
+| `h` / `l` | Focus worktrees/detail panel |
+| `g` / `G` | First/last worktree |
+| `Enter` | Focus worktree detail |
 | `Esc` | Normal mode / back |
 | `1-4` | Jump to lane |
-| `b` | New branch |
+| `b` | New worktree |
 | `c` / `/` | Chat mode (message agent) |
-| `a` | Task mode (add task to branch) |
+| `a` | Task mode (add task to worktree) |
 | `n` | Focus input |
 | `s` | Start/stop brewing |
 | `+` / `-` | Agent count |
