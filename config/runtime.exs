@@ -64,6 +64,7 @@ if config_env() == :prod do
   config :apothecary, ApothecaryWeb.Endpoint,
     url: [host: host, port: port, scheme: "http"],
     http: [
+      port: port,
       ip: {0, 0, 0, 0, 0, 0, 0, 0}
     ],
     secret_key_base: secret_key_base
