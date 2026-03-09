@@ -117,13 +117,17 @@ When a reviewer requests changes on a PR, Apothecary notices (it polls GitHub ev
 
 ## What keeps it running
 
-Agents crash. They hang. They run out of memory. That's fine. Two things handle it:
+Agents crash. They hang. They run out of memory. They hit rate limits. That's fine — the system handles all of it automatically.
 
-**Watchdog** — Each agent has a 5-minute silence timer. If Claude stops producing output for that long, the watchdog kills the process, logs the last 30 lines of output, and releases the worktree back to the pool. An idle agent picks it up and tries again.
+**Automatic retries** — When an agent fails for any reason, the worktree goes back into the queue and an idle agent picks it up. No manual intervention. The agent that picks it up reads the previous agent's notes and continues where it left off. A single worktree can be retried as many times as needed until it succeeds.
 
-**Notes** — Agents log progress notes as they work: what they tried, what worked, key decisions. These notes are stored in Mnesia and get included in the prompt when the next agent picks up the worktree. So if an agent crashes halfway through, the replacement doesn't start from scratch — it reads what happened and continues. Crash diagnostics get written to notes automatically too.
+**Watchdog** — Each agent has a 5-minute silence timer. If Claude stops producing output for that long, the watchdog kills the process, logs the last 30 lines of output, and releases the worktree back to the pool. This catches hangs, deadlocks, and runaway processes before they waste your Claude credits.
 
-Between the two, the system is self-healing. Stuck agents get recycled, and context survives across restarts. You can walk away and it sorts itself out.
+**Context survival** — Agents log progress notes as they work: what they tried, what worked, key decisions. These notes are stored in Mnesia and get included in the prompt when the next agent picks up the worktree. Crash diagnostics get written to notes automatically too. So retried agents don't start from scratch — they pick up with full context of what happened before.
+
+**Supervision** — Every agent process runs under an OTP supervisor. If an agent's OS process dies unexpectedly, the supervisor detects it immediately and cleans up. There's no zombie state, no leaked resources, no worktrees stuck in limbo.
+
+Between these layers, the system is self-healing. Stuck agents get recycled, crashed agents get retried, and context survives across restarts. You can queue up work and walk away — it sorts itself out.
 
 ## The dashboard
 
@@ -185,9 +189,11 @@ The whole UI is keyboard-navigable with vim-like modes (normal, insert, detail).
 
 ## Why Elixir
 
-Each agent is a GenServer under a DynamicSupervisor. Agent crashes are isolated — one going down doesn't affect the others. Mnesia handles all the state so there's no external database to set up. Phoenix PubSub makes the dispatch reactive, and LiveView gives you a real-time dashboard without writing any JavaScript.
+Erlang was built at Ericsson in the 1980s to manage millions of simultaneous phone calls. The requirements were: massive concurrency, processes that crash without taking down neighbors, hot code upgrades, and systems that self-heal without human intervention. They built the BEAM virtual machine for exactly this. Elixir runs on the same VM.
 
-The BEAM is good at running lots of concurrent processes that talk to each other and occasionally fall over. That's exactly what this is.
+Managing a fleet of AI agents is essentially the same problem. You have N concurrent processes that need isolation, supervision, and automatic recovery. Each agent is a GenServer under a DynamicSupervisor — when one crashes, the supervisor handles it and the others keep working. There's no shared memory to corrupt, no thread pools to exhaust, no cascading failures. Mnesia (Erlang's built-in distributed database) handles all the state so there's no external database to set up. Phoenix PubSub makes the dispatch reactive, and LiveView gives you a real-time dashboard without writing any JavaScript.
+
+The BEAM was designed for systems that run forever and recover from failure automatically. That's exactly what an agent orchestrator needs to do.
 
 ## WARNING
 
