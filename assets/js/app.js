@@ -645,9 +645,40 @@ let Hooks = {
   ChatBottomInput: {
     mounted() {
       this.pendingImages = [] // [{path, dataUrl}]
+      this.mentionActive = false
+      this.mentionStart = -1
+      this.selectedIndex = 0
+      this.results = []
+      this.dropdown = document.getElementById("file-autocomplete-dropdown")
 
       this.el.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
+        // Handle @ mention navigation first
+        if (this.mentionActive && this.results.length > 0) {
+          if (e.key === "ArrowDown" || e.key === "Tab" || (e.ctrlKey && e.key === "n")) {
+            e.preventDefault()
+            this.selectedIndex = (this.selectedIndex + 1) % this.results.length
+            this.renderMentionDropdown(false)
+            return
+          }
+          if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) {
+            e.preventDefault()
+            this.selectedIndex = (this.selectedIndex - 1 + this.results.length) % this.results.length
+            this.renderMentionDropdown(false)
+            return
+          }
+          if (e.key === "Enter") {
+            e.preventDefault()
+            this.selectMentionFile(this.results[this.selectedIndex])
+            return
+          }
+          if (e.key === "Escape") {
+            e.preventDefault()
+            this.closeMention()
+            return
+          }
+        }
+
+        if (e.key === "Enter" && !e.shiftKey && !this.mentionActive) {
           e.preventDefault()
           e.stopPropagation()
           const text = this.el.value.trim()
@@ -668,6 +699,37 @@ let Hooks = {
 
       this.el.addEventListener("input", () => {
         this.updateModeBadge(this.el.value)
+        // Check for @ mention
+        const pos = this.el.selectionStart
+        const text = this.el.value.substring(0, pos)
+        const match = text.match(/(^|[\s])@([^\s]*)$/)
+        if (match) {
+          const query = match[2]
+          this.mentionStart = pos - query.length - 1
+          if (query.length >= 1) {
+            this.pushEvent("file-search", { query }, (reply) => {
+              this.results = reply.files || []
+              this.selectedIndex = 0
+              if (this.results.length > 0) {
+                this.mentionActive = true
+                this.renderMentionDropdown()
+              } else {
+                this.closeMention()
+              }
+            })
+          } else {
+            this.closeMention()
+          }
+        } else {
+          this.closeMention()
+        }
+      })
+
+      // Close mention on click outside
+      document.addEventListener("click", (e) => {
+        if (!this.el.contains(e.target) && this.dropdown && !this.dropdown.contains(e.target)) {
+          this.closeMention()
+        }
       })
 
       // Image paste handling
@@ -743,6 +805,88 @@ let Hooks = {
           this.removePreviewImage(parseInt(btn.dataset.removeIdx))
         })
       })
+    },
+    selectMentionFile(filePath) {
+      if (!filePath) return
+      const before = this.el.value.substring(0, this.mentionStart)
+      const after = this.el.value.substring(this.el.selectionStart)
+      this.el.value = before + "@" + filePath + " " + after
+      const newPos = this.mentionStart + 1 + filePath.length + 1
+      this.el.selectionStart = newPos
+      this.el.selectionEnd = newPos
+      this.el.focus()
+      this.closeMention()
+    },
+    closeMention() {
+      this.mentionActive = false
+      this.results = []
+      this.selectedIndex = 0
+      if (this.dropdown) {
+        this.dropdown.classList.add("hidden")
+        this.dropdown.innerHTML = ""
+      }
+    },
+    renderMentionDropdown(rebuildContent = true) {
+      if (!this.dropdown || this.results.length === 0) return
+      this.dropdown.classList.remove("hidden")
+
+      const rect = this.el.getBoundingClientRect()
+      this.dropdown.style.left = rect.left + "px"
+      this.dropdown.style.width = rect.width + "px"
+
+      if (rebuildContent) {
+        this.dropdown.style.top = "-9999px"
+        this.dropdown.innerHTML = this.results.map((file, i) => {
+          const parts = file.split("/")
+          const fileName = parts.pop()
+          const dir = parts.join("/")
+          const isSelected = i === this.selectedIndex
+          return `<div class="file-ac-item ${isSelected ? "file-ac-selected" : ""}" data-index="${i}">
+            <span class="file-ac-name">${this.escapeHtml(fileName)}</span>
+            ${dir ? `<span class="file-ac-dir">${this.escapeHtml(dir)}/</span>` : ""}
+          </div>`
+        }).join("")
+
+        const dropdownHeight = this.dropdown.offsetHeight
+        if (rect.top >= dropdownHeight) {
+          this.dropdown.style.top = (rect.top - dropdownHeight - 4) + "px"
+        } else {
+          this.dropdown.style.top = (rect.bottom + 4) + "px"
+        }
+
+        this.dropdown.querySelectorAll(".file-ac-item").forEach(item => {
+          item.addEventListener("mousedown", (e) => {
+            e.preventDefault()
+            const idx = parseInt(item.dataset.index)
+            this.selectMentionFile(this.results[idx])
+          })
+          item.addEventListener("mouseenter", () => {
+            this.selectedIndex = parseInt(item.dataset.index)
+            this.updateMentionSelection()
+          })
+        })
+      } else {
+        this.updateMentionSelection()
+      }
+
+      const selected = this.dropdown.querySelector(".file-ac-selected")
+      if (selected) selected.scrollIntoView({ block: "nearest" })
+    },
+    updateMentionSelection() {
+      if (!this.dropdown) return
+      this.dropdown.querySelectorAll(".file-ac-item").forEach(item => {
+        const idx = parseInt(item.dataset.index)
+        if (idx === this.selectedIndex) {
+          item.classList.add("file-ac-selected")
+        } else {
+          item.classList.remove("file-ac-selected")
+        }
+      })
+    },
+    escapeHtml(text) {
+      const div = document.createElement("div")
+      div.textContent = text
+      return div.innerHTML
     },
     updateModeBadge(value) {
       const badge = document.getElementById("input-mode-badge")
