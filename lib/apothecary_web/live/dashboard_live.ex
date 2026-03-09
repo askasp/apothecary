@@ -62,6 +62,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:editing_child_id, nil)
       |> assign(:working_agent, nil)
       |> assign(:agent_output, [])
+      |> assign(:pending_user_question, false)
       |> assign(:diff_view, nil)
       |> assign(:show_preview, false)
       |> assign(:preview_port, nil)
@@ -387,11 +388,16 @@ defmodule ApothecaryWeb.DashboardLive do
     cond do
       # Already matched — append output
       working_agent && working_agent.id == agent_id ->
+        {tagged_lines, pending} = tag_response_lines(lines, socket.assigns.pending_user_question)
+
         output =
-          (socket.assigns.agent_output ++ lines)
+          (socket.assigns.agent_output ++ tagged_lines)
           |> Enum.take(-200)
 
-        {:noreply, assign(socket, :agent_output, output)}
+        {:noreply,
+         socket
+         |> assign(:agent_output, output)
+         |> assign(:pending_user_question, pending)}
 
       # Not matched yet — try to match this agent to the selected worktree
       is_nil(working_agent) && socket.assigns[:selected_task_id] ->
@@ -404,12 +410,14 @@ defmodule ApothecaryWeb.DashboardLive do
           end)
 
         if agent do
-          output = (socket.assigns.agent_output ++ lines) |> Enum.take(-200)
+          {tagged_lines, pending} = tag_response_lines(lines, socket.assigns.pending_user_question)
+          output = (socket.assigns.agent_output ++ tagged_lines) |> Enum.take(-200)
 
           {:noreply,
            socket
            |> assign(:working_agent, agent)
-           |> assign(:agent_output, output)}
+           |> assign(:agent_output, output)
+           |> assign(:pending_user_question, pending)}
         else
           {:noreply, socket}
         end
@@ -3133,10 +3141,38 @@ defmodule ApothecaryWeb.DashboardLive do
       {:noreply,
        socket
        |> assign(:agent_output, output)
+       |> assign(:pending_user_question, true)
        |> put_flash(:info, "Sent to agent")}
     else
       {:noreply, put_flash(socket, :error, "No active agent process")}
     end
+  end
+
+  # --- Response tagging ---
+  # When a user question is pending, tag text lines as responses (▹ prefix).
+  # Tool call lines ("[tool: ...]") clear the pending state — agent moved on to work.
+  defp tag_response_lines(lines, false), do: {lines, false}
+
+  defp tag_response_lines(lines, true) do
+    {tagged, still_pending} =
+      Enum.reduce(lines, {[], true}, fn line, {acc, pending} ->
+        cond do
+          # Tool calls mean the agent is doing work, not responding
+          not pending ->
+            {[line | acc], false}
+
+          String.starts_with?(line, "[tool:") or Regex.match?(~r/^\[[A-Z][A-Za-z]+\]/, line) ->
+            {[line | acc], false}
+
+          String.trim(line) == "" ->
+            {[line | acc], pending}
+
+          true ->
+            {["▹ #{line}" | acc], true}
+        end
+      end)
+
+    {Enum.reverse(tagged), still_pending}
   end
 
   # --- Task selection ---
@@ -3153,6 +3189,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:editing_child_id, nil)
     |> assign(:working_agent, nil)
     |> assign(:agent_output, [])
+    |> assign(:pending_user_question, false)
     |> assign(:show_preview, false)
     |> assign(:preview_port, nil)
     |> assign(:focused_pane, :tree)

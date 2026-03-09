@@ -1736,27 +1736,50 @@ defmodule ApothecaryWeb.DashboardComponents do
     assigns = assign(assigns, line_type: line_type, tag: tag, rest: rest)
 
     ~H"""
-    <div style="font-size: var(--font-size-xs); line-height: 1.6;">
-      <%= case @line_type do %>
-        <% :tool -> %>
+    <%= case @line_type do %>
+      <% :tool -> %>
+        <div style="font-size: var(--font-size-xs); line-height: 1.6;">
           <span style="color: var(--accent); font-weight: 600;">[{@tag}]</span>
           <span style="color: var(--text); font-weight: 500;">{@rest}</span>
-        <% :user -> %>
-          <span style="color: var(--queued); font-weight: 600;">▸ you:</span>
+        </div>
+      <% :user -> %>
+        <div
+          class="mt-3 mb-1 px-2 py-1.5 rounded"
+          style="font-size: var(--font-size-xs); line-height: 1.6; background: rgba(108, 158, 255, 0.08); border-left: 2px solid var(--accent);"
+        >
+          <span style="color: var(--accent); font-weight: 600;">you</span>
+          <span style="color: var(--text); font-weight: 500; margin-left: 6px;">{@rest}</span>
+        </div>
+      <% :reply -> %>
+        <div
+          class="px-2 py-0.5"
+          style="font-size: var(--font-size-xs); line-height: 1.6; border-left: 2px solid var(--bottled); margin-left: 0px;"
+        >
           <span style="color: var(--text); font-weight: 500;">{@rest}</span>
-        <% :narrative -> %>
+        </div>
+      <% :narrative -> %>
+        <div style="font-size: var(--font-size-xs); line-height: 1.6;">
           <span style="color: var(--dim); font-weight: 500;">&mdash; {@rest}</span>
-        <% :committed -> %>
+        </div>
+      <% :committed -> %>
+        <div style="font-size: var(--font-size-xs); line-height: 1.6;">
           <span style="color: var(--accent);">{@rest}</span>
-        <% _ -> %>
+        </div>
+      <% _ -> %>
+        <div style="font-size: var(--font-size-xs); line-height: 1.6;">
           <span style="color: var(--muted);">{@rest}</span>
-      <% end %>
-    </div>
+        </div>
+    <% end %>
     """
   end
 
   defp parse_log_line(line) do
     cond do
+      # Agent response to user question (▹ prefix added by tag_response_lines)
+      match = Regex.run(~r/^▹ (.*)$/, line) ->
+        [_, rest] = match
+        {:reply, nil, rest}
+
       # User message sent to brewer
       match = Regex.run(~r/^▸ you: (.*)$/, line) ->
         [_, rest] = match
