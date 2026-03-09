@@ -1,8 +1,9 @@
-# Apothecary - A claude orchestration IDE
+# Apothecary - Neovim for AI Agents
 
 I tried running an entire [Gas Town](https://github.com/steveyegge/gastown). Turns out that's a lot. But an apothecary? That I can manage.
 
 Apothecary is a small Elixir app that runs multiple Claude Code agents in parallel. You give it work, it spins up agents in isolated git worktrees, they do the coding, and PRs come out the other end. It's inspired by [Beads](https://github.com/steveyegge/beads) and Gas Town, but uses the BEAM for process supervision — so when an agent crashes, it just gets restarted. Agents continuously write notes on what they discover that are recovered on a crash restart.
+
 
 ## How it works
 
