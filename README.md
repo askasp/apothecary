@@ -2,8 +2,11 @@
 
 I tried running an entire [Gas Town](https://github.com/steveyegge/gastown). Turns out that's a lot. But an apothecary? That I can manage.
 
-Apothecary is a small Elixir app that runs multiple Claude Code agents in parallel. You give it work, it spins up agents in isolated git worktrees, they do the coding, and PRs come out the other end. It's inspired by [Beads](https://github.com/steveyegge/beads) and Gas Town, but uses the BEAM for process supervision — so when an agent crashes, it just gets restarted. Agent contiously write notes on what the discover that are recovered on a crash restard.
+Apothecary is a small Elixir app that runs multiple Claude Code agents in parallel. You give it work, it spins up agents in isolated git worktrees, they do the coding, and PRs come out the other end. It's inspired by [Beads](https://github.com/steveyegge/beads) and Gas Town, but uses the BEAM for process supervision — so when an agent crashes, it just gets restarted. Agents continuously write notes on what they discover that are recovered on a crash restart.
 
+Every era of programming has shifted what developers actually think about. First it was registers and bits — you lived in the machine, counting cycles, juggling opcodes. Then higher-level languages freed us from that, and the mental energy moved to RAM constraints and memory leaks. With advanced compilers and growing codebases, the unit of thought became directories, files, and reusable components — how to organize code so a team could work on it without stepping on each other. The SaaS era pushed it further outward: APIs, services, deployment pipelines, uptime. Developers stopped thinking about the code on their machine and started thinking about the system in production.
+
+This moves up another level. With agents that can write and ship code autonomously, the unit of work isn't a file anymore — it's a branch. You think in features, not functions. You describe what you want, and branches come back with PRs. The mental model shifts from "which files do I edit" to "which problems do I solve."
 
 ## How it works
 
