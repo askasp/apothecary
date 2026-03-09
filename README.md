@@ -7,7 +7,7 @@ Apothecary is a small Elixir app that runs multiple Claude Code agents in parall
 
 ## DEMO
 
-https://github.com/askasp/apothecary/releases/download/v0.1.12/ApotheacryIntro.mp4
+[Watch the demo](https://github.com/askasp/apothecary/releases/download/v0.1.12/ApotheacryIntro.mp4)
 
 ## How it works
 
