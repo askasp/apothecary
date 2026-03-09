@@ -19,6 +19,11 @@ defmodule Apothecary.MCP.Tools.CompleteTask do
          true <- is_nil(worktree_id) or task.worktree_id == worktree_id do
       summary = params[:summary] || "Completed"
 
+      # Auto-claim if the task wasn't explicitly claimed yet
+      if task.status == "open" do
+        Apothecary.Worktrees.update_task(task_id, %{status: "in_progress"})
+      end
+
       case Apothecary.Worktrees.close_task(task_id, summary) do
         {:ok, closed} ->
           if params[:summary] do
