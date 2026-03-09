@@ -971,3 +971,15 @@ details[open] > summary .merge-arrow {
 .detail-brewer-log::-webkit-scrollbar { width: 4px; }
 .detail-brewer-log::-webkit-scrollbar-track { background: transparent; }
 .detail-brewer-log::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+
+/* ── Responsive: hide branch pane on narrow screens when preview is open ── */
+
+.hidden-when-narrow {
+  display: none;
+}
+
+@media (min-width: 1200px) {
+  .hidden-when-narrow {
+    display: flex !important;
+  }
+}

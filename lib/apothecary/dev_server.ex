@@ -343,10 +343,12 @@ defmodule Apothecary.DevServer do
     state = put_in(state.servers[wt_id], server)
     broadcast_update(wt_id, server)
 
-    # Build env: BASE_PORT + config env vars
+    # Build env: inherit system env, then overlay BASE_PORT + config env vars
     env =
-      [{"BASE_PORT", to_string(base_port)}] ++
-        Enum.map(config.env, fn {k, v} -> {k, v} end)
+      System.get_env()
+      |> Map.put("BASE_PORT", to_string(base_port))
+      |> Map.merge(Map.new(config.env))
+      |> Enum.to_list()
 
     # Run setup command synchronously (fast, writes .env etc)
     case run_setup(config.setup, worktree_path, env) do
@@ -387,8 +389,12 @@ defmodule Apothecary.DevServer do
              env: env,
              stderr_to_stdout: true
            ) do
-        {_output, 0} -> :ok
-        {output, code} -> {:error, "exit code #{code}: #{String.slice(output, 0, 500)}"}
+        {output, 0} ->
+          Logger.info("DevServer setup completed: #{String.slice(output, 0, 200)}")
+          :ok
+
+        {output, code} ->
+          {:error, "exit code #{code}: #{String.slice(output, 0, 500)}"}
       end
     rescue
       e -> {:error, Exception.message(e)}
@@ -437,23 +443,22 @@ defmodule Apothecary.DevServer do
         state = put_in(state.servers[wt_id], server)
         broadcast_update(wt_id, server)
 
-        # Build env for shutdown command
+        # Build env for shutdown command: inherit system env + overlay config
         env =
-          [{"BASE_PORT", to_string(server.base_port)}] ++
-            Enum.map(config.env, fn {k, v} -> {k, v} end)
+          System.get_env()
+          |> Map.put("BASE_PORT", to_string(server.base_port))
+          |> Map.merge(Map.new(config.env))
+          |> Enum.to_list()
 
         # Run shutdown command if defined
         if config.shutdown do
           Logger.info("DevServer running shutdown: #{config.shutdown} for #{wt_id}")
 
-          charlist_env =
-            Enum.map(env, fn {k, v} -> {String.to_charlist(k), String.to_charlist(v)} end)
-
           Elixir.Task.start(fn ->
             try do
               System.cmd("sh", ["-c", config.shutdown],
                 cd: worktree_path,
-                env: charlist_env,
+                env: env,
                 stderr_to_stdout: true
               )
             rescue

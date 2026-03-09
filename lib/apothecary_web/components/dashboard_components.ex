@@ -598,6 +598,10 @@ defmodule ApothecaryWeb.DashboardComponents do
                   <button phx-click={@stop_event} phx-value-id={@target_id} class="action-text">
                     stop
                   </button>
+                  <span style="color: var(--border);">&middot;</span>
+                  <button phx-click="restart-preview" phx-value-id={@target_id} class="action-text">
+                    restart
+                  </button>
                 </div>
               <% else %>
                 <%!-- Single port: original compact layout --%>
@@ -616,12 +620,31 @@ defmodule ApothecaryWeb.DashboardComponents do
                 <button phx-click={@stop_event} phx-value-id={@target_id} class="action-text">
                   stop
                 </button>
+                <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+                <button phx-click="restart-preview" phx-value-id={@target_id} class="action-text">
+                  restart
+                </button>
               <% end %>
             </div>
           <% @dev_server && @dev_server.status == :starting -> %>
             <div class="flex items-center gap-2" style="font-size: var(--font-size-sm);">
               <.spinner class="w-3 h-3" />
               <span style="color: var(--concocting);">starting dev server...</span>
+            </div>
+          <% @dev_server && @dev_server.status == :error -> %>
+            <div style="font-size: var(--font-size-sm);">
+              <span
+                class="cursor-pointer"
+                style="color: var(--error);"
+                phx-click="show-preview"
+                phx-value-port={@port || 0}
+              >
+                preview crashed
+              </span>
+              <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+              <span class="action-text" phx-click={@start_event} phx-value-id={@target_id}>
+                restart
+              </span>
             </div>
           <% @has_config -> %>
             <div style="font-size: var(--font-size-sm);">
@@ -1801,10 +1824,17 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :dev_servers, :map, default: %{}
   attr :current_project, :map, default: nil
   attr :show_logs, :boolean, default: false
+  attr :worktrees_by_status, :map, default: %{}
 
   def preview_panel(assigns) do
     # Build list of all available preview sources
     project_id = assigns.current_project && assigns.current_project.id
+
+    # Build a lookup from worktree id to worktree for branch name display
+    wt_lookup =
+      assigns.worktrees_by_status
+      |> Enum.flat_map(fn {_status, groups} -> Enum.map(groups, fn g -> {g.worktree.id, g.worktree} end) end)
+      |> Map.new()
 
     # Build sources: expand each dev server's ports into separate entries
     main_sources =
@@ -1826,10 +1856,12 @@ defmodule ApothecaryWeb.DashboardComponents do
           match?(%{status: s, ports: [_ | _]} when s in [:running, :starting, :error], server)
       end)
       |> Enum.flat_map(fn {id, %{ports: ports}} ->
-        short_id = id |> to_string() |> String.replace_leading("wt-", "") |> String.slice(0, 6)
+        wt = Map.get(wt_lookup, id)
+        branch = (wt && wt.git_branch) || (wt && wt.title)
+        short_label = if branch, do: branch |> String.replace_leading("worktree/", ""), else: id |> to_string() |> String.replace_leading("wt-", "") |> String.slice(0, 6)
 
         Enum.map(ports, fn %{port: p, name: name} ->
-          label = if length(ports) > 1, do: "#{short_id}:#{name}", else: short_id
+          label = if length(ports) > 1, do: "#{short_label}:#{name}", else: short_label
           %{id: id, label: label, port: p}
         end)
       end)
@@ -1910,6 +1942,16 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
         <div class="flex items-center gap-3">
           <%= if @port do %>
+            <%= if @server_status == :error and @active_source do %>
+              <button
+                phx-click="restart-preview"
+                phx-value-id={@active_source.id}
+                class="cursor-pointer"
+                style="color: var(--accent);"
+              >
+                restart
+              </button>
+            <% end %>
             <button
               phx-click="toggle-preview-logs"
               class="cursor-pointer"

@@ -1132,6 +1132,25 @@ defmodule ApothecaryWeb.DashboardLive do
     {:noreply, put_flash(socket, :info, "Preview stopped for #{wt_id}")}
   end
 
+  @impl true
+  def handle_event("restart-preview", %{"id" => server_id}, socket) do
+    DevServer.stop_server(server_id)
+
+    project = socket.assigns.current_project
+
+    result =
+      if project && server_id == project.id do
+        DevServer.start_project_server(project.id, project.path)
+      else
+        DevServer.start_server(server_id)
+      end
+
+    case result do
+      {:ok, _} -> {:noreply, put_flash(socket, :info, "Restarting preview...")}
+      {:error, reason} -> {:noreply, put_flash(socket, :error, "Restart failed: #{inspect(reason)}")}
+    end
+  end
+
   # Project-level dev server controls
   @impl true
   def handle_event("start-project-dev", _params, socket) do
@@ -3703,11 +3722,10 @@ defmodule ApothecaryWeb.DashboardLive do
             <% @active_tab == :workbench -> %>
               <%!-- Split panel: worktree list left, detail + preview right --%>
               <div class="flex h-full">
-                <%!-- Left panel: worktree tree (hidden when preview open) --%>
+                <%!-- Left panel: worktree tree (hidden on small screens when preview open) --%>
                 <div
-                  :if={!@show_preview}
                   id="worktree-panel"
-                  class="h-full overflow-y-auto scroll-main flex-shrink-0 flex flex-col"
+                  class={"h-full overflow-y-auto scroll-main flex-shrink-0 flex flex-col#{if @show_preview, do: " hidden-when-narrow", else: ""}"}
                   style="width: 280px; min-width: 220px; max-width: 400px; border-right: 1px solid var(--border);"
                   phx-click="focus-tree-pane"
                 >
@@ -3828,6 +3846,7 @@ defmodule ApothecaryWeb.DashboardLive do
                       dev_servers={@dev_servers}
                       current_project={@current_project}
                       show_logs={@show_preview_logs}
+                      worktrees_by_status={@worktrees_by_status}
                     />
                   </div>
                 <% end %>
