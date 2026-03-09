@@ -133,51 +133,73 @@ Between these layers, the system is self-healing. Stuck agents get recycled, cra
 
 ## The dashboard
 
-The dashboard is a Phoenix LiveView app — real-time updates, no page refreshes, and entirely keyboard-driven if you want it to be.
+The dashboard is a Phoenix LiveView app — real-time updates, no page refreshes, and entirely keyboard-driven. The design is inspired by Neovim: modal, composable, and fast.
 
-Worktrees are grouped in the left panel as a tree:
+### Layout
+
+The left panel shows worktrees grouped by status:
 
 | Group | What's in it |
 |-------|-------------|
-| **Brewing** | Currently being worked on by an agent |
-| **Reviewing** | PR is open, under review |
-| **Queued** | Ready and waiting for an agent |
-| **Bottled** | Done and merged |
+| **Queued** (`1`) | Ready and waiting for an agent |
+| **Brewing** (`2`) | Currently being worked on by an agent |
+| **Reviewing** (`3`) | PR is open, under review |
+| **Done** (`4`) | Merged |
+| **Discarded** (`5`) | Closed without merging |
 
-Each entry shows the title and which agent is working on it. Select a worktree to see its tasks, progress, agent notes, and live output stream in the right panel. A preview of your app runs inline — you can see what the agent built without leaving the dashboard.
+Select a worktree to see its tasks, progress, agent notes, and live output in the right detail panel. Inline previews show what the agent built without leaving the dashboard.
 
-The input bar is context-sensitive:
-- Plain text creates a new worktree
-- If you have a worktree selected, typing adds a task to it
-- If an agent is working on the selected worktree, your text goes directly to the agent
-- Prefix with `?` to ask a question about the codebase
+### Workflow
+
+The input bar is context-sensitive — what happens when you type depends on the current mode:
+
+1. **Worktree mode** (`b`) — Type a title to create a new worktree. The agent picks it up and starts coding.
+2. **Task mode** (`a`) — With a worktree selected, type to add a task (sub-step) to it.
+3. **Chat mode** (`c` or `/`) — If an agent is working on the selected worktree, your text goes directly to the agent's stdin.
+4. **Default** — `n` focuses the input without switching modes.
+
+Press `Esc` to cancel any mode and return to normal navigation.
 
 ### Keyboard shortcuts
 
-The whole UI is keyboard-navigable with vim-like modes (normal, insert, detail). Press `?` for the full list, but the highlights:
+Everything is keyboard-navigable. Press `?` in the dashboard for the full list.
+
+**Navigation:**
 
 | Key | What it does |
 |-----|-------------|
-| `j` / `k` | Next/prev worktree |
-| `h` / `l` | Focus worktrees/detail panel |
-| `g` / `G` | First/last worktree |
-| `Enter` | Focus worktree detail |
-| `Esc` | Normal mode / back |
-| `1-4` | Jump to lane |
+| `j` / `k` | Next / prev worktree |
+| `h` / `l` | Focus tree / detail panel |
+| `g` / `G` | First / last worktree |
+| `Enter` | Open worktree detail |
+| `Esc` / `q` | Back / cancel mode |
+| `1`–`5` | Jump to status group |
+| `w` | Focus worktree tree |
+| `e` | Switch to recipes tab |
+| `Ctrl+H/L` | Switch panels (works in input) |
+| `Ctrl+J/K` | Cycle sections: tree → detail → input |
+| `Cmd+K` | Project switcher |
+
+**Actions:**
+
+| Key | What it does |
+|-----|-------------|
 | `b` | New worktree |
-| `c` / `/` | Chat mode (message agent) |
-| `a` | Task mode (add task to worktree) |
+| `a` | Add task to selected worktree |
+| `c` / `/` | Chat with agent |
 | `n` | Focus input |
-| `s` | Start/stop brewing |
-| `+` / `-` | Agent count |
-| `J` / `K` | Reorder priority |
+| `s` | Start / stop brewing |
+| `+` / `-` | Increase / decrease agent count |
+| `J` / `K` | Reorder worktree priority |
 | `d` | View diff |
-| `p` | Open preview |
-| `t` | Open terminal |
+| `D` | Toggle dev server preview |
+| `p` | Open inline preview |
+| `t` | Open terminal in worktree |
 | `P` | Pull origin main |
-| `m` | Merge (in detail view) |
-| `r` | Requeue (in detail view) |
-| `x` | Close worktree (in detail view) |
+| `R` | Requeue orphaned tasks |
+| `m` | Merge PR |
+| `r` | Requeue task |
+| `x` | Close worktree |
 | `?` | Show all shortcuts |
 
 ## The naming
