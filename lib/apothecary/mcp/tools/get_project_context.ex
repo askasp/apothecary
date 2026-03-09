@@ -38,7 +38,12 @@ defmodule Apothecary.MCP.Tools.GetProjectContext do
         entries
         |> Enum.map(fn e ->
           header = "## #{e.category}"
-          meta = if e.updated_by, do: "(updated by #{e.updated_by} at #{e.updated_at})", else: "(updated at #{e.updated_at})"
+
+          meta =
+            if e.updated_by,
+              do: "(updated by #{e.updated_by} at #{e.updated_at})",
+              else: "(updated at #{e.updated_at})"
+
           "#{header}\n#{meta}\n\n#{e.content}"
         end)
         |> Enum.join("\n\n---\n\n")
@@ -51,13 +56,19 @@ defmodule Apothecary.MCP.Tools.GetProjectContext do
   defp get_single(project_id, category, frame) do
     case Apothecary.ProjectContexts.get(project_id, category) do
       {:ok, entry} ->
-        meta = if entry.updated_by, do: "(updated by #{entry.updated_by} at #{entry.updated_at})", else: "(updated at #{entry.updated_at})"
+        meta =
+          if entry.updated_by,
+            do: "(updated by #{entry.updated_by} at #{entry.updated_at})",
+            else: "(updated at #{entry.updated_at})"
+
         text = "## #{entry.category}\n#{meta}\n\n#{entry.content}"
         response = Response.tool() |> Response.text(text)
         {:reply, response, frame}
 
       {:error, :not_found} ->
-        response = Response.tool() |> Response.text("No context found for category '#{category}'.")
+        response =
+          Response.tool() |> Response.text("No context found for category '#{category}'.")
+
         {:reply, response, frame}
     end
   end

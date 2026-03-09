@@ -73,10 +73,16 @@ defmodule Apothecary.Git do
       {:error, _} ->
         # Fallback: check if main or master exists as local branch
         cond do
-          match?({:ok, _}, CLI.run("git", ["rev-parse", "--verify", "refs/heads/main"], cd: project_dir)) ->
+          match?(
+            {:ok, _},
+            CLI.run("git", ["rev-parse", "--verify", "refs/heads/main"], cd: project_dir)
+          ) ->
             "main"
 
-          match?({:ok, _}, CLI.run("git", ["rev-parse", "--verify", "refs/heads/master"], cd: project_dir)) ->
+          match?(
+            {:ok, _},
+            CLI.run("git", ["rev-parse", "--verify", "refs/heads/master"], cd: project_dir)
+          ) ->
             "master"
 
           true ->

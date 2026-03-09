@@ -82,7 +82,10 @@ defmodule Apothecary.DevServer do
     unless result do
       config_path = Path.join(path, ".apothecary/preview.yml")
       exists? = File.exists?(config_path)
-      Logger.debug("has_config_for_path?(#{path}): #{result}, file exists at #{config_path}: #{exists?}")
+
+      Logger.debug(
+        "has_config_for_path?(#{path}): #{result}, file exists at #{config_path}: #{exists?}"
+      )
     end
 
     result

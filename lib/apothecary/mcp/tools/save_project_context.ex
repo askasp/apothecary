@@ -11,7 +11,8 @@ defmodule Apothecary.MCP.Tools.SaveProjectContext do
     )
 
     field(:content, {:required, :string},
-      description: "The context content to save. Will replace any existing content for this category."
+      description:
+        "The context content to save. Will replace any existing content for this category."
     )
   end
 
@@ -23,7 +24,12 @@ defmodule Apothecary.MCP.Tools.SaveProjectContext do
     with {:ok, project_id} <- resolve_project_id(worktree_id) do
       updated_by = if brewer_id, do: "brewer-#{brewer_id}", else: worktree_id
 
-      case Apothecary.ProjectContexts.save(project_id, params.category, params.content, updated_by) do
+      case Apothecary.ProjectContexts.save(
+             project_id,
+             params.category,
+             params.content,
+             updated_by
+           ) do
         {:ok, _entry} ->
           response =
             Response.tool()

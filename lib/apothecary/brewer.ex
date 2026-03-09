@@ -777,7 +777,9 @@ defmodule Apothecary.Brewer do
     # Include parent worktree context if this question is scoped to a branch
     parent_context =
       case Map.get(worktree, :parent_worktree_id) do
-        nil -> ""
+        nil ->
+          ""
+
         parent_id ->
           case Apothecary.Worktrees.get_worktree(parent_id) do
             {:ok, parent} ->
@@ -788,7 +790,9 @@ defmodule Apothecary.Brewer do
               context = if branch, do: context <> "\nBranch: #{branch}", else: context
               context = if path, do: context <> "\nWorktree path: #{path}", else: context
               context
-            _ -> ""
+
+            _ ->
+              ""
           end
       end
 

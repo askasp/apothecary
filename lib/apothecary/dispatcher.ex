@@ -119,15 +119,17 @@ defmodule Apothecary.Dispatcher do
 
         brewer_projects = Map.drop(state.brewer_projects, pool.agent_pids)
 
-        pool = %{pool |
-          status: :paused,
-          target_count: 0,
-          agent_pids: [],
-          idle_agents: [],
-          agents: Map.drop(pool.agents, pool.agent_pids),
-          failure_tracker: %{},
-          backoff_timers: %{}
+        pool = %{
+          pool
+          | status: :paused,
+            target_count: 0,
+            agent_pids: [],
+            idle_agents: [],
+            agents: Map.drop(pool.agents, pool.agent_pids),
+            failure_tracker: %{},
+            backoff_timers: %{}
         }
+
         state = %{state | brewer_projects: brewer_projects}
         state = put_pool(state, project_id, pool)
 
@@ -243,36 +245,37 @@ defmodule Apothecary.Dispatcher do
       broadcast(state)
       {:noreply, state}
     else
-    project_id = state.brewer_projects[pid]
+      project_id = state.brewer_projects[pid]
 
-    state =
-      if project_id do
-        pool = state.projects[project_id]
+      state =
+        if project_id do
+          pool = state.projects[project_id]
 
-        if pool do
-          idle =
-            if pid in pool.idle_agents, do: pool.idle_agents, else: [pid | pool.idle_agents]
-          pool = %{pool | idle_agents: idle}
+          if pool do
+            idle =
+              if pid in pool.idle_agents, do: pool.idle_agents, else: [pid | pool.idle_agents]
 
-          # Reset failure counter on successful idle (brewer completed work)
-          brewer_state = pool.agents[pid]
-          slot_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(pid)
-          failure_tracker = Map.delete(pool.failure_tracker, slot_id)
+            pool = %{pool | idle_agents: idle}
 
-          pool = %{pool | failure_tracker: failure_tracker}
-          state = put_pool(state, project_id, pool)
-          try_dispatch(state)
+            # Reset failure counter on successful idle (brewer completed work)
+            brewer_state = pool.agents[pid]
+            slot_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(pid)
+            failure_tracker = Map.delete(pool.failure_tracker, slot_id)
+
+            pool = %{pool | failure_tracker: failure_tracker}
+            state = put_pool(state, project_id, pool)
+            try_dispatch(state)
+          else
+            state
+          end
         else
+          # Brewer not associated with any project — shouldn't happen but handle gracefully
+          Logger.warning("Brewer #{inspect(pid)} reported idle but has no project association")
           state
         end
-      else
-        # Brewer not associated with any project — shouldn't happen but handle gracefully
-        Logger.warning("Brewer #{inspect(pid)} reported idle but has no project association")
-        state
-      end
 
-    broadcast(state)
-    {:noreply, state}
+      broadcast(state)
+      {:noreply, state}
     end
   end
 
@@ -330,10 +333,11 @@ defmodule Apothecary.Dispatcher do
 
           is_question = MapSet.member?(state.question_pids, pid)
 
-          pool = %{pool |
-            agent_pids: List.delete(pool.agent_pids, pid),
-            idle_agents: List.delete(pool.idle_agents, pid),
-            agents: Map.delete(pool.agents, pid)
+          pool = %{
+            pool
+            | agent_pids: List.delete(pool.agent_pids, pid),
+              idle_agents: List.delete(pool.idle_agents, pid),
+              agents: Map.delete(pool.agents, pid)
           }
 
           state = %{state | question_pids: MapSet.delete(state.question_pids, pid)}
@@ -344,31 +348,30 @@ defmodule Apothecary.Dispatcher do
             state = %{state | brewer_projects: brewer_projects}
             put_pool(state, project_id, pool)
           else
+            pool = record_pool_failure(pool, slot_id)
 
-          pool = record_pool_failure(pool, slot_id)
+            brewer_projects = Map.delete(state.brewer_projects, pid)
+            state = %{state | brewer_projects: brewer_projects}
 
-          brewer_projects = Map.delete(state.brewer_projects, pid)
-          state = %{state | brewer_projects: brewer_projects}
-
-          if should_pool_backoff?(pool, slot_id) do
-            Logger.warning(
-              "Brewer slot #{slot_id} in project #{project_id} hit #{@max_fast_failures} fast failures, " <>
-                "backing off #{div(@backoff_ms, 1000)}s before respawn"
-            )
-
-            timer =
-              Process.send_after(
-                self(),
-                {:backoff_expired, project_id, slot_id},
-                @backoff_ms
+            if should_pool_backoff?(pool, slot_id) do
+              Logger.warning(
+                "Brewer slot #{slot_id} in project #{project_id} hit #{@max_fast_failures} fast failures, " <>
+                  "backing off #{div(@backoff_ms, 1000)}s before respawn"
               )
 
-            pool = put_in(pool.backoff_timers[slot_id], timer)
-            put_pool(state, project_id, pool)
-          else
-            state = put_pool(state, project_id, pool)
-            scale_project_agents(state, project_id)
-          end
+              timer =
+                Process.send_after(
+                  self(),
+                  {:backoff_expired, project_id, slot_id},
+                  @backoff_ms
+                )
+
+              pool = put_in(pool.backoff_timers[slot_id], timer)
+              put_pool(state, project_id, pool)
+            else
+              state = put_pool(state, project_id, pool)
+              scale_project_agents(state, project_id)
+            end
           end
         else
           Map.update!(state, :brewer_projects, &Map.delete(&1, pid))
