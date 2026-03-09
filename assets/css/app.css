@@ -1,0 +1,985 @@
+/* Apothecary — Multi-theme design system
+   No daisyUI. Custom properties + Tailwind utility classes only. */
+
+@import "tailwindcss" source(none);
+@source "../css";
+@source "../js";
+@source "../../lib/apothecary_web";
+
+@plugin "../vendor/heroicons";
+
+/* ── Shared ────────────────────────────────────────────────── */
+
+:root {
+  --font-mono: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+}
+
+/* ── Theme: Studio (default) ──────────────────────────────── */
+
+:root, .theme-studio {
+  --bg:       #1b1e24;
+  --surface:  #242830;
+  --border:   #353b46;
+  --text:     #e2e6ec;
+  --dim:      #8d93a0;
+  --muted:    #515868;
+  --accent:   #6c9eff;
+
+  --concocting: #f0b030;
+  --assaying:   #e8805a;
+  --reviewing:  var(--assaying);
+  --queued:     #515868;
+  --bottled:    #50b870;
+  --error:      #ee5555;
+
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-size-base:  14px;
+  --font-size-sm:    14px;
+  --font-size-xs:    12px;
+  --font-size-xxs:   11px;
+  --font-size-title: 16px;
+  --line-height:     1.55;
+
+  --bg-pattern: radial-gradient(circle, rgba(108, 158, 255, 0.05) 1px, transparent 1px);
+  --shadow-overlay: rgba(0, 0, 0, 0.5);
+}
+
+/* ── Theme: Moonlight ────────────────────────────────────── */
+
+.theme-moonlight {
+  --bg:       #0a0e10;
+  --surface:  #101618;
+  --border:   #1a2428;
+  --text:     #b0c8d0;
+  --dim:      #708a92;
+  --muted:    #4a6670;
+  --accent:   #5aaa9a;
+
+  --concocting: #c4aa4e;
+  --assaying:   #c48060;
+  --reviewing:  var(--assaying);
+  --queued:     #4a6670;
+  --bottled:    #4a7270;
+  --error:      #c45a5a;
+
+  --font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+  --font-size-base:  14px;
+  --font-size-sm:    14px;
+  --font-size-xs:    12px;
+  --font-size-xxs:   11px;
+  --font-size-title: 16px;
+  --line-height:     1.6;
+
+  --bg-pattern: radial-gradient(circle, rgba(90, 130, 150, 0.12) 1px, transparent 1px);
+  --shadow-overlay: rgba(0, 0, 0, 0.5);
+}
+
+/* ── Theme: Daylight ──────────────────────────────────────── */
+
+.theme-daylight {
+  --bg:       #f5f6f8;
+  --surface:  #ffffff;
+  --border:   #dce0e6;
+  --text:     #1a1e28;
+  --dim:      #555e70;
+  --muted:    #8890a0;
+  --accent:   #3a6adf;
+
+  --concocting: #b08820;
+  --assaying:   #c06040;
+  --reviewing:  var(--assaying);
+  --queued:     #8890a0;
+  --bottled:    #2a8a50;
+  --error:      #cc3333;
+
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-size-base:  14px;
+  --font-size-sm:    14px;
+  --font-size-xs:    12px;
+  --font-size-xxs:   11px;
+  --font-size-title: 16px;
+  --line-height:     1.55;
+
+  --bg-pattern: radial-gradient(circle, rgba(60, 70, 90, 0.04) 1px, transparent 1px);
+  --shadow-overlay: rgba(0, 0, 0, 0.15);
+}
+
+/* ── Base ────────────────────────────────────────────────── */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-pattern), var(--bg);
+  background-size: 32px 32px;
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*, *::before, *::after {
+  border-color: var(--border);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+/* ── Tailwind LiveView variants ──────────────────────────── */
+
+@custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
+@custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
+@custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
+
+/* Make LiveView wrapper divs transparent for layout */
+[data-phx-session], [data-phx-teleported-src] { display: contents; }
+
+/* ── Theme utility classes ────────────────────────────────── */
+
+/* Colors */
+.color-bg       { color: var(--bg); }
+.color-surface  { color: var(--surface); }
+.color-border   { color: var(--border); }
+.color-text     { color: var(--text); }
+.color-dim      { color: var(--dim); }
+.color-muted    { color: var(--muted); }
+.color-accent   { color: var(--accent); }
+
+.bg-moonlight        { background: var(--bg); }
+.bg-surface          { background: var(--surface); }
+.border-moonlight    { border-color: var(--border); }
+
+/* Status colors */
+.color-concocting { color: var(--concocting); }
+.color-assaying  { color: var(--assaying); }
+.color-queued    { color: var(--queued); }
+.color-bottled   { color: var(--bottled); }
+.color-error     { color: var(--error); }
+
+.bg-concocting { background: var(--concocting); }
+.bg-assaying  { background: var(--assaying); }
+.bg-accent    { background: var(--accent); }
+
+/* ── Section headers ─────────────────────────────────────── */
+
+.section-header {
+  font-size: var(--font-size-xxs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+/* ── Pulsing dot animation (concocting status) ───────────── */
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.dot-pulse {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* ── Tree characters ─────────────────────────────────────── */
+
+.tree-char {
+  color: var(--muted);
+  user-select: none;
+}
+
+/* ── Input ───────────────────────────────────────────────── */
+
+.moonlight-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  outline: none;
+  padding: 12px 16px;
+  width: 100%;
+}
+
+.moonlight-input:focus {
+  border-color: var(--dim);
+}
+
+.moonlight-input::placeholder {
+  color: transparent;
+}
+
+/* ── Scrollable output box ───────────────────────────────── */
+
+.output-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+
+.output-box::-webkit-scrollbar { width: 4px; }
+.output-box::-webkit-scrollbar-track { background: transparent; }
+.output-box::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+
+/* ── Action pills ────────────────────────────────────────── */
+
+.action-pill {
+  background: var(--accent);
+  color: var(--bg);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  cursor: pointer;
+  border: none;
+  display: inline-block;
+}
+
+.action-pill:hover {
+  opacity: 0.85;
+}
+
+.action-text {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.action-text:hover {
+  color: var(--dim);
+}
+
+.action-outlined {
+  color: var(--dim);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  display: inline-block;
+}
+
+.action-outlined:hover {
+  color: var(--text);
+  border-color: var(--dim);
+}
+
+/* ── Status bar ──────────────────────────────────────────── */
+
+.status-bar {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  font-size: var(--font-size-xs);
+  color: var(--dim);
+  padding: 6px 16px;
+}
+
+/* ── Diff view ───────────────────────────────────────────── */
+
+.diff-add  { color: var(--accent); }
+.diff-del  { color: var(--error); }
+
+/* ── File autocomplete dropdown ──────────────────────────── */
+
+.file-ac-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.file-ac-item:last-child { border-bottom: none; }
+.file-ac-item:hover, .file-ac-selected {
+  background: var(--surface);
+}
+.file-ac-name {
+  font-weight: 500;
+  color: var(--accent);
+}
+.file-ac-dir {
+  font-size: var(--font-size-xs);
+  color: var(--dim);
+}
+
+/* ── Scrollbar for main content area ─────────────────────── */
+
+.scroll-main {
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+.scroll-main::-webkit-scrollbar { width: 6px; }
+.scroll-main::-webkit-scrollbar-track { background: transparent; }
+.scroll-main::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+
+/* ── Flash messages ──────────────────────────────────────── */
+
+.flash-info {
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: var(--font-size-sm);
+}
+
+.flash-error {
+  background: var(--surface);
+  border: 1px solid var(--error);
+  border-radius: 6px;
+  color: var(--error);
+  padding: 8px 12px;
+  font-size: var(--font-size-sm);
+}
+
+/* ── Settings value hover ────────────────────────────────── */
+
+.settings-value:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+}
+
+/* ── Project landing hover ──────────────────────────────── */
+
+.project-landing-item {
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+.project-landing-item:hover {
+  background: var(--surface);
+  border-left: 2px solid var(--accent) !important;
+}
+
+/* ── Project Switcher Dropdown ─────────────────────────── */
+
+.switcher-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--shadow-overlay);
+  display: flex;
+  justify-content: center;
+  padding-top: 60px;
+  animation: switcher-fade-in 0.1s ease-out;
+}
+
+.switcher-dropdown {
+  width: 420px;
+  max-height: 420px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px var(--shadow-overlay);
+  animation: switcher-slide-in 0.12s ease-out;
+  height: fit-content;
+}
+
+.switcher-input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  padding: 10px 12px;
+  outline: none;
+  caret-color: var(--accent);
+}
+
+.switcher-input:focus {
+  border-color: var(--accent);
+}
+
+.switcher-input::placeholder {
+  color: var(--muted);
+}
+
+.switcher-list {
+  overflow-y: auto;
+  max-height: 280px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+
+.switcher-item {
+  display: block;
+  padding: 8px 16px;
+  cursor: pointer;
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  transition: background 0.06s ease;
+}
+
+.switcher-item--selected {
+  background: var(--surface);
+  border-left-color: var(--accent);
+}
+
+.switcher-item:hover:not(.switcher-item--selected) {
+  background: var(--surface);
+}
+
+.switcher-item-name {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--dim);
+}
+
+.switcher-item-name--selected {
+  color: var(--text);
+}
+
+.switcher-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+}
+
+.switcher-current-badge {
+  color: var(--accent);
+  font-size: var(--font-size-sm);
+}
+
+.switcher-divider {
+  margin: 4px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.switcher-add {
+  padding: 8px 16px;
+}
+
+.switcher-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  border-top: 1px solid var(--border);
+}
+
+@keyframes switcher-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes switcher-slide-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Fuzzy match highlight ─────────────────────────────── */
+
+.fuzzy-match {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ── Opacity helpers for queued state ────────────────────── */
+
+.opacity-queued {
+  opacity: 0.5;
+}
+
+/* ── Task new glow ─────────────────────────────────────── */
+
+@keyframes task-glow {
+  0% { background-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+  100% { background-color: transparent; }
+}
+.task-new { animation: task-glow 1.5s ease-out forwards; }
+
+/* ── Oracle view ────────────────────────────────────────── */
+
+.oracle-response {
+  background: var(--surface);
+  border-left: 2px solid var(--accent);
+}
+
+.oracle-body {
+  color: var(--dim);
+  line-height: 1.6;
+}
+
+.oracle-body br {
+  display: block;
+  content: "";
+  margin-top: 0.25em;
+}
+
+.oracle-file-path {
+  color: var(--accent);
+}
+
+.oracle-code-block {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 6px 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+}
+
+.oracle-code-block pre {
+  margin: 0;
+  white-space: pre;
+}
+
+.oracle-code-block code {
+  color: var(--text);
+  font-size: var(--font-size-sm);
+}
+
+#oracle-input::placeholder {
+  color: var(--muted);
+}
+
+/* ── Task inline styles ─────────────────────────────── */
+
+.task-dot-active {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.task-inline-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  outline: none;
+  padding: 2px 0;
+  width: 100%;
+}
+
+.search-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  outline: none;
+  width: 100%;
+  padding: 4px 0;
+}
+
+/* ── Chat UI ──────────────────────────────────────────── */
+
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-height: 100vh;
+  max-width: 900px;
+  margin: 0 auto;
+  overflow: hidden;
+  outline: none;
+}
+
+.chat-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  font-size: var(--font-size-sm);
+}
+
+.chat-top-bar-left {
+  display: flex;
+  align-items: center;
+}
+
+.chat-top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.chat-top-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-top-brewers {
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+  margin-left: 0;
+}
+
+.chat-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+
+.chat-log::-webkit-scrollbar { width: 6px; }
+.chat-log::-webkit-scrollbar-track { background: transparent; }
+.chat-log::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+
+/* ── Chat Messages ──────────────────────────────────── */
+
+.chat-msg {
+  padding: 4px 0;
+}
+
+/* User message: "you 2:42" then "wb > /s" */
+.chat-user-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--font-size-xs);
+  margin-bottom: 2px;
+  margin-top: 12px;
+}
+
+.chat-user-body {
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+/* System message: "apothecary" label + body */
+.chat-system-block {
+  margin: 8px 0;
+}
+
+.chat-system-label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--dim);
+  margin-bottom: 2px;
+}
+
+.chat-system-body {
+  font-size: var(--font-size-sm);
+  color: var(--dim);
+  line-height: 1.5;
+}
+
+/* Brewer event: "— ● ff55d7 completed · title    2:39" */
+.chat-event-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  padding: 2px 0;
+}
+
+/* Status tree output */
+.chat-status-block {
+  margin: 8px 0;
+}
+
+.chat-timestamp {
+  font-size: var(--font-size-xxs);
+  color: var(--muted);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.chat-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+.chat-status-block [phx-hook=".BrailleSpinner"] {
+  color: var(--concocting);
+}
+
+/* ── Chat Welcome ──────────────────────────────────── */
+
+.chat-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 80px 0 40px;
+  text-align: center;
+}
+
+.chat-welcome-title {
+  font-size: 22px;
+  color: var(--dim);
+  font-weight: 400;
+  margin-bottom: 32px;
+}
+
+.chat-welcome-hints {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-welcome-hint {
+  font-size: var(--font-size-sm);
+  color: var(--muted);
+}
+
+.chat-welcome-cmd {
+  color: var(--dim);
+  font-weight: 500;
+  margin-right: 8px;
+}
+
+/* ── Chat Input Bar ─────────────────────────────────── */
+
+.chat-input-bar {
+  flex-shrink: 0;
+  padding: 0 24px 48px;
+  background: var(--bg);
+}
+
+.chat-input-form {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.chat-input-form:focus-within {
+  border-color: var(--dim);
+}
+
+.chat-input-prompt {
+  color: var(--accent);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  padding-top: 2px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.chat-input-form textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  outline: none;
+  resize: none;
+  line-height: 1.5;
+  padding: 0;
+  min-height: 64px;
+  max-height: 200px;
+}
+
+.chat-input-form textarea::placeholder {
+  color: var(--muted);
+}
+
+/* ── Path autocomplete dropdown ─────────────────────── */
+
+.chat-path-dropdown {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+
+.chat-path-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  color: var(--text);
+  border-left: 2px solid transparent;
+}
+
+.chat-path-item:hover,
+.chat-path-item--selected {
+  background: var(--bg);
+  border-left-color: var(--accent);
+}
+
+.chat-path-dir {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 250px;
+}
+
+/* ── Theme toggle ──────────────────────────────────────── */
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--font-size-xxs);
+  user-select: none;
+}
+
+.theme-toggle-option {
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--muted);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.theme-toggle-option:hover {
+  color: var(--dim);
+}
+
+.theme-toggle-option--active {
+  color: var(--text);
+  background: var(--surface);
+}
+
+/* ── Theme transitions ─────────────────────────────────── */
+
+details[open] > summary .merge-arrow {
+  transform: rotate(90deg);
+}
+
+.theme-transitioning,
+.theme-transitioning *,
+.theme-transitioning *::before,
+.theme-transitioning *::after {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease !important;
+}
+
+/* ── Resize handle ────────────────────────────────────── */
+
+.resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+  position: relative;
+}
+
+.resize-handle:hover,
+.resize-handle.dragging {
+  background: var(--accent);
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  right: -4px;
+}
+
+/* ── Chat bottom input ────────────────────────────────── */
+
+.chat-bottom-input {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  outline: none;
+  min-width: 0;
+  flex: 1;
+}
+
+.chat-bottom-input::placeholder {
+  color: var(--muted);
+}
+
+/* ── Worktree panel compact cards ─────────────────────── */
+
+.worktree-card {
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.worktree-card--selected {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.worktree-progress {
+  display: flex;
+  gap: 1px;
+  align-items: center;
+}
+
+.worktree-progress-block {
+  width: 8px;
+  height: 10px;
+  border-radius: 1px;
+}
+
+/* ── Detail panel: active task highlight ────────────────── */
+
+.detail-active-task {
+  background: color-mix(in srgb, var(--concocting) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--concocting) 25%, transparent);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+/* ── Detail panel: brewer activity log ──────────────────── */
+
+.detail-brewer-log {
+  max-height: 240px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+
+.detail-brewer-log::-webkit-scrollbar { width: 4px; }
+.detail-brewer-log::-webkit-scrollbar-track { background: transparent; }
+.detail-brewer-log::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+
+/* ── Responsive: hide branch pane on narrow screens when preview is open ── */
+
+.hidden-when-narrow {
+  display: none;
+}
+
+@media (min-width: 1200px) {
+  .hidden-when-narrow {
+    display: flex !important;
+  }
+}
