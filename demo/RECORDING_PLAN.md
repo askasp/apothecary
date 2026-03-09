@@ -28,41 +28,32 @@ For each segment:
 
 ## Segment 1 — Intro
 
-**Title card:** "Apothecary" / "A BEAM-orchestrated swarm of Claude Code agents"
+**Title card:** "Apothecary" / "Neovim for agents"
 
 - Hold 3 seconds. That's it — just the title.
 
 ---
 
-## Segment 2 — Start Apothecary
+## Segment 2 — Boot & Open a Project
 
-**Title card:** "Start Apothecary"
+**Title card:** "Boot & open a project"
+
+**What to show:** Apothecary boots fast, keyboard-driven project selection.
 
 1. Cmd+Tab to a terminal.
 2. Run `apothecary` (or `apothecary start`).
 3. Show it booting — Elixir/Phoenix output scrolls briefly.
 4. Browser opens (or Cmd+Tab to it) showing the Apothecary dashboard.
-5. Pause on the dashboard for a beat — clean slate, no project selected yet.
+5. Select the demo Phoenix app from the project selector (type the path or pick from list).
+6. Dashboard loads with the project name. Pause briefly — clean workspace, ready to go.
 
 ---
 
-## Segment 3 — Choose a Project
-
-**Title card:** "Choose a project"
-
-1. Cmd+Tab to dashboard.
-2. Click the project selector dropdown in the top-left corner.
-3. Select the demo Phoenix app from the list (or use **Open Project** to point at it).
-4. Project loads — dashboard updates to show the project name, tree panel populates.
-5. Pause briefly to show the project is now active.
-
----
-
-## Segment 4 — Preview Main
+## Segment 3 — Preview Main
 
 **Title card:** "Preview main" / "The starting point"
 
-**Note:** This establishes the baseline the viewer will compare against later.
+**What to show:** Inline preview of main branch, establishing the "before" state.
 
 1. Cmd+Tab to dashboard.
 2. Click **main** in the tree panel to select it.
@@ -72,82 +63,88 @@ For each segment:
 
 ---
 
-## Segment 5 — Create a Worktree
+## Segment 4 — Create a Worktree
 
-**Title card:** "Create a worktree"
+**Title card:** "Create a worktree" / "Describe the work, dispatch an agent"
+
+**What to show:** Natural language input creates a worktree, agent starts working.
 
 1. Cmd+Tab to dashboard.
-2. Click the input bar.
+2. Press `b` to enter branch-creation mode.
 3. Type: "Fix the landing page hero section — update the headline text, improve spacing, and add a call-to-action button"
-4. Hit send. Worktree appears in the queued group.
-5. Pause briefly so viewer sees the worktree.
+4. Hit Enter. Worktree appears in the queued group.
+5. Press `s` to start the swarm. Agent picks it up, worktree moves to brewing.
 
 ---
 
-## Segment 6 — Watch It Work
+## Segment 5 — Watch It Work
 
-**Title card:** "Watch it work" / "One agent, full lifecycle"
+**Title card:** "Watch it work" / "Tasks, progress, live output"
+
+**What to show:** Agent output streaming, self-decomposition into tasks, progress bar filling.
 
 1. Cmd+Tab to dashboard.
-2. Click the **Start** button (or press `s`). Swarm activates.
-3. Watch the worktree move from queued to brewing as the agent claims it.
-4. Agent status dot goes green.
-5. Click the brewing worktree to see the detail panel.
-6. Show agent output streaming in real-time.
-7. **Key moment:** tasks appear as the agent self-decomposes the work. Checkboxes populate, progress bar moves.
-8. Let it run to completion. Speed up waiting parts in post (2-4x).
+2. Click the brewing worktree to see the detail panel.
+3. Show agent output streaming in real-time.
+4. **Key moment:** Tasks appear as the agent self-decomposes the work. Checkboxes populate, progress bar moves.
+5. Let it run to completion. Speed up waiting parts in post (2-4x).
 
 ---
 
-## Segment 7 — Preview the Branch
+## Segment 6 — Preview the Branch
 
-**Title card:** "Preview the branch" / "See the changes live"
+**Title card:** "Preview the branch" / "Inline, side by side with main"
+
+**What to show:** Inline dev server preview of the agent's branch, comparing to main.
 
 1. Cmd+Tab to dashboard.
-2. The worktree should now be visible in the tree panel.
+2. The worktree should now be done or have a PR open.
 3. Click the worktree to select it in the detail pane.
 4. Click the preview link — inline preview opens showing the changes.
 5. **Show the actual change.** Compare to what main looked like. This is the first payoff.
 
 ---
 
-## Segment 8 — Merge into Main
+## Segment 7 — Merge into Main
 
 **Title card:** "Merge into main"
+
+**What to show:** One-key merge, result visible on main's preview immediately.
 
 1. Cmd+Tab to dashboard.
 2. Select the completed worktree. Show the PR in the detail panel.
 3. Merge it (press `m`). Worktree moves to bottled.
 4. Click **main** in the tree panel. The preview updates.
-5. The app now has the fixes merged into main.
-6. Show the updated app briefly. The "after" moment.
+5. Show the updated app briefly. The "after" moment.
 
 ---
 
-## Segment 9 — Create Multiple Worktrees
+## Segment 8 — Scale It Up
 
-**Title card:** "Now, scale it up" / "Multiple agents in parallel"
+**Title card:** "Scale it up" / "Three agents in parallel"
 
-**Note:** The viewer now understands the full lifecycle. Time to show it scales.
+**What to show:** Rapid worktree creation, scaling agents, parallel execution.
 
 1. Cmd+Tab to dashboard.
-2. Create several worktrees in quick succession:
+2. Create several worktrees in quick succession (press `b` each time):
    - "Add a dark mode toggle with a sun/moon icon that persists preference to localStorage"
    - "Add a footer component with links to GitHub and docs"
    - "Add a testimonials carousel with auto-rotation"
-3. Scale to 3 agents so all three run in parallel (press `+`).
+3. Scale to 3 agents (press `+` twice).
 4. Watch all three worktrees move to brewing simultaneously.
 5. Briefly peek at each detail panel — three agents working at the same time.
 6. Let them run. Speed up waiting parts in post (2-4x).
 
 ---
 
-## Segment 10 — Preview Each Branch
+## Segment 9 — Preview Each Branch
 
-**Title card:** "Preview each branch" / "One by one"
+**Title card:** "Preview each branch"
+
+**What to show:** Click through each worktree, each has its own live preview.
 
 1. Cmd+Tab to dashboard.
-2. Three worktrees should now be visible in the tree panel.
+2. Three worktrees should now be done or have PRs open.
 3. Click the first worktree. Preview shows the dark mode toggle.
 4. Click the second worktree. Preview shows the footer.
 5. Click the third worktree. Preview shows the testimonials carousel.
@@ -155,22 +152,25 @@ For each segment:
 
 ---
 
-## Segment 11 — Merge All
+## Segment 10 — Merge All
 
-**Title card:** "Merge all" / "Everything combined"
+**Title card:** "Merge all" / "Everything combined on main"
+
+**What to show:** Merge all branches, preview main with all features combined.
 
 1. Cmd+Tab to dashboard.
-2. Merge all three worktrees one by one. They move to bottled.
+2. Merge all three worktrees one by one (select each, press `m`). They move to bottled.
 3. **Key moment:** Click **main** in the tree panel. Preview updates.
 4. The app now has everything — dark mode, footer, testimonials, plus the earlier fixes.
-5. Show the fully updated app. The "after" state with all changes combined.
-6. This is the big payoff.
+5. Show the fully updated app. This is the big payoff.
 
 ---
 
-## Segment 12 — Recurring Worktrees
+## Segment 11 — Recurring Worktrees
 
-**Title card:** "Recurring worktrees" / "Scheduled work on autopilot"
+**Title card:** "Recurring worktrees" / "Cron-scheduled, fully unattended"
+
+**What to show:** Recipe creation for scheduled agent work.
 
 1. Cmd+Tab to dashboard.
 2. Press `e` to switch to the Recipes tab.
@@ -178,11 +178,10 @@ For each segment:
 4. Fill in: title "Weekly dependency update", schedule `0 3 * * SUN`, priority P2.
 5. Create it. Card appears with "active" badge and "next: 5d".
 6. Show the pause/resume toggle briefly.
-7. Mention this runs unattended — agents wake up, do the work, open a PR.
 
 ---
 
-## Segment 13 — Outro
+## Segment 12 — Outro
 
 **Title card:** "Apothecary" / "github.com/askasp/apothecary"
 
@@ -208,9 +207,10 @@ If a segment has dead time while agents work, cut it or speed it up in iMovie/kd
 
 ### Key moments to keep at 1x speed
 
-- Project selection
+- Boot and project selection (fast, keyboard-driven)
 - Main preview opening inline (the baseline)
-- Single worktree creation and lifecycle
+- Worktree creation with natural language
+- Agent self-decomposition into tasks
 - First branch preview — comparing to main
 - First merge and seeing the result on main
 - Creating multiple worktrees in rapid succession
