@@ -706,20 +706,16 @@ let Hooks = {
         if (match) {
           const query = match[2]
           this.mentionStart = pos - query.length - 1
-          if (query.length >= 1) {
-            this.pushEvent("file-search", { query }, (reply) => {
-              this.results = reply.files || []
-              this.selectedIndex = 0
-              if (this.results.length > 0) {
-                this.mentionActive = true
-                this.renderMentionDropdown()
-              } else {
-                this.closeMention()
-              }
-            })
-          } else {
-            this.closeMention()
-          }
+          this.pushEvent("file-search", { query }, (reply) => {
+            this.results = reply.files || []
+            this.selectedIndex = 0
+            if (this.results.length > 0) {
+              this.mentionActive = true
+              this.renderMentionDropdown()
+            } else {
+              this.closeMention()
+            }
+          })
         } else {
           this.closeMention()
         }
