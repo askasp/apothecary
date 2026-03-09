@@ -88,7 +88,20 @@ defmodule Apothecary.Brewer do
         write_mcp_config(worktree_path, agent.id, worktree.id, extra_mcps, project_dir)
         # Write apothecary CLAUDE.md to the worktree's .claude/ directory
         write_claude_md(worktree_path)
-        Apothecary.Worktrees.list_tasks(worktree_id: worktree.id)
+        fetched = Apothecary.Worktrees.list_tasks(worktree_id: worktree.id)
+
+        # Auto-claim the first open task so the UI immediately shows progress
+        first_open =
+          fetched
+          |> Enum.sort_by(fn t -> {t.priority || 99, t.created_at || ""} end)
+          |> Enum.find(&(&1.status == "open"))
+
+        if first_open, do: Apothecary.Worktrees.claim(first_open.id)
+
+        # Re-fetch to reflect the claimed state in the prompt
+        if first_open,
+          do: Apothecary.Worktrees.list_tasks(worktree_id: worktree.id),
+          else: fetched
       end
 
     case spawn_claude(agent, worktree, tasks) do
