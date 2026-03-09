@@ -1596,9 +1596,11 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%!-- 7. Actions (only for merge/PR states) --%>
       <div
         :if={
-          @loading? || @pending_action || @pr_url || @task.status in ["brew_done", "done", "closed"]
+          @loading? || @pending_action || @pr_url ||
+            @task.status in ["brew_done", "done", "closed"] ||
+            @has_preview_config || @dev_server
         }
-        class="flex items-center gap-3 mb-4"
+        class="flex items-center gap-3 mb-4 flex-wrap"
         style="font-size: var(--font-size-sm);"
       >
         <%= if @loading? do %>
@@ -1637,6 +1639,24 @@ defmodule ApothecaryWeb.DashboardComponents do
             >
               m merge
             </span>
+            <%!-- Preview button: start dev server + open preview panel --%>
+            <%= cond do %>
+              <% @dev_server && @dev_server.status == :running -> %>
+                <span
+                  class="action-pill"
+                  phx-click="show-preview"
+                  phx-value-port={@dev_port}
+                >
+                  p preview :{@dev_port}
+                </span>
+              <% @dev_server && @dev_server.status == :starting -> %>
+                <span class="action-pill" style="color: var(--concocting); cursor: default;">
+                  p preview starting...
+                </span>
+              <% @has_preview_config -> %>
+                <span class="action-pill" phx-click="preview-worktree">p preview</span>
+              <% true -> %>
+            <% end %>
           <% end %>
         <% end %>
       </div>

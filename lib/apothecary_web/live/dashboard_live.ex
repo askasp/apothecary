@@ -1060,6 +1060,45 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   # Preview controls
+
+  # Start dev server for selected worktree and open preview panel
+  @impl true
+  def handle_event("preview-worktree", _params, socket) do
+    wt_id = socket.assigns.selected_task_id
+
+    if wt_id do
+      case DevServer.start_server(wt_id) do
+        {:ok, base_port} ->
+          {:noreply,
+           socket
+           |> assign(:show_preview, true)
+           |> assign(:preview_port, base_port)
+           |> assign(:has_preview_config, true)}
+
+        {:error, :already_running} ->
+          # Already running — just open the preview with its port
+          port =
+            case DevServer.get_status(wt_id) do
+              %{ports: [%{port: p} | _]} -> p
+              _ -> nil
+            end
+
+          {:noreply,
+           socket
+           |> assign(:show_preview, true)
+           |> assign(:preview_port, port)}
+
+        {:error, :no_dev_config} ->
+          {:noreply, put_flash(socket, :error, "No .apothecary/preview.yml found in worktree")}
+
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Failed to start preview: #{inspect(reason)}")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
   @impl true
   def handle_event("start-dev", %{"id" => wt_id}, socket) do
     # Re-check config existence (file may have been added since selection)
