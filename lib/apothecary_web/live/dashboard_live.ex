@@ -1100,7 +1100,8 @@ defmodule ApothecaryWeb.DashboardLive do
 
     if project do
       # Re-check config existence (file may have been added since page load)
-      socket = assign(socket, :has_project_preview_config, DevServer.has_config_for_path?(project.path))
+      socket =
+        assign(socket, :has_project_preview_config, DevServer.has_config_for_path?(project.path))
 
       case DevServer.start_project_server(project.id, project.path) do
         {:ok, _base_port} ->
@@ -1506,6 +1507,31 @@ defmodule ApothecaryWeb.DashboardLive do
     {:noreply, socket}
   end
 
+  # Handle pasted images from chat input — save to temp file for agent use
+  @impl true
+  def handle_event("paste-image-chat", %{"data" => data, "mime" => mime, "name" => name}, socket) do
+    ext =
+      case mime do
+        "image/png" -> ".png"
+        "image/jpeg" -> ".jpg"
+        "image/gif" -> ".gif"
+        "image/webp" -> ".webp"
+        _ -> Path.extname(name)
+      end
+
+    filename = "paste-#{System.unique_integer([:positive])}#{ext}"
+    path = Path.join(System.tmp_dir!(), filename)
+
+    case Base.decode64(data) do
+      {:ok, binary} ->
+        File.write!(path, binary)
+        {:noreply, push_event(socket, "chat-image-saved", %{path: path})}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, "Failed to decode pasted image")}
+    end
+  end
+
   # Handle pasted images — save to temp file and insert path into textarea
   @impl true
   def handle_event("paste-image", %{"data" => data, "mime" => mime, "name" => name}, socket) do
@@ -1574,11 +1600,12 @@ defmodule ApothecaryWeb.DashboardLive do
 
   # Context-sensitive primary input submit
   @impl true
-  def handle_event("submit-input", %{"text" => text}, socket) do
-    text = String.trim(text)
+  def handle_event("submit-input", params, socket) do
+    text = String.trim(params["text"] || "")
+    images = params["images"] || []
 
     cond do
-      text == "" ->
+      text == "" && images == [] ->
         {:noreply, socket}
 
       # Branch creation mode: create worktree with typed name
@@ -1633,7 +1660,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
       # Active agent: send as instruction to brewer
       socket.assigns.working_agent ->
-        send_to_agent(text, socket)
+        send_to_agent(text, images, socket)
 
       # ? prefix asks a question in the focused worktree's context
       String.starts_with?(text, "?") && socket.assigns.selected_task_id ->
@@ -1653,7 +1680,12 @@ defmodule ApothecaryWeb.DashboardLive do
 
       true ->
         # No context — hint the user to press 'b' or select a worktree
-        {:noreply, put_flash(socket, :info, "Press 'b' to create a branch, or select a worktree to add tasks")}
+        {:noreply,
+         put_flash(
+           socket,
+           :info,
+           "Press 'b' to create a branch, or select a worktree to add tasks"
+         )}
     end
   end
 
@@ -2961,6 +2993,7 @@ defmodule ApothecaryWeb.DashboardLive do
     else
       # Use the focused worktree as context
       worktree_id = socket.assigns.adding_task_to || socket.assigns.selected_task_id
+
       project_id =
         if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
 
@@ -2992,14 +3025,33 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  defp send_to_agent(text, socket) do
+  defp send_to_agent(text, images, socket) do
     agent = socket.assigns.working_agent
 
     if agent && agent.pid do
-      Brewer.send_instruction(agent.pid, text)
+      # Build message with image paths if any were attached
+      message =
+        case images do
+          [] ->
+            text
+
+          paths ->
+            image_refs = Enum.map_join(paths, "\n", &"[image: #{&1}]")
+            if text == "", do: image_refs, else: "#{text}\n#{image_refs}"
+        end
+
+      Brewer.send_instruction(agent.pid, message)
 
       # Show user message in the activity stream
-      user_line = "▸ you: #{text}"
+      image_count = length(images)
+
+      user_line =
+        cond do
+          image_count > 0 && text != "" -> "▸ you: #{text} [#{image_count} image(s)]"
+          image_count > 0 -> "▸ you: [#{image_count} image(s)]"
+          true -> "▸ you: #{text}"
+        end
+
       output = (socket.assigns.agent_output ++ [user_line]) |> Enum.take(-200)
 
       {:noreply,
@@ -3421,6 +3473,7 @@ defmodule ApothecaryWeb.DashboardLive do
   defp rebuild_card_ids(socket, worktrees_by_status) do
     old_card_ids = socket.assigns.card_ids
     old_selected_id = Enum.at(old_card_ids, socket.assigns.selected_card)
+
     new_card_ids =
       build_card_ids(
         worktrees_by_status,
@@ -3648,7 +3701,12 @@ defmodule ApothecaryWeb.DashboardLive do
                 </div>
 
                 <%!-- Resize handle (hidden when preview open) --%>
-                <div :if={!@show_preview} id="resize-handle" phx-hook="ResizeHandle" class="resize-handle" />
+                <div
+                  :if={!@show_preview}
+                  id="resize-handle"
+                  phx-hook="ResizeHandle"
+                  class="resize-handle"
+                />
 
                 <%!-- Middle panel: focused branch detail + chat input --%>
                 <div
@@ -3670,7 +3728,11 @@ defmodule ApothecaryWeb.DashboardLive do
                         has_preview_config={@has_preview_config}
                         pending_action={@pending_action}
                         loading_action={@loading_action}
-                        worktree_questions={Enum.filter(@questions, fn q -> Map.get(q, :parent_worktree_id) == @selected_task_id end)}
+                        worktree_questions={
+                          Enum.filter(@questions, fn q ->
+                            Map.get(q, :parent_worktree_id) == @selected_task_id
+                          end)
+                        }
                       />
                     <% else %>
                       <div
@@ -3691,15 +3753,13 @@ defmodule ApothecaryWeb.DashboardLive do
                           </div>
                           <div class="mb-1" style="font-size: var(--font-size-xs);">
                             <span style="font-weight: 600;">j/k</span>
-                            navigate
-                            <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+                            navigate <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
                             <span style="font-weight: 600;">enter</span>
                             focus
                           </div>
                           <div class="mb-1" style="font-size: var(--font-size-xs);">
                             <span style="font-weight: 600;">c</span>
-                            chat
-                            <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+                            chat <span style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
                             <span style="font-weight: 600;">w</span>
                             branches
                           </div>

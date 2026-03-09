@@ -644,14 +644,18 @@ let Hooks = {
   },
   ChatBottomInput: {
     mounted() {
+      this.pendingImages = [] // [{path, dataUrl}]
+
       this.el.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault()
           e.stopPropagation()
           const text = this.el.value.trim()
-          if (text) {
-            this.pushEvent("submit-input", { text })
+          const images = this.pendingImages.map(img => img.path)
+          if (text || images.length > 0) {
+            this.pushEvent("submit-input", { text, images })
             this.el.value = ""
+            this.clearPendingImages()
             this.updateModeBadge("")
           }
         }
@@ -661,8 +665,42 @@ let Hooks = {
           this.pushEvent("switch-to-task-mode", {})
         }
       })
+
       this.el.addEventListener("input", () => {
         this.updateModeBadge(this.el.value)
+      })
+
+      // Image paste handling
+      this.el.addEventListener("paste", (e) => {
+        const items = e.clipboardData?.items
+        if (!items) return
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf("image") !== -1) {
+            e.preventDefault()
+            const file = items[i].getAsFile()
+            const reader = new FileReader()
+            reader.onload = (evt) => {
+              const dataUrl = evt.target.result
+              const base64 = dataUrl.split(",")[1]
+              this.pushEvent("paste-image-chat", {
+                data: base64,
+                mime: file.type,
+                name: file.name || "pasted-image"
+              })
+              // Optimistically show preview with data URL
+              this.addPreviewImage(dataUrl, null)
+            }
+            reader.readAsDataURL(file)
+            return
+          }
+        }
+      })
+
+      // Server responds with saved path
+      this.handleEvent("chat-image-saved", ({ path }) => {
+        // Update the last preview that has no path yet
+        const pending = this.pendingImages.find(img => !img.path)
+        if (pending) pending.path = path
       })
     },
     updated() {
@@ -670,6 +708,41 @@ let Hooks = {
       if (this.el.dataset.refocus === "true") {
         this.el.focus()
       }
+    },
+    addPreviewImage(dataUrl, path) {
+      this.pendingImages.push({ dataUrl, path })
+      this.renderPreviews()
+    },
+    removePreviewImage(index) {
+      this.pendingImages.splice(index, 1)
+      this.renderPreviews()
+    },
+    clearPendingImages() {
+      this.pendingImages = []
+      this.renderPreviews()
+    },
+    renderPreviews() {
+      const container = document.getElementById("chat-image-previews")
+      if (!container) return
+      if (this.pendingImages.length === 0) {
+        container.innerHTML = ""
+        container.style.display = "none"
+        return
+      }
+      container.style.display = "flex"
+      container.innerHTML = this.pendingImages.map((img, i) => `
+        <div style="position: relative; width: 48px; height: 48px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); flex-shrink: 0;">
+          <img src="${img.dataUrl}" style="width: 100%; height: 100%; object-fit: cover;" />
+          <button data-remove-idx="${i}" style="position: absolute; top: -2px; right: -2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); color: var(--muted); font-size: 10px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;">&times;</button>
+        </div>
+      `).join("")
+      // Bind remove buttons
+      container.querySelectorAll("[data-remove-idx]").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.preventDefault()
+          this.removePreviewImage(parseInt(btn.dataset.removeIdx))
+        })
+      })
     },
     updateModeBadge(value) {
       const badge = document.getElementById("input-mode-badge")

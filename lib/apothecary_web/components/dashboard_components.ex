@@ -801,10 +801,10 @@ defmodule ApothecaryWeb.DashboardComponents do
           style="border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); background: color-mix(in srgb, var(--accent) 5%, var(--surface));"
         >
           <div class="flex items-center gap-2 px-3 py-2">
-            <span
-              style="color: var(--dim); font-size: var(--font-size-xs); white-space: nowrap; user-select: none;"
-            >
-              <kbd style="color: var(--muted); font-size: var(--font-size-xxs); padding: 1px 4px; border: 1px solid var(--border); border-radius: 3px;">a</kbd>
+            <span style="color: var(--dim); font-size: var(--font-size-xs); white-space: nowrap; user-select: none;">
+              <kbd style="color: var(--muted); font-size: var(--font-size-xxs); padding: 1px 4px; border: 1px solid var(--border); border-radius: 3px;">
+                a
+              </kbd>
               add task to
             </span>
             <span style="color: var(--accent); font-weight: 600; font-size: var(--font-size-sm); white-space: nowrap;">
@@ -928,6 +928,12 @@ defmodule ApothecaryWeb.DashboardComponents do
       style="border-top: 1px solid var(--border); background: var(--bg);"
       class="px-3 py-2 flex-shrink-0"
     >
+      <div
+        id="chat-image-previews"
+        phx-update="ignore"
+        style="display: none; gap: 6px; padding-bottom: 6px; flex-wrap: wrap; align-items: center;"
+      >
+      </div>
       <div class="flex items-center gap-2">
         <span
           :if={@mode}
@@ -1016,7 +1022,8 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> assign(:bottled, bottled)
       |> assign(:discarded, discarded)
 
-    total_count = length(brewing) + length(assaying) + length(queued) + length(bottled) + length(discarded)
+    total_count =
+      length(brewing) + length(assaying) + length(queued) + length(bottled) + length(discarded)
 
     # Count idle agents
     idle_count =
@@ -1193,7 +1200,11 @@ defmodule ApothecaryWeb.DashboardComponents do
           total_count = length(tasks) %>
           <div
             class={"branch-card #{if selected?, do: "branch-card--selected"}"}
-            style={if selected?, do: "border-left: 2px solid #{@color};", else: "border-left: 2px solid transparent;"}
+            style={
+              if selected?,
+                do: "border-left: 2px solid #{@color};",
+                else: "border-left: 2px solid transparent;"
+            }
             phx-click="select-task"
             phx-value-id={wt.id}
             data-card-id={wt.id}
@@ -1217,7 +1228,10 @@ defmodule ApothecaryWeb.DashboardComponents do
                 {wt.git_branch || wt.title || wt.id}
               </span>
               <%!-- Right side: progress ratio + blocks + arrow --%>
-              <span class="ml-auto flex items-center gap-1.5 flex-shrink-0" style="font-size: var(--font-size-xs); color: var(--muted);">
+              <span
+                class="ml-auto flex items-center gap-1.5 flex-shrink-0"
+                style="font-size: var(--font-size-xs); color: var(--muted);"
+              >
                 <span :if={total_count > 0}>{done_count}/{total_count}</span>
                 <span :if={total_count > 0} class="branch-progress">
                   <%= for i <- 0..min(total_count - 1, 15) do %>
@@ -1310,7 +1324,6 @@ defmodule ApothecaryWeb.DashboardComponents do
       Enum.filter(assigns.children, fn c ->
         c.status not in ["done", "closed", "in_progress"]
       end)
-
 
     assigns =
       assigns
@@ -1408,10 +1421,11 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%!-- 2. Progress bar --%>
       <div :if={@total_children > 0} class="mb-1">
         <div class="flex items-center gap-2">
-          <div class="flex-1 rounded-full overflow-hidden" style="height: 4px; background: var(--border);">
-            <div
-              style={"width: #{if @total_children > 0, do: round(@done_children / @total_children * 100), else: 0}%; height: 100%; background: var(--concocting); border-radius: 9999px; transition: width 0.3s ease;"}
-            />
+          <div
+            class="flex-1 rounded-full overflow-hidden"
+            style="height: 4px; background: var(--border);"
+          >
+            <div style={"width: #{if @total_children > 0, do: round(@done_children / @total_children * 100), else: 0}%; height: 100%; background: var(--concocting); border-radius: 9999px; transition: width 0.3s ease;"} />
           </div>
           <span style="font-size: var(--font-size-xs); color: var(--muted); flex-shrink: 0;">
             {@done_children}/{@total_children}
@@ -1420,7 +1434,11 @@ defmodule ApothecaryWeb.DashboardComponents do
       </div>
 
       <%!-- 3. Done tasks summary --%>
-      <div :if={@done_children > 0} class="mb-1" style="font-size: var(--font-size-xs); color: var(--dim);">
+      <div
+        :if={@done_children > 0}
+        class="mb-1"
+        style="font-size: var(--font-size-xs); color: var(--dim);"
+      >
         <span style="color: var(--accent);">&#x25CF;</span>
         {@done_children} done
       </div>
@@ -1534,8 +1552,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           </div>
           <div :if={@working_agent && @working_agent.status == :working} class="mt-1">
             <span style="color: var(--concocting); font-size: var(--font-size-sm);">
-              <.braille_spinner id="detail-working-spin" offset={1} />
-              working...
+              <.braille_spinner id="detail-working-spin" offset={1} /> working...
             </span>
           </div>
         </div>
@@ -1560,9 +1577,7 @@ defmodule ApothecaryWeb.DashboardComponents do
 
       <%!-- 6. Oracle Q&A for this worktree --%>
       <div :if={@worktree_questions != []} class="mb-4">
-        <div
-          style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 12px; margin-bottom: 8px;"
-        />
+        <div style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 12px; margin-bottom: 8px;" />
         <div :for={q <- @worktree_questions} class="mb-3">
           <div class="flex items-start gap-2" style="font-size: var(--font-size-sm);">
             <span style="color: var(--concocting); font-weight: 600; flex-shrink: 0;">?</span>
@@ -1580,7 +1595,9 @@ defmodule ApothecaryWeb.DashboardComponents do
 
       <%!-- 7. Actions (only for merge/PR states) --%>
       <div
-        :if={@loading? || @pending_action || @pr_url || @task.status in ["brew_done", "done", "closed"]}
+        :if={
+          @loading? || @pending_action || @pr_url || @task.status in ["brew_done", "done", "closed"]
+        }
         class="flex items-center gap-3 mb-4"
         style="font-size: var(--font-size-sm);"
       >
@@ -1613,7 +1630,13 @@ defmodule ApothecaryWeb.DashboardComponents do
               <span class="action-pill" phx-click="show-diff">d diff</span>
               <span class="action-pill" phx-click="close-task">x close</span>
             <% end %>
-            <span :if={@pr_url && @task.status not in ["merged", "cancelled"]} class="action-pill" phx-click="merge-pr">m merge</span>
+            <span
+              :if={@pr_url && @task.status not in ["merged", "cancelled"]}
+              class="action-pill"
+              phx-click="merge-pr"
+            >
+              m merge
+            </span>
           <% end %>
         <% end %>
       </div>
@@ -1674,10 +1697,10 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%= case @line_type do %>
         <% :tool -> %>
           <span style="color: var(--accent); font-weight: 600;">[{@tag}]</span>
-          <span style="color: var(--text); font-weight: 500;"> {@rest}</span>
+          <span style="color: var(--text); font-weight: 500;">{@rest}</span>
         <% :user -> %>
           <span style="color: var(--queued); font-weight: 600;">▸ you:</span>
-          <span style="color: var(--text); font-weight: 500;"> {@rest}</span>
+          <span style="color: var(--text); font-weight: 500;">{@rest}</span>
         <% :narrative -> %>
           <span style="color: var(--dim); font-weight: 500;">&mdash; {@rest}</span>
         <% :committed -> %>
@@ -2013,6 +2036,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :agents, :list, default: []
   attr :input_focused, :boolean, default: false
   attr :focused_pane, :atom, default: :tree
+
   def moonlight_status_bar(assigns) do
     running_count = length(assigns.worktrees_by_status["running"] || [])
     pr_count = length(assigns.worktrees_by_status["pr"] || [])
@@ -2490,6 +2514,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     </div>
     """
   end
+
   # ── Recipe List ──────────────────────────────────────────
 
   attr :recipes, :list, required: true
