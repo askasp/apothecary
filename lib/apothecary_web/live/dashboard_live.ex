@@ -61,6 +61,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:children, [])
       |> assign(:editing_field, nil)
       |> assign(:editing_child_id, nil)
+      |> assign(:follow_up_question_id, nil)
       |> assign(:working_agent, nil)
       |> assign(:agent_output, [])
       |> assign(:diff_view, nil)
@@ -1613,7 +1614,60 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  # Clear task-add mode (backspace on empty input)
+  @impl true
+  def handle_event("toggle-follow-up", %{"question-id" => qid}, socket) do
+    current = socket.assigns.follow_up_question_id
+
+    {:noreply,
+     assign(socket, :follow_up_question_id, if(current == qid, do: nil, else: qid))}
+  end
+
+  @impl true
+  def handle_event("submit-follow-up", %{"follow_up_text" => text, "parent_question_id" => parent_qid}, socket) do
+    text = String.trim(text)
+
+    if text == "" do
+      {:noreply, socket}
+    else
+      # Find the parent question to get its parent_worktree_id and project_id
+      parent_q =
+        Enum.find(socket.assigns.questions, fn q -> q.id == parent_qid end)
+
+      project_id =
+        if parent_q, do: parent_q.project_id, else:
+          if(socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil)
+
+      parent_worktree_id =
+        if parent_q, do: Map.get(parent_q, :parent_worktree_id), else: socket.assigns.selected_task_id
+
+      attrs = %{
+        title: text,
+        kind: "question",
+        priority: 2,
+        project_id: project_id,
+        parent_question_id: parent_qid
+      }
+
+      attrs =
+        if parent_worktree_id, do: Map.put(attrs, :parent_worktree_id, parent_worktree_id), else: attrs
+
+      case Worktrees.create_worktree(attrs) do
+        {:ok, item} when not is_nil(item) ->
+          if project_id do
+            Dispatcher.dispatch_question(project_id, item.id)
+          end
+
+          {:noreply,
+           socket
+           |> assign(:follow_up_question_id, nil)
+           |> put_flash(:info, "Follow-up question submitted")}
+
+        _ ->
+          {:noreply, put_flash(socket, :error, "Failed to submit follow-up")}
+      end
+    end
+  end
+
   @impl true
   def handle_event("clear-task-input-mode", _params, socket) do
     {:noreply,
@@ -3938,6 +3992,7 @@ defmodule ApothecaryWeb.DashboardLive do
                             Map.get(q, :parent_worktree_id) == @selected_task_id
                           end)
                         }
+                        follow_up_question_id={@follow_up_question_id}
                       />
                     <% else %>
                       <div

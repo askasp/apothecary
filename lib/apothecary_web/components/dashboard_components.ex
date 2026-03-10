@@ -1300,6 +1300,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :loading_action, :atom, default: nil
   attr :editing_child_id, :string, default: nil
   attr :worktree_questions, :list, default: []
+  attr :follow_up_question_id, :string, default: nil
 
   def worktree_detail(assigns) do
     pr_url = Map.get(assigns.task, :pr_url)
@@ -1599,38 +1600,16 @@ defmodule ApothecaryWeb.DashboardComponents do
       <% end %>
 
       <%!-- 6. Oracle Q&A for this worktree --%>
-      <div :if={@worktree_questions != []} class="mb-4">
+      <% grouped_questions = group_questions_threaded(@worktree_questions) %>
+      <div :if={grouped_questions != []} class="mb-4">
         <div style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 12px; margin-bottom: 8px;" />
-        <div :for={q <- @worktree_questions} class="mb-4">
-          <%!-- Question --%>
-          <div class="flex items-start gap-2" style="font-size: var(--font-size-sm);">
-            <span style="color: var(--accent); font-weight: 600; flex-shrink: 0;">?</span>
-            <span style="color: var(--text); font-weight: 500;">{q.title}</span>
-          </div>
-          <%!-- Answer --%>
-          <% answer = question_answer(q) %>
-          <%= if answer != "" do %>
-            <div
-              id={"q-answer-#{q.id}"}
-              class="ml-5 mt-2 pl-3 question-answer"
-              style="border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); font-size: var(--font-size-sm); color: var(--dim); white-space: pre-wrap; line-height: 1.6;"
-            >
-              {answer}
-            </div>
-            <div class="ml-5 mt-1">
-              <.copy_button target={"#q-answer-#{q.id}"} class="ml-3" />
-            </div>
-          <% else %>
-            <%!-- In-progress: show thinking indicator --%>
-            <div
-              :if={q.status in ["open", "in_progress"]}
-              class="ml-5 mt-2 pl-3 flex items-center gap-2"
-              style="border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); font-size: var(--font-size-sm); color: var(--muted);"
-            >
-              <.braille_spinner id={"q-spin-#{q.id}"} offset={0} />
-              <span>thinking...</span>
-            </div>
-          <% end %>
+        <div :for={thread <- grouped_questions} class="mb-4">
+          <.question_thread_item
+            :for={q <- thread}
+            q={q}
+            depth={q.__depth__ || 0}
+            follow_up_id={@follow_up_question_id}
+          />
         </div>
       </div>
 
@@ -2967,6 +2946,87 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp agent_status_color(:error), do: "var(--error)"
   defp agent_status_color(_), do: "var(--muted)"
 
+  # ── Question Thread Item ─────────────────────────────────
+
+  attr :q, :map, required: true
+  attr :depth, :integer, default: 0
+  attr :follow_up_id, :string, default: nil
+
+  defp question_thread_item(assigns) do
+    answer = question_answer(assigns.q)
+    is_follow_up_open = assigns.follow_up_id == assigns.q.id
+    indent_ml = if assigns.depth > 0, do: "ml-5", else: ""
+
+    assigns =
+      assigns
+      |> assign(:answer, answer)
+      |> assign(:is_follow_up_open, is_follow_up_open)
+      |> assign(:indent_ml, indent_ml)
+
+    ~H"""
+    <div class={[@indent_ml, "mb-3"]}>
+      <%!-- Question --%>
+      <div class="flex items-start gap-2" style="font-size: var(--font-size-sm);">
+        <span style="color: var(--accent); font-weight: 600; flex-shrink: 0;">?</span>
+        <span style="color: var(--text); font-weight: 500;">{@q.title}</span>
+      </div>
+      <%!-- Answer --%>
+      <%= if @answer != "" do %>
+        <div
+          id={"q-answer-#{@q.id}"}
+          class="ml-5 mt-2 pl-3 question-answer"
+          style="border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); font-size: var(--font-size-sm); color: var(--dim); white-space: pre-wrap; line-height: 1.6;"
+        >
+          {@answer}
+        </div>
+        <div class="ml-5 mt-1 flex items-center gap-2">
+          <.copy_button target={"#q-answer-#{@q.id}"} class="ml-3" />
+          <button
+            phx-click="toggle-follow-up"
+            phx-value-question-id={@q.id}
+            style="color: var(--muted); font-size: var(--font-size-xs);"
+            class="hover:underline cursor-pointer"
+          >
+            follow up
+          </button>
+        </div>
+        <%!-- Follow-up input --%>
+        <%= if @is_follow_up_open do %>
+          <form
+            phx-submit="submit-follow-up"
+            class="ml-5 mt-2 flex items-center gap-2"
+            style="font-size: var(--font-size-sm);"
+          >
+            <input type="hidden" name="parent_question_id" value={@q.id} />
+            <span style="color: var(--accent); font-weight: 600;">?</span>
+            <input
+              type="text"
+              name="follow_up_text"
+              placeholder="follow-up question..."
+              autofocus
+              class="flex-1 bg-transparent outline-none"
+              style="color: var(--text); border: none; border-bottom: 1px solid var(--border); padding: 4px 0; font-size: var(--font-size-sm);"
+            />
+            <span style="color: var(--muted); font-size: var(--font-size-xs);">
+              enter to send · esc to close
+            </span>
+          </form>
+        <% end %>
+      <% else %>
+        <%!-- In-progress: show thinking indicator --%>
+        <div
+          :if={@q.status in ["open", "in_progress"]}
+          class="ml-5 mt-2 pl-3 flex items-center gap-2"
+          style="border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); font-size: var(--font-size-sm); color: var(--muted);"
+        >
+          <.braille_spinner id={"q-spin-#{@q.id}"} offset={0} />
+          <span>thinking...</span>
+        </div>
+      <% end %>
+    </div>
+    """
+  end
+
   # ── Helper functions ─────────────────────────────────────
 
   defp question_answer(q) do
@@ -2975,6 +3035,25 @@ defmodule ApothecaryWeb.DashboardComponents do
     notes
     |> String.replace(~r/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]\s*/, "")
     |> String.trim()
+  end
+
+  # Group questions into threaded conversations.
+  # Root questions (no parent_question_id) start threads;
+  # follow-ups are nested under their parent.
+  defp group_questions_threaded(questions) do
+    by_parent = Enum.group_by(questions, & &1.parent_question_id)
+    roots = Map.get(by_parent, nil, [])
+
+    Enum.map(roots, fn root ->
+      build_thread(root, by_parent, 0)
+    end)
+  end
+
+  defp build_thread(q, by_parent, depth) do
+    q_with_depth = Map.put(q, :__depth__, depth)
+    children = Map.get(by_parent, q.id, [])
+
+    [q_with_depth | Enum.flat_map(children, &build_thread(&1, by_parent, depth + 1))]
   end
 
   defp task_status_group(task) do
