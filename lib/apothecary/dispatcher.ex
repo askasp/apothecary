@@ -166,7 +166,7 @@ defmodule Apothecary.Dispatcher do
           [pid] ->
             # Track it as a question brewer (auto-stop when idle)
             pool = get_or_create_pool(state, project_id)
-            agents = Map.put(pool.agents, pid, %{id: next_id - 1, status: :working})
+            agents = Map.put(pool.agents, pid, %{id: next_id - 1, status: :working, sandboxed: false})
             pool = %{pool | agents: agents}
 
             state = %{
