@@ -65,6 +65,8 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:working_agent, nil)
       |> assign(:agent_output, [])
       |> assign(:diff_view, nil)
+      |> assign(:expanded_detail_items, MapSet.new())
+      |> assign(:branch_diff_stat, nil)
       |> assign(:show_preview, false)
       |> assign(:preview_port, nil)
       |> assign(:show_preview_logs, false)
@@ -470,6 +472,21 @@ defmodule ApothecaryWeb.DashboardLive do
     }
 
     {:noreply, assign(socket, :diff_view, diff_view)}
+  end
+
+  @impl true
+  def handle_info({:branch_diff_stat_result, wt_id, {:ok, raw_stat}}, socket) do
+    if socket.assigns.selected_task_id == wt_id do
+      parsed = parse_diff_stat(raw_stat)
+      {:noreply, assign(socket, :branch_diff_stat, parsed)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_info({:branch_diff_stat_result, _wt_id, {:error, _}}, socket) do
+    {:noreply, assign(socket, :branch_diff_stat, nil)}
   end
 
   # Recipe PubSub handlers — refresh the recipe list on any change
@@ -985,6 +1002,18 @@ defmodule ApothecaryWeb.DashboardLive do
   @impl true
   def handle_event("deselect-task", _params, socket) do
     {:noreply, push_patch(socket, to: project_path(socket))}
+  end
+
+  @impl true
+  def handle_event("toggle-detail-expand", %{"id" => id}, socket) do
+    expanded = socket.assigns.expanded_detail_items
+
+    expanded =
+      if MapSet.member?(expanded, id),
+        do: MapSet.delete(expanded, id),
+        else: MapSet.put(expanded, id)
+
+    {:noreply, assign(socket, :expanded_detail_items, expanded)}
   end
 
   @impl true
@@ -3197,6 +3226,64 @@ defmodule ApothecaryWeb.DashboardLive do
 
   defp try_worktree_diff(_, _), do: {:error, :no_git_path}
 
+  # Parse git diff --stat output into structured data
+  # Example: " lib/foo.ex | 42 ++++++--\n 2 files changed, 30 insertions(+), 12 deletions(-)"
+  defp parse_diff_stat(raw) when is_binary(raw) do
+    lines = String.split(raw, "\n", trim: true)
+
+    {file_lines, summary_lines} =
+      Enum.split_while(lines, fn line ->
+        not Regex.match?(~r/^\s*\d+ files? changed/, line)
+      end)
+
+    files =
+      Enum.flat_map(file_lines, fn line ->
+        case Regex.run(~r/^\s*(.+?)\s*\|\s*(\d+)\s*([+\-]*)/, line) do
+          [_, path, count, bar] ->
+            additions = String.length(String.replace(bar, "-", ""))
+            deletions = String.length(String.replace(bar, "+", ""))
+            [%{path: String.trim(path), count: String.to_integer(count), additions: additions, deletions: deletions}]
+
+          _ ->
+            []
+        end
+      end)
+
+    summary = List.first(summary_lines) || ""
+
+    %{files: files, summary: String.trim(summary), total_files: length(files)}
+  end
+
+  defp parse_diff_stat(_), do: nil
+
+  # Fetch branch diff stat (lightweight, for inline display in task list)
+  defp maybe_fetch_branch_diff_stat(socket, nil), do: assign(socket, :branch_diff_stat, nil)
+
+  defp maybe_fetch_branch_diff_stat(socket, task) do
+    git_path = Map.get(task, :git_path)
+    project_dir = resolve_project_dir_for_worktree(task.id)
+
+    if is_binary(git_path) and git_path != "" and File.dir?(git_path) do
+      lv = self()
+      wt_id = task.id
+
+      Elixir.Task.start(fn ->
+        result =
+          try do
+            Git.worktree_diff_stat(project_dir, git_path)
+          rescue
+            e -> {:error, Exception.message(e)}
+          end
+
+        send(lv, {:branch_diff_stat_result, wt_id, result})
+      end)
+
+      assign(socket, :branch_diff_stat, :loading)
+    else
+      assign(socket, :branch_diff_stat, nil)
+    end
+  end
+
   # --- Input handlers ---
 
   defp create_question_for_worktree(text, socket) do
@@ -3293,6 +3380,8 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:agent_output, [])
     |> assign(:show_preview, false)
     |> assign(:preview_port, nil)
+    |> assign(:expanded_detail_items, MapSet.new())
+    |> assign(:branch_diff_stat, nil)
     |> assign(:focused_pane, :tree)
     |> assign(:page_title, "Dashboard")
   end
@@ -3342,9 +3431,11 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:has_preview_config, has_preview)
     |> assign(:has_project_preview_config, has_project_preview)
     |> assign(:adding_task_to, wt_id)
+    |> assign(:expanded_detail_items, MapSet.new())
     |> assign(:page_title, "Task #{id}")
     |> sync_selected_card(id)
     |> find_working_agent()
+    |> maybe_fetch_branch_diff_stat(task)
   end
 
   defp sync_selected_card(socket, id) do
@@ -4013,6 +4104,8 @@ defmodule ApothecaryWeb.DashboardLive do
                           end)
                         }
                         follow_up_question_id={@follow_up_question_id}
+                        expanded_detail_items={@expanded_detail_items}
+                        branch_diff_stat={@branch_diff_stat}
                       />
                     <% else %>
                       <div

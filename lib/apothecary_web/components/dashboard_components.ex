@@ -1376,6 +1376,8 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :editing_child_id, :string, default: nil
   attr :worktree_questions, :list, default: []
   attr :follow_up_question_id, :string, default: nil
+  attr :expanded_detail_items, :any, default: nil
+  attr :branch_diff_stat, :any, default: nil
 
   def worktree_detail(assigns) do
     # Render question-specific view when kind is "question"
@@ -1554,6 +1556,14 @@ defmodule ApothecaryWeb.DashboardComponents do
         c.status not in ["done", "closed", "in_progress"]
       end)
 
+    # Root questions for inline display (not follow-ups)
+    root_questions =
+      Enum.filter(assigns.worktree_questions, fn q ->
+        is_nil(Map.get(q, :parent_question_id))
+      end)
+
+    expanded = assigns.expanded_detail_items || MapSet.new()
+
     assigns =
       assigns
       |> assign(:done_children, done_children)
@@ -1563,6 +1573,8 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> assign(:done_tasks, done_tasks)
       |> assign(:active_task, active_task)
       |> assign(:pending_tasks, pending_tasks)
+      |> assign(:root_questions, root_questions)
+      |> assign(:expanded, expanded)
 
     ~H"""
     <div class="px-4 py-4 scroll-main overflow-y-auto flex-1">
@@ -1672,12 +1684,123 @@ defmodule ApothecaryWeb.DashboardComponents do
         {@done_children} done
       </div>
 
-      <%!-- 4. Done tasks listed with checkmarks --%>
+      <%!-- 4. Done tasks — expandable rows --%>
       <div :if={@done_tasks != []} class="mb-1" style="font-size: var(--font-size-sm);">
-        <div :for={task <- @done_tasks} class="flex items-center gap-2 py-0.5">
-          <span style="color: var(--accent);">✓</span>
-          <span style="color: var(--muted); text-decoration: line-through;">{task.title}</span>
+        <div :for={task <- @done_tasks}>
+          <div
+            class="flex items-center gap-2 py-0.5 cursor-pointer group"
+            phx-click="toggle-detail-expand"
+            phx-value-id={task.id}
+          >
+            <span style="color: var(--accent);">✓</span>
+            <span style="color: var(--muted);">{task.title}</span>
+            <span
+              class="ml-auto opacity-0 group-hover:opacity-100 transition-opacity"
+              style="font-size: var(--font-size-xxs); color: var(--dim);"
+            >
+              {if MapSet.member?(@expanded, task.id), do: "▾", else: "▸"}
+            </span>
+          </div>
+          <%!-- Expanded content for done task --%>
+          <div
+            :if={MapSet.member?(@expanded, task.id)}
+            class="ml-6 mb-2 mt-1"
+          >
+            <%!-- Task notes --%>
+            <div
+              :if={task.notes && task.notes != ""}
+              class="px-2 py-1"
+              style="border-left: 2px solid var(--border); font-size: var(--font-size-xs); color: var(--muted); white-space: pre-wrap; line-height: 1.5;"
+            >
+              {task.notes}
+            </div>
+            <div
+              :if={is_nil(task.notes) || task.notes == ""}
+              style="font-size: var(--font-size-xs); color: var(--dim);"
+            >
+              no notes
+            </div>
+          </div>
         </div>
+      </div>
+
+      <%!-- Inline questions (answered, expandable) --%>
+      <div
+        :if={Enum.any?(@root_questions, fn q -> q.status not in ["open", "in_progress"] end)}
+        class="mb-1"
+        style="font-size: var(--font-size-sm);"
+      >
+        <%= for q <- Enum.filter(@root_questions, fn q -> q.status not in ["open", "in_progress"] end) do %>
+          <% answer = question_answer(q) %>
+          <% follow_ups = Enum.count(@worktree_questions, fn fq -> Map.get(fq, :parent_question_id) == q.id end) %>
+          <div
+            class="flex items-center gap-2 py-0.5 cursor-pointer group"
+            phx-click="toggle-detail-expand"
+            phx-value-id={q.id}
+          >
+            <span style="color: var(--accent); font-weight: 600;">?</span>
+            <span style="color: var(--muted);" class="truncate">{q.title}</span>
+            <span
+              :if={follow_ups > 0}
+              class="ml-auto flex-shrink-0"
+              style="font-size: var(--font-size-xxs); color: var(--dim);"
+            >
+              &middot; {follow_ups + 1} msgs
+            </span>
+          </div>
+          <%!-- Expanded question answer --%>
+          <div
+            :if={MapSet.member?(@expanded, q.id)}
+            class="ml-6 mb-2 mt-1"
+          >
+            <%= if answer != "" do %>
+              <div
+                id={"q-inline-answer-#{q.id}"}
+                class="px-2 py-1"
+                style="border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); font-size: var(--font-size-xs); color: var(--dim); white-space: pre-wrap; line-height: 1.5;"
+              >
+                {answer}
+              </div>
+              <div class="mt-1 flex items-center gap-2">
+                <button
+                  phx-click="toggle-follow-up"
+                  phx-value-question-id={q.id}
+                  style="color: var(--muted); font-size: var(--font-size-xs);"
+                  class="hover:underline cursor-pointer"
+                >
+                  follow up
+                </button>
+              </div>
+              <%!-- Follow-up input --%>
+              <%= if @follow_up_question_id == q.id do %>
+                <form
+                  phx-submit="submit-follow-up"
+                  id={"follow-up-form-inline-#{q.id}"}
+                  class="mt-2 flex items-center gap-2 px-2 py-1"
+                  style="font-size: var(--font-size-xs); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 6px;"
+                >
+                  <input type="hidden" name="parent_question_id" value={q.id} />
+                  <span style="color: var(--accent); font-weight: 600;">?</span>
+                  <input
+                    type="text"
+                    name="follow_up_text"
+                    placeholder="follow-up..."
+                    autofocus
+                    class="flex-1 bg-transparent outline-none"
+                    style="color: var(--text); border: none; padding: 2px 0; font-size: var(--font-size-xs);"
+                  />
+                  <span style="color: var(--muted); font-size: var(--font-size-xxs);">
+                    enter
+                  </span>
+                </form>
+              <% end %>
+            <% else %>
+              <div style="font-size: var(--font-size-xs); color: var(--dim);">
+                no answer yet
+              </div>
+            <% end %>
+          </div>
+        <% end %>
       </div>
 
       <%!-- 5. Active task (highlighted) --%>
@@ -1699,7 +1822,27 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </div>
 
-      <%!-- 6. Queued tasks — tree chars, no hover --%>
+      <%!-- Inline questions (pending/thinking) --%>
+      <div
+        :if={Enum.any?(@root_questions, fn q -> q.status in ["open", "in_progress"] end)}
+        class="mb-1"
+        style="font-size: var(--font-size-sm);"
+      >
+        <%= for q <- Enum.filter(@root_questions, fn q -> q.status in ["open", "in_progress"] end) do %>
+          <div class="flex items-center gap-2 py-0.5">
+            <span style="color: var(--accent); font-weight: 600;">?</span>
+            <span style="color: var(--text);">{q.title}</span>
+            <span
+              class="ml-auto flex-shrink-0"
+              style="font-size: var(--font-size-xxs); color: var(--concocting);"
+            >
+              <.braille_spinner id={"q-inline-spin-#{q.id}"} offset={0} />
+            </span>
+          </div>
+        <% end %>
+      </div>
+
+      <%!-- 6. Queued tasks — tree chars --%>
       <div :if={@pending_tasks != []} class="mb-2" style="font-size: var(--font-size-sm);">
         <%= for {child, idx} <- Enum.with_index(@pending_tasks) do %>
           <% is_last = idx == length(@pending_tasks) - 1 %>
@@ -1758,7 +1901,44 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </details>
 
-      <%!-- 5. Activity stream (agent output live, or notes as historical stream) --%>
+      <%!-- Branch diff stat (expandable) --%>
+      <%= if is_map(@branch_diff_stat) and @branch_diff_stat.files != [] do %>
+        <div class="mb-2">
+          <div
+            class="flex items-center gap-2 py-0.5 cursor-pointer"
+            phx-click="toggle-detail-expand"
+            phx-value-id="branch-diff-stat"
+            style="font-size: var(--font-size-xs);"
+          >
+            <span style="color: var(--dim);">
+              {if MapSet.member?(@expanded, "branch-diff-stat"), do: "▾", else: "▸"}
+            </span>
+            <span style="color: var(--dim);">
+              {@branch_diff_stat.summary}
+            </span>
+          </div>
+          <div
+            :if={MapSet.member?(@expanded, "branch-diff-stat")}
+            class="ml-4 mt-1"
+            style="font-size: var(--font-size-xs);"
+          >
+            <div
+              :for={file <- @branch_diff_stat.files}
+              class="flex items-center gap-2 py-0.5"
+              style="font-family: var(--font-mono, monospace);"
+            >
+              <span style="color: var(--dim);" class="truncate flex-1 min-w-0">{file.path}</span>
+              <span style="color: var(--muted); flex-shrink: 0;">&vert; {file.count}</span>
+              <span style="flex-shrink: 0;">
+                <span :if={file.additions > 0} style="color: var(--accent);">{String.duplicate("+", min(file.additions, 20))}</span>
+                <span :if={file.deletions > 0} style="color: var(--error);">{String.duplicate("-", min(file.deletions, 20))}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <%!-- 7. Activity stream (agent output live, or notes as historical stream) --%>
       <%= if @agent_output != [] do %>
         <%!-- Live brewer stream --%>
         <div class="mb-4">
@@ -1803,20 +1983,6 @@ defmodule ApothecaryWeb.DashboardComponents do
           <.copy_button target="#task-notes-stream" />
         </div>
       <% end %>
-
-      <%!-- 6. Oracle Q&A for this worktree --%>
-      <% grouped_questions = group_questions_threaded(@worktree_questions) %>
-      <div :if={grouped_questions != []} class="mb-4">
-        <div style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 12px; margin-bottom: 8px;" />
-        <div :for={thread <- grouped_questions} class="mb-4">
-          <.question_thread_item
-            :for={q <- thread}
-            q={q}
-            depth={q.__depth__ || 0}
-            follow_up_id={@follow_up_question_id}
-          />
-        </div>
-      </div>
 
       <%!-- 7. Actions (only for merge/PR states) --%>
       <div
