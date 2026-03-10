@@ -183,6 +183,87 @@ defmodule Apothecary.Worktrees do
     {:ok, compute_stats(items)}
   end
 
+  @doc """
+  Adopt an existing worktree from a filesystem path.
+
+  Validates the path is a git repo, extracts the branch name, and checks if
+  a worktree record already exists in Mnesia (matched by directory name as ID
+  or by git_path). If found, returns the existing record. Otherwise creates
+  a new worktree record pointing at the given path.
+
+  Options:
+  - project_id: associate with a project
+  """
+  def adopt_worktree(path, opts \\ []) do
+    path = Path.expand(path)
+
+    cond do
+      not File.dir?(path) ->
+        {:error, :not_a_directory}
+
+      not Apothecary.Git.is_repo?(path) ->
+        {:error, :not_a_git_repo}
+
+      true ->
+        dir_name = Path.basename(path)
+
+        # Check if this worktree already exists in Mnesia by directory name (wt-* ID)
+        existing =
+          if String.starts_with?(dir_name, "wt-") do
+            case get_worktree(dir_name) do
+              {:ok, wt} -> wt
+              _ -> nil
+            end
+          end
+
+        # Also check by git_path match across all worktrees
+        existing =
+          existing ||
+            Enum.find(list_worktrees(), fn wt ->
+              wt.git_path && Path.expand(wt.git_path) == path
+            end)
+
+        if existing do
+          {:ok, existing}
+        else
+          branch =
+            case Apothecary.Git.current_branch(path) do
+              {:ok, b} -> b
+              _ -> nil
+            end
+
+          # Preserve the directory name as ID if it looks like a worktree ID
+          id = if String.starts_with?(dir_name, "wt-"), do: dir_name, else: generate_id("wt")
+          title = opts[:title] || dir_name
+          now = DateTime.utc_now() |> DateTime.to_iso8601()
+
+          record =
+            {:apothecary_worktrees, id, opts[:project_id], "open", title, 3, path, branch, nil,
+             nil,
+             %{
+               description: nil,
+               notes: nil,
+               pr_url: nil,
+               mcp_servers: nil,
+               kind: "task",
+               created_at: now,
+               updated_at: now,
+               blockers: [],
+               dependents: []
+             }}
+
+          case :mnesia.transaction(fn -> :mnesia.write(record) end) do
+            {:atomic, :ok} ->
+              schedule_broadcast()
+              {:ok, Apothecary.Worktree.from_record(record)}
+
+            {:aborted, reason} ->
+              {:error, reason}
+          end
+        end
+    end
+  end
+
   # --- Worktree Operations ---
 
   def create_worktree(attrs) do

@@ -1851,7 +1851,9 @@ defmodule ApothecaryWeb.DashboardComponents do
     # Build a lookup from worktree id to worktree for branch name display
     wt_lookup =
       assigns.worktrees_by_status
-      |> Enum.flat_map(fn {_status, groups} -> Enum.map(groups, fn g -> {g.worktree.id, g.worktree} end) end)
+      |> Enum.flat_map(fn {_status, groups} ->
+        Enum.map(groups, fn g -> {g.worktree.id, g.worktree} end)
+      end)
       |> Map.new()
 
     # Build sources: expand each dev server's ports into separate entries
@@ -1876,7 +1878,11 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> Enum.flat_map(fn {id, %{ports: ports}} ->
         wt = Map.get(wt_lookup, id)
         branch = (wt && wt.git_branch) || (wt && wt.title)
-        short_label = if branch, do: branch |> String.replace_leading("worktree/", ""), else: id |> to_string() |> String.replace_leading("wt-", "") |> String.slice(0, 6)
+
+        short_label =
+          if branch,
+            do: branch |> String.replace_leading("worktree/", ""),
+            else: id |> to_string() |> String.replace_leading("wt-", "") |> String.slice(0, 6)
 
         Enum.map(ports, fn %{port: p, name: name} ->
           label = if length(ports) > 1, do: "#{short_label}:#{name}", else: short_label
@@ -2377,6 +2383,55 @@ defmodule ApothecaryWeb.DashboardComponents do
             <button type="submit" disabled={@progress != nil} class="action-pill">
               {if @progress, do: "creating...", else: "create"}
             </button>
+          </div>
+        </form>
+      </div>
+    </div>
+    """
+  end
+
+  # ── Adopt Worktree Modal ────────────────────────────────
+
+  attr :error, :string, default: nil
+
+  def adopt_worktree_modal(assigns) do
+    ~H"""
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center"
+      style="background: rgba(0,0,0,0.6);"
+    >
+      <div
+        class="w-full max-w-md mx-4 p-4"
+        style="background: var(--surface); border: 1px solid var(--border);"
+        phx-click-away="cancel-adopt-worktree"
+        phx-window-keydown="cancel-adopt-worktree"
+        phx-key="Escape"
+      >
+        <div class="section-header mb-3">OPEN EXISTING WORKTREE</div>
+        <form phx-submit="adopt-worktree" id="adopt-worktree-form">
+          <div class="mb-3">
+            <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">
+              path to worktree directory
+            </div>
+            <input
+              type="text"
+              name="path"
+              placeholder="~/.apothecary/worktrees/..."
+              autofocus
+              class="moonlight-input w-full"
+            />
+          </div>
+          <div class="mb-2" style="color: var(--muted); font-size: var(--font-size-xs);">
+            enter the path to an existing git worktree. if tasks and state are stored in mnesia they will be loaded, otherwise a clean worktree will be created.
+          </div>
+          <p :if={@error} style="color: var(--error); font-size: var(--font-size-xs);" class="mb-2">
+            {@error}
+          </p>
+          <div class="flex justify-end gap-2">
+            <button type="button" phx-click="cancel-adopt-worktree" class="action-text">
+              cancel
+            </button>
+            <button type="submit" class="action-pill">open</button>
           </div>
         </form>
       </div>

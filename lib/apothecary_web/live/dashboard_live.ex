@@ -95,6 +95,9 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:show_new_project, false)
       |> assign(:new_project_error, nil)
       |> assign(:bootstrap_progress, nil)
+      # Adopt worktree modal
+      |> assign(:show_adopt_worktree, false)
+      |> assign(:adopt_worktree_error, nil)
       # Pane focus
       |> assign(:focused_pane, :tree)
       # Task inline input
@@ -1146,8 +1149,11 @@ defmodule ApothecaryWeb.DashboardLive do
       end
 
     case result do
-      {:ok, _} -> {:noreply, put_flash(socket, :info, "Restarting preview...")}
-      {:error, reason} -> {:noreply, put_flash(socket, :error, "Restart failed: #{inspect(reason)}")}
+      {:ok, _} ->
+        {:noreply, put_flash(socket, :info, "Restarting preview...")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Restart failed: #{inspect(reason)}")}
     end
   end
 
@@ -1973,6 +1979,57 @@ defmodule ApothecaryWeb.DashboardLive do
           {:error, reason} ->
             {:noreply, assign(socket, :new_project_error, "Failed: #{inspect(reason)}")}
         end
+    end
+  end
+
+  # --- Adopt worktree event handlers ---
+
+  @impl true
+  def handle_event("show-adopt-worktree", _params, socket) do
+    {:noreply,
+     assign(socket,
+       show_adopt_worktree: true,
+       adopt_worktree_error: nil
+     )}
+  end
+
+  @impl true
+  def handle_event("cancel-adopt-worktree", _params, socket) do
+    {:noreply,
+     assign(socket,
+       show_adopt_worktree: false,
+       adopt_worktree_error: nil
+     )}
+  end
+
+  @impl true
+  def handle_event("adopt-worktree", %{"path" => path}, socket) do
+    path = String.trim(path)
+
+    if path == "" do
+      {:noreply, assign(socket, :adopt_worktree_error, "Path cannot be empty")}
+    else
+      project_id =
+        if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
+
+      case Worktrees.adopt_worktree(path, project_id: project_id) do
+        {:ok, wt} ->
+          {:noreply,
+           socket
+           |> assign(show_adopt_worktree: false, adopt_worktree_error: nil)
+           |> select_task(wt.id)
+           |> put_flash(:info, "Worktree opened: #{wt.title}")}
+
+        {:error, :not_a_directory} ->
+          {:noreply, assign(socket, :adopt_worktree_error, "Path is not a directory")}
+
+        {:error, :not_a_git_repo} ->
+          {:noreply, assign(socket, :adopt_worktree_error, "Directory is not a git repository")}
+
+        {:error, reason} ->
+          {:noreply,
+           assign(socket, :adopt_worktree_error, "Failed to open worktree: #{inspect(reason)}")}
+      end
     end
   end
 
@@ -3349,7 +3406,9 @@ defmodule ApothecaryWeb.DashboardLive do
 
   defp build_description_with_images(text, images) do
     case images do
-      [] -> if text != "", do: text, else: nil
+      [] ->
+        if text != "", do: text, else: nil
+
       paths ->
         image_lines = Enum.map_join(paths, "\n", &"[image: #{&1}]")
         if text != "", do: "#{text}\n#{image_lines}", else: image_lines
@@ -3812,6 +3871,17 @@ defmodule ApothecaryWeb.DashboardLive do
                       search_mode={@search_mode}
                       search_query={@search_query}
                     />
+
+                    <%!-- Open existing worktree button --%>
+                    <div class="px-3 py-2">
+                      <button
+                        phx-click="show-adopt-worktree"
+                        class="cursor-pointer w-full text-left"
+                        style="color: var(--muted); font-size: var(--font-size-xs); padding: 4px 6px; border: 1px dashed var(--border); border-radius: 4px;"
+                      >
+                        + open existing worktree
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -3943,6 +4013,11 @@ defmodule ApothecaryWeb.DashboardLive do
         :if={@show_new_project}
         error={@new_project_error}
         progress={@bootstrap_progress}
+      />
+
+      <.adopt_worktree_modal
+        :if={@show_adopt_worktree}
+        error={@adopt_worktree_error}
       />
     </Layouts.app>
     """
