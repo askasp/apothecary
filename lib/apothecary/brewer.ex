@@ -1056,6 +1056,15 @@ defmodule Apothecary.Brewer do
 
       line = "- [#{status}] #{t.id}: #{t.title}#{blockers}"
 
+      desc = Map.get(t, :description)
+
+      line =
+        if desc && desc != "" && desc != t.title do
+          line <> "\n  Description: #{desc}"
+        else
+          line
+        end
+
       if t.notes && t.notes != "" do
         line <> "\n  Notes: #{t.notes}"
       else

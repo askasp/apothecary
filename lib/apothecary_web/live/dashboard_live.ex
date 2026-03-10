@@ -1565,24 +1565,11 @@ defmodule ApothecaryWeb.DashboardLive do
     {:noreply, socket}
   end
 
-  # Handle pasted images from chat input — save to temp file for agent use
+  # Handle pasted images from chat input — save to persistent uploads dir
   @impl true
   def handle_event("paste-image-chat", %{"data" => data, "mime" => mime, "name" => name}, socket) do
-    ext =
-      case mime do
-        "image/png" -> ".png"
-        "image/jpeg" -> ".jpg"
-        "image/gif" -> ".gif"
-        "image/webp" -> ".webp"
-        _ -> Path.extname(name)
-      end
-
-    filename = "paste-#{System.unique_integer([:positive])}#{ext}"
-    path = Path.join(System.tmp_dir!(), filename)
-
-    case Base.decode64(data) do
-      {:ok, binary} ->
-        File.write!(path, binary)
+    case save_uploaded_image(data, mime, name) do
+      {:ok, path} ->
         {:noreply, push_event(socket, "chat-image-saved", %{path: path})}
 
       :error ->
@@ -1590,25 +1577,11 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  # Handle pasted images — save to temp file and insert path into textarea
+  # Handle pasted images — save to persistent uploads dir
   @impl true
   def handle_event("paste-image", %{"data" => data, "mime" => mime, "name" => name}, socket) do
-    ext =
-      case mime do
-        "image/png" -> ".png"
-        "image/jpeg" -> ".jpg"
-        "image/gif" -> ".gif"
-        "image/webp" -> ".webp"
-        _ -> Path.extname(name)
-      end
-
-    filename = "paste-#{System.unique_integer([:positive])}#{ext}"
-    tmp_dir = System.tmp_dir!()
-    path = Path.join(tmp_dir, filename)
-
-    case Base.decode64(data) do
-      {:ok, binary} ->
-        File.write!(path, binary)
+    case save_uploaded_image(data, mime, name) do
+      {:ok, path} ->
         {:noreply, push_event(socket, "image-pasted", %{path: path})}
 
       :error ->
@@ -1616,29 +1589,15 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  # Handle pasted images in task input — save to temp file and append path
+  # Handle pasted images in task input — save to persistent uploads dir
   @impl true
   def handle_event(
         "paste-image-task",
         %{"data" => data, "mime" => mime, "name" => name, "worktree_id" => _wt_id},
         socket
       ) do
-    ext =
-      case mime do
-        "image/png" -> ".png"
-        "image/jpeg" -> ".jpg"
-        "image/gif" -> ".gif"
-        "image/webp" -> ".webp"
-        _ -> Path.extname(name)
-      end
-
-    filename = "paste-#{System.unique_integer([:positive])}#{ext}"
-    tmp_dir = System.tmp_dir!()
-    path = Path.join(tmp_dir, filename)
-
-    case Base.decode64(data) do
-      {:ok, binary} ->
-        File.write!(path, binary)
+    case save_uploaded_image(data, mime, name) do
+      {:ok, path} ->
         {:noreply, push_event(socket, "task-image-pasted", %{path: path})}
 
       :error ->
@@ -1671,8 +1630,11 @@ defmodule ApothecaryWeb.DashboardLive do
         project_id =
           if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
 
+        description = build_description_with_images(text, images)
+
         case Worktrees.create_worktree(%{
                title: text,
+               description: description,
                priority: 3,
                project_id: project_id
              }) do
@@ -1690,8 +1652,14 @@ defmodule ApothecaryWeb.DashboardLive do
       # Task-add mode: create task in focused worktree (takes priority over ? prefix)
       socket.assigns.adding_task_to ->
         wt_id = socket.assigns.adding_task_to
+        description = build_description_with_images("", images)
 
-        case Worktrees.create_task(%{title: text, worktree_id: wt_id, priority: 3}) do
+        case Worktrees.create_task(%{
+               title: text,
+               description: description,
+               worktree_id: wt_id,
+               priority: 3
+             }) do
           {:ok, item} when not is_nil(item) ->
             {:noreply, put_flash(socket, :info, "Task added: #{item.title}")}
 
@@ -1703,9 +1671,15 @@ defmodule ApothecaryWeb.DashboardLive do
       socket.assigns.working_agent && String.starts_with?(text, "+") ->
         task_text = text |> String.trim_leading("+") |> String.trim()
         wt_id = socket.assigns.selected_task_id
+        description = build_description_with_images("", images)
 
         if task_text != "" && wt_id do
-          case Worktrees.create_task(%{title: task_text, worktree_id: wt_id, priority: 3}) do
+          case Worktrees.create_task(%{
+                 title: task_text,
+                 description: description,
+                 worktree_id: wt_id,
+                 priority: 3
+               }) do
             {:ok, item} when not is_nil(item) ->
               {:noreply, put_flash(socket, :info, "Task queued: #{item.title}")}
 
@@ -1727,8 +1701,14 @@ defmodule ApothecaryWeb.DashboardLive do
       # Chat input with a focused worktree: add task
       socket.assigns.selected_task_id ->
         wt_id = socket.assigns.selected_task_id
+        description = build_description_with_images("", images)
 
-        case Worktrees.create_task(%{title: text, worktree_id: wt_id, priority: 3}) do
+        case Worktrees.create_task(%{
+               title: text,
+               description: description,
+               worktree_id: wt_id,
+               priority: 3
+             }) do
           {:ok, item} when not is_nil(item) ->
             {:noreply, put_flash(socket, :info, "Task queued: #{item.title}")}
 
@@ -3341,6 +3321,40 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   # --- Helpers ---
+
+  defp save_uploaded_image(data, mime, name) do
+    ext =
+      case mime do
+        "image/png" -> ".png"
+        "image/jpeg" -> ".jpg"
+        "image/gif" -> ".gif"
+        "image/webp" -> ".webp"
+        _ -> Path.extname(name)
+      end
+
+    uploads_dir = Path.join([System.get_env("HOME") || "/tmp", ".apothecary", "uploads"])
+    File.mkdir_p!(uploads_dir)
+    filename = "paste-#{System.unique_integer([:positive])}#{ext}"
+    path = Path.join(uploads_dir, filename)
+
+    case Base.decode64(data) do
+      {:ok, binary} ->
+        File.write!(path, binary)
+        {:ok, path}
+
+      :error ->
+        :error
+    end
+  end
+
+  defp build_description_with_images(text, images) do
+    case images do
+      [] -> if text != "", do: text, else: nil
+      paths ->
+        image_lines = Enum.map_join(paths, "\n", &"[image: #{&1}]")
+        if text != "", do: "#{text}\n#{image_lines}", else: image_lines
+    end
+  end
 
   defp fetch_priority_task(id, socket) do
     if id == socket.assigns.selected_task_id do
