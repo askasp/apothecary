@@ -1695,7 +1695,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span style="color: var(--accent);">✓</span>
             <span style="color: var(--muted);">{task.title}</span>
             <span
-              class="ml-auto opacity-0 group-hover:opacity-100 transition-opacity"
+              class={["ml-auto transition-opacity", if(MapSet.member?(@expanded, task.id), do: "opacity-100", else: "opacity-0 group-hover:opacity-100")]}
               style="font-size: var(--font-size-xxs); color: var(--dim);"
             >
               {if MapSet.member?(@expanded, task.id), do: "▾", else: "▸"}
@@ -1719,6 +1719,16 @@ defmodule ApothecaryWeb.DashboardComponents do
               style="font-size: var(--font-size-xs); color: var(--dim);"
             >
               no notes
+            </div>
+            <%!-- Completion metadata --%>
+            <div
+              class="mt-1 flex items-center gap-1"
+              style="font-size: var(--font-size-xxs); color: var(--dim);"
+            >
+              <% duration = task_duration(task) %>
+              <span :if={duration}>Completed in {duration}</span>
+              <span :if={duration && @brewer_label}>&middot;</span>
+              <span :if={@brewer_label}>{@brewer_label}</span>
             </div>
           </div>
         </div>
@@ -3485,6 +3495,25 @@ defmodule ApothecaryWeb.DashboardComponents do
       n -> "#{n} worktrees"
     end
   end
+
+  defp task_duration(%{created_at: created, updated_at: updated})
+       when is_binary(created) and is_binary(updated) do
+    with {:ok, c, _} <- DateTime.from_iso8601(created),
+         {:ok, u, _} <- DateTime.from_iso8601(updated) do
+      diff = DateTime.diff(u, c, :second)
+
+      cond do
+        diff < 60 -> "#{diff}s"
+        diff < 3_600 -> "#{div(diff, 60)}m"
+        diff < 86_400 -> "#{div(diff, 3_600)}h #{rem(div(diff, 60), 60)}m"
+        true -> "#{div(diff, 86_400)}d"
+      end
+    else
+      _ -> nil
+    end
+  end
+
+  defp task_duration(_), do: nil
 
   defp format_relative_time(nil), do: nil
 
