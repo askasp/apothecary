@@ -850,9 +850,12 @@ defmodule Apothecary.Brewer do
           end
       end
 
+    # Build conversation history for follow-up questions
+    conversation_context = build_question_conversation(worktree)
+
     """
     You are a codebase expert answering a question about the project in: #{project_dir}
-
+    #{conversation_context}
     ## Question
     #{worktree.title}
     #{if worktree.description && worktree.description != worktree.title, do: "\n#{worktree.description}", else: ""}
@@ -873,7 +876,51 @@ defmodule Apothecary.Brewer do
     - Use markdown formatting: headers, bullet points, code blocks with syntax highlighting.
     - Start with a brief summary, then go into detail if needed.
     - Keep it focused — answer only what was asked.
+    #{if conversation_context != "", do: "- This is a follow-up question. Reference the previous Q&A context above when relevant.", else: ""}
     """
+  end
+
+  # Walk up the parent_question_id chain to build conversation history
+  defp build_question_conversation(worktree) do
+    case worktree.parent_question_id do
+      nil -> ""
+      parent_id -> build_qa_chain(parent_id, [])
+    end
+  end
+
+  defp build_qa_chain(question_id, acc) do
+    case Apothecary.Worktrees.get_worktree(question_id) do
+      {:ok, q} ->
+        answer =
+          (q.notes || "")
+          |> String.replace(~r/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]\s*/, "")
+          |> String.trim()
+
+        entry = %{question: q.title, answer: answer, id: q.id}
+
+        # Recurse up the chain
+        acc = [entry | acc]
+
+        case q.parent_question_id do
+          nil -> format_qa_chain(acc)
+          parent_id -> build_qa_chain(parent_id, acc)
+        end
+
+      _ ->
+        format_qa_chain(acc)
+    end
+  end
+
+  defp format_qa_chain([]), do: ""
+
+  defp format_qa_chain(chain) do
+    entries =
+      Enum.map(chain, fn %{question: q, answer: a} ->
+        answer_text = if a == "", do: "(no answer yet)", else: a
+        "**Q:** #{q}\n**A:** #{answer_text}"
+      end)
+
+    "\n## Previous Q&A Context\n#{Enum.join(entries, "\n\n---\n\n")}\n"
   end
 
   defp build_prompt(worktree, tasks, worktree_path) do
