@@ -416,7 +416,7 @@ defmodule ApothecaryWeb.DashboardLive do
           socket.assigns.agents
           |> Enum.find(fn a ->
             a.id == agent_id &&
-              a.current_worktree &&
+              Map.get(a, :current_worktree) &&
               to_string(a.current_worktree.id) == to_string(socket.assigns.selected_task_id)
           end)
 
@@ -3491,7 +3491,7 @@ defmodule ApothecaryWeb.DashboardLive do
     agent =
       socket.assigns.agents
       |> Enum.find(fn a ->
-        a.current_worktree && to_string(a.current_worktree.id) == to_string(task_id)
+        Map.get(a, :current_worktree) && to_string(a.current_worktree.id) == to_string(task_id)
       end)
 
     old_agent = socket.assigns.working_agent
@@ -3528,13 +3528,16 @@ defmodule ApothecaryWeb.DashboardLive do
 
     agent_by_wt =
       agents
-      |> Enum.filter(& &1.current_worktree)
+      |> Enum.filter(&Map.get(&1, :current_worktree))
       |> Map.new(fn a -> {to_string(a.current_worktree.id), a} end)
 
     active_wt_ids =
       agents
       |> Enum.flat_map(fn a ->
-        if a.current_worktree, do: [to_string(a.current_worktree.id)], else: []
+        case Map.get(a, :current_worktree) do
+          nil -> []
+          wt -> [to_string(wt.id)]
+        end
       end)
       |> MapSet.new()
 
