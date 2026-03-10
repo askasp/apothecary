@@ -59,6 +59,11 @@ defmodule Apothecary.Dispatcher do
     GenServer.call(__MODULE__, {:project_status, project_id})
   end
 
+  @doc "Abort the brew on a specific worktree without stopping the brewer."
+  def abort_worktree(worktree_id) do
+    GenServer.call(__MODULE__, {:abort_worktree, worktree_id}, 30_000)
+  end
+
   @doc "Subscribe to dispatcher updates."
   def subscribe do
     Phoenix.PubSub.subscribe(@pubsub, @topic)
@@ -210,6 +215,27 @@ defmodule Apothecary.Dispatcher do
   def handle_call(:status, _from, state) do
     info = build_global_status(state)
     {:reply, info, state}
+  end
+
+  @impl true
+  def handle_call({:abort_worktree, worktree_id}, _from, state) do
+    # Find the brewer working on this worktree across all project pools
+    brewer_pid =
+      Enum.find_value(state.projects, fn {_project_id, pool} ->
+        Enum.find_value(pool.agents, fn {pid, agent_state} ->
+          if agent_state.current_worktree &&
+               to_string(agent_state.current_worktree.id) == to_string(worktree_id) do
+            pid
+          end
+        end)
+      end)
+
+    if brewer_pid do
+      Apothecary.Brewer.abort(brewer_pid)
+      {:reply, :ok, state}
+    else
+      {:reply, {:error, :not_found}, state}
+    end
   end
 
   @impl true

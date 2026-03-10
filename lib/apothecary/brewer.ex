@@ -40,6 +40,11 @@ defmodule Apothecary.Brewer do
     GenServer.cast(pid, {:send_instruction, text})
   end
 
+  @doc "Abort the current brew — kills the Port, releases the worktree, goes idle."
+  def abort(pid) do
+    GenServer.cast(pid, :abort)
+  end
+
   # Server Callbacks
 
   @impl true
@@ -139,6 +144,37 @@ defmodule Apothecary.Brewer do
   end
 
   def handle_cast({:send_instruction, _text}, state), do: {:noreply, state}
+
+  @impl true
+  def handle_cast(:abort, %{port: port, agent: agent} = state) when not is_nil(port) do
+    Logger.info("Brewer #{agent.id} aborting worktree #{state.worktree_id}")
+    cancel_watchdog(state)
+    Port.close(port)
+
+    if state.worktree_id do
+      Apothecary.Worktrees.add_note(state.worktree_id, "Brew aborted by user.")
+      Apothecary.Worktrees.release_worktree(state.worktree_id)
+    end
+
+    Apothecary.Worktrees.force_refresh()
+
+    agent = %{
+      agent
+      | status: :idle,
+        current_worktree: nil,
+        project_dir: nil,
+        worktree_path: nil,
+        branch: nil
+    }
+
+    broadcast_state(agent)
+    Apothecary.Dispatcher.agent_idle(self())
+
+    {:noreply,
+     %{state | agent: agent, port: nil, buffer: "", worktree_id: nil, watchdog_timer: nil}}
+  end
+
+  def handle_cast(:abort, state), do: {:noreply, state}
 
   @impl true
   def handle_call(:get_state, _from, state) do
