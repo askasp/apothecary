@@ -1601,18 +1601,36 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%!-- 6. Oracle Q&A for this worktree --%>
       <div :if={@worktree_questions != []} class="mb-4">
         <div style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 12px; margin-bottom: 8px;" />
-        <div :for={q <- @worktree_questions} class="mb-3">
+        <div :for={q <- @worktree_questions} class="mb-4">
+          <%!-- Question --%>
           <div class="flex items-start gap-2" style="font-size: var(--font-size-sm);">
-            <span style="color: var(--concocting); font-weight: 600; flex-shrink: 0;">?</span>
+            <span style="color: var(--accent); font-weight: 600; flex-shrink: 0;">?</span>
             <span style="color: var(--text); font-weight: 500;">{q.title}</span>
           </div>
-          <div
-            :if={q.notes && q.notes != ""}
-            class="ml-5 mt-1 pl-3"
-            style="border-left: 2px solid var(--border); font-size: var(--font-size-sm); color: var(--dim); white-space: pre-wrap;"
-          >
-            {q.notes}
-          </div>
+          <%!-- Answer --%>
+          <% answer = question_answer(q) %>
+          <%= if answer != "" do %>
+            <div
+              id={"q-answer-#{q.id}"}
+              class="ml-5 mt-2 pl-3 question-answer"
+              style="border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); font-size: var(--font-size-sm); color: var(--dim); white-space: pre-wrap; line-height: 1.6;"
+            >
+              {answer}
+            </div>
+            <div class="ml-5 mt-1">
+              <.copy_button target={"#q-answer-#{q.id}"} class="ml-3" />
+            </div>
+          <% else %>
+            <%!-- In-progress: show thinking indicator --%>
+            <div
+              :if={q.status in ["open", "in_progress"]}
+              class="ml-5 mt-2 pl-3 flex items-center gap-2"
+              style="border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); font-size: var(--font-size-sm); color: var(--muted);"
+            >
+              <.braille_spinner id={"q-spin-#{q.id}"} offset={0} />
+              <span>thinking...</span>
+            </div>
+          <% end %>
         </div>
       </div>
 
@@ -2869,6 +2887,14 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp agent_status_color(_), do: "var(--muted)"
 
   # ── Helper functions ─────────────────────────────────────
+
+  defp question_answer(q) do
+    notes = q.notes || ""
+
+    notes
+    |> String.trim_leading("Answer:\n")
+    |> String.trim()
+  end
 
   defp task_status_group(task) do
     case task.status do

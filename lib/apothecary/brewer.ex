@@ -225,9 +225,14 @@ defmodule Apothecary.Brewer do
     wt = agent.current_worktree
 
     if wt && wt.kind == "question" do
-      # Questions: save the response as notes and close — no push/PR
-      response = Enum.join(output, "\n")
-      Apothecary.Worktrees.add_note(worktree_id, "Answer:\n#{response}")
+      # Questions: save only text content (filter out tool-use lines) and close
+      answer =
+        output
+        |> Enum.reject(&String.starts_with?(&1, "[tool: "))
+        |> Enum.join("\n")
+        |> String.trim()
+
+      Apothecary.Worktrees.add_note(worktree_id, answer)
       Apothecary.Worktrees.close_worktree(worktree_id)
     else
       # Tasks: record session summary, push, and create PR
@@ -826,6 +831,12 @@ defmodule Apothecary.Brewer do
     - Do NOT run destructive commands.
     - Answer the question thoroughly by reading relevant source files.
     - Be concise but complete. Use code references (file:line) where helpful.
+
+    ## Output Format
+    - Give a direct, well-structured answer. No preamble like "Let me look into this".
+    - Use markdown formatting: headers, bullet points, code blocks with syntax highlighting.
+    - Start with a brief summary, then go into detail if needed.
+    - Keep it focused — answer only what was asked.
     """
   end
 
