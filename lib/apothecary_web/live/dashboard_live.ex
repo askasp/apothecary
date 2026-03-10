@@ -1638,7 +1638,7 @@ defmodule ApothecaryWeb.DashboardLive do
         project_id =
           if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
 
-        description = build_description_with_images(text, images)
+        description = build_description_with_images("", images)
 
         case Worktrees.create_worktree(%{
                title: text,
