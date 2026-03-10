@@ -1378,421 +1378,435 @@ defmodule ApothecaryWeb.DashboardComponents do
           time_ago={@time_ago}
         />
       <% else %>
-      <%!-- 1. Title + Status --%>
-      <div class="mb-3">
-        <div class="flex items-start justify-between">
-          <div class="flex-1 min-w-0">
-            <%= if @editing_field == :title do %>
-              <.form for={%{}} phx-submit="save-edit" class="mb-2">
-                <input type="hidden" name="field" value="title" />
-                <input
-                  type="text"
-                  name="value"
-                  value={@task.title}
-                  autofocus
-                  phx-focus="input-focus"
-                  phx-blur="input-blur"
-                  class="moonlight-input w-full"
-                  style="font-size: var(--font-size-title); font-weight: 600;"
-                />
-                <div class="flex items-center gap-2 mt-1">
-                  <button type="submit" class="action-pill">save</button>
-                  <button type="button" phx-click="cancel-edit" class="action-text">cancel</button>
+        <%!-- 1. Title + Status --%>
+        <div class="mb-3">
+          <div class="flex items-start justify-between">
+            <div class="flex-1 min-w-0">
+              <%= if @editing_field == :title do %>
+                <.form for={%{}} phx-submit="save-edit" class="mb-2">
+                  <input type="hidden" name="field" value="title" />
+                  <input
+                    type="text"
+                    name="value"
+                    value={@task.title}
+                    autofocus
+                    phx-focus="input-focus"
+                    phx-blur="input-blur"
+                    class="moonlight-input w-full"
+                    style="font-size: var(--font-size-title); font-weight: 600;"
+                  />
+                  <div class="flex items-center gap-2 mt-1">
+                    <button type="submit" class="action-pill">save</button>
+                    <button type="button" phx-click="cancel-edit" class="action-text">cancel</button>
+                  </div>
+                </.form>
+              <% else %>
+                <div class="flex items-center gap-2">
+                  <span style={"color: #{@status_color};"}>
+                    <%= if @status_group == "brewing" do %>
+                      <.braille_spinner id="detail-title-spin" offset={0} />
+                    <% else %>
+                      {@status_dot}
+                    <% end %>
+                  </span>
+                  <span
+                    phx-click="start-edit"
+                    phx-value-field="title"
+                    class="cursor-pointer"
+                    style="font-size: var(--font-size-title); font-weight: 600; color: var(--text);"
+                  >
+                    {@task.title}
+                  </span>
                 </div>
-              </.form>
-            <% else %>
-              <div class="flex items-center gap-2">
-                <span style={"color: #{@status_color};"}>
-                  <%= if @status_group == "brewing" do %>
-                    <.braille_spinner id="detail-title-spin" offset={0} />
-                  <% else %>
-                    {@status_dot}
-                  <% end %>
+              <% end %>
+              <%!-- Metadata line --%>
+              <div
+                class="flex items-center gap-1 mt-1 flex-wrap"
+                style="font-size: var(--font-size-xs); color: var(--muted);"
+              >
+                <span>{@task.id}</span>
+                <span :if={@git_branch}>
+                  &middot; <span style="color: var(--dim);">{@git_branch}</span>
                 </span>
+                <span :if={@brewer_label}>
+                  &middot; <span style="color: var(--dim);">{@brewer_label}</span>
+                </span>
+                <span :if={@time_ago}>&middot; {@time_ago}</span>
                 <span
-                  phx-click="start-edit"
-                  phx-value-field="title"
+                  :if={@dev_port}
                   class="cursor-pointer"
-                  style="font-size: var(--font-size-title); font-weight: 600; color: var(--text);"
-                >
-                  {@task.title}
-                </span>
-              </div>
-            <% end %>
-            <%!-- Metadata line --%>
-            <div
-              class="flex items-center gap-1 mt-1 flex-wrap"
-              style="font-size: var(--font-size-xs); color: var(--muted);"
-            >
-              <span>{@task.id}</span>
-              <span :if={@git_branch}>
-                &middot; <span style="color: var(--dim);">{@git_branch}</span>
-              </span>
-              <span :if={@brewer_label}>
-                &middot; <span style="color: var(--dim);">{@brewer_label}</span>
-              </span>
-              <span :if={@time_ago}>&middot; {@time_ago}</span>
-              <span
-                :if={@dev_port}
-                class="cursor-pointer"
-                style="color: var(--accent);"
-                phx-click="show-preview"
-                phx-value-port={@dev_port}
-              >
-                &middot; :{@dev_port} &#x2197;
-              </span>
-              <span
-                :if={@working_agent && @working_agent.status == :working && !@working_agent.sandboxed}
-                style="color: var(--error); font-weight: 500;"
-              >
-                &middot; unsandboxed
-              </span>
-            </div>
-          </div>
-          <button
-            phx-click="deselect-task"
-            class="cursor-pointer flex-shrink-0"
-            style="color: var(--muted); font-size: var(--font-size-xs);"
-          >
-            esc
-          </button>
-        </div>
-      </div>
-
-      <%!-- 2. Progress bar --%>
-      <div :if={@total_children > 0} class="mb-1">
-        <div class="flex items-center gap-2">
-          <div
-            class="flex-1 rounded-full overflow-hidden"
-            style="height: 4px; background: var(--border);"
-          >
-            <div style={"width: #{if @total_children > 0, do: round(@done_children / @total_children * 100), else: 0}%; height: 100%; background: var(--concocting); border-radius: 9999px; transition: width 0.3s ease;"} />
-          </div>
-          <span style="font-size: var(--font-size-xs); color: var(--muted); flex-shrink: 0;">
-            {@done_children}/{@total_children}
-          </span>
-        </div>
-      </div>
-
-      <%!-- 3. Done tasks summary --%>
-      <div
-        :if={@done_children > 0}
-        class="mb-1"
-        style="font-size: var(--font-size-xs); color: var(--dim);"
-      >
-        <span style="color: var(--accent);">&#x25CF;</span>
-        {@done_children} done
-      </div>
-
-      <%!-- 4. Done tasks listed with checkmarks --%>
-      <div :if={@done_tasks != []} class="mb-1" style="font-size: var(--font-size-sm);">
-        <div
-          :for={task <- @done_tasks}
-          class="flex items-center gap-2 py-0.5 cursor-pointer hover:opacity-80"
-          phx-click="open-child-task"
-          phx-value-id={task.id}
-        >
-          <span style="color: var(--accent);">✓</span>
-          <span style="color: var(--muted); text-decoration: line-through;">{task.title}</span>
-        </div>
-      </div>
-
-      <%!-- 5. Active task (highlighted) --%>
-      <div :if={@active_task} class="detail-active-task mb-1">
-        <div
-          class="flex items-center gap-2 cursor-pointer"
-          phx-click="open-child-task"
-          phx-value-id={@active_task.id}
-        >
-          <span style="color: var(--concocting);">
-            <.braille_spinner id="detail-active-task-spin" offset={2} />
-          </span>
-          <span style="color: var(--text); font-weight: 500; font-size: var(--font-size-sm);">
-            {@active_task.title}
-          </span>
-          <span
-            :if={@brewer_label}
-            class="ml-auto"
-            style="color: var(--muted); font-size: var(--font-size-xxs);"
-          >
-            {@brewer_label}
-          </span>
-        </div>
-      </div>
-
-      <%!-- 6. Queued tasks — tree chars, with J/K reorder --%>
-      <div :if={@pending_tasks != []} class="mb-2" style="font-size: var(--font-size-sm);">
-        <%= for {child, idx} <- Enum.with_index(@pending_tasks) do %>
-          <% is_last = idx == length(@pending_tasks) - 1 %>
-          <% focused? = @focused_child_idx == idx %>
-          <div
-            class={["flex items-center gap-2 py-0.5 group", focused? && "rounded"]}
-            style={if focused?, do: "background: color-mix(in srgb, var(--concocting) 10%, transparent); margin: 0 -4px; padding-left: 4px; padding-right: 4px;", else: ""}
-          >
-            <span style="color: var(--border); font-family: monospace; font-size: var(--font-size-xs); width: 16px; text-align: center; flex-shrink: 0;">
-              {if is_last, do: "└─", else: "├─"}
-            </span>
-            <span style={if(focused?, do: "color: var(--concocting);", else: "color: var(--muted);")}>
-              {if focused?, do: "●", else: "○"}
-            </span>
-            <span
-              class="cursor-pointer hover:opacity-80 flex-1 min-w-0 truncate"
-              style={if(focused?, do: "color: var(--text); font-weight: 500;", else: "color: var(--muted);")}
-              phx-click="open-child-task"
-              phx-value-id={child.id}
-            >
-              {child.title}
-            </span>
-            <span
-              class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0 transition-opacity"
-              style="font-size: var(--font-size-xxs); color: var(--dim);"
-            >
-              <button
-                :if={idx > 0}
-                phx-click="reorder-child-task"
-                phx-value-id={child.id}
-                phx-value-dir="up"
-                phx-value-swap-id={Enum.at(@pending_tasks, idx - 1).id}
-                class="cursor-pointer px-0.5 hover:opacity-80"
-                title="Move up"
-              >
-                ▲
-              </button>
-              <button
-                :if={!is_last}
-                phx-click="reorder-child-task"
-                phx-value-id={child.id}
-                phx-value-dir="down"
-                phx-value-swap-id={Enum.at(@pending_tasks, idx + 1).id}
-                class="cursor-pointer px-0.5 hover:opacity-80"
-                title="Move down"
-              >
-                ▼
-              </button>
-            </span>
-          </div>
-        <% end %>
-      </div>
-
-      <%!-- Merge conflict auto-fix warning --%>
-      <% merge_fix_tasks =
-        Enum.filter(@children, fn c ->
-          String.contains?(c.title || "", "merge conflict")
-        end) %>
-      <details
-        :if={merge_fix_tasks != []}
-        class="mb-4 rounded"
-        style="background: color-mix(in srgb, var(--concocting) 12%, transparent); border: 1px solid color-mix(in srgb, var(--concocting) 30%, transparent); font-size: var(--font-size-sm);"
-      >
-        <summary class="px-3 py-2 cursor-pointer select-none list-none flex items-center gap-1">
-          <span
-            class="merge-arrow inline-block transition-transform duration-150"
-            style="font-size: 0.65em; color: var(--dim);"
-          >
-            ▶
-          </span>
-          <span style="color: var(--concocting); font-weight: 600;">
-            &#x26A0; merge conflicts auto-fixed
-          </span>
-          <span style="color: var(--dim);">
-            &mdash; review decisions
-          </span>
-        </summary>
-        <div
-          class="px-3 pb-2"
-          style="color: var(--fg); border-top: 1px solid color-mix(in srgb, var(--concocting) 20%, transparent);"
-        >
-          <div :for={task <- merge_fix_tasks} class="mt-2">
-            <div :if={task.notes && task.notes != ""}>
-              <pre
-                class="whitespace-pre-wrap break-words"
-                style="font-size: var(--font-size-xs); color: var(--muted); line-height: 1.5; margin: 0;"
-              >{task.notes}</pre>
-            </div>
-            <div
-              :if={is_nil(task.notes) || task.notes == ""}
-              style="color: var(--dim); font-size: var(--font-size-xs);"
-            >
-              No resolution notes recorded.
-            </div>
-          </div>
-        </div>
-      </details>
-
-      <%!-- 5. Activity stream (agent output live, or notes as historical stream) --%>
-      <%= if @agent_output != [] do %>
-        <%!-- Live brewer stream --%>
-        <div class="mb-4">
-          <div
-            class="mb-3"
-            style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 12px;"
-          >
-            <span style="color: var(--muted); font-size: var(--font-size-xs);">
-              &mdash; {@brewer_label || "brewer"} assigned to {String.slice(@task.id || "", 0..9)}
-            </span>
-          </div>
-          <div
-            id="agent-output-inline"
-            class="detail-brewer-log"
-            phx-hook="ScrollBottom"
-          >
-            <div :for={line <- Enum.take(@agent_output, -60)}>
-              <.brewer_log_line line={line} />
-            </div>
-          </div>
-          <div :if={@working_agent && @working_agent.status == :working} class="mt-1">
-            <span style="color: var(--concocting); font-size: var(--font-size-sm);">
-              <.braille_spinner id="detail-working-spin" offset={1} /> working...
-            </span>
-          </div>
-        </div>
-      <% else %>
-        <%!-- Historical notes rendered as stream --%>
-        <div :if={@task.notes && @task.notes != ""} class="mb-4">
-          <div
-            class="mb-3"
-            style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 12px;"
-          />
-          <div
-            id="task-notes-stream"
-            class="detail-brewer-log"
-          >
-            <div :for={line <- String.split(@task.notes || "", "\n")}>
-              <.brewer_log_line line={line} />
-            </div>
-          </div>
-          <.copy_button target="#task-notes-stream" />
-        </div>
-      <% end %>
-
-      <%!-- 6. Oracle Q&A for this worktree --%>
-      <div :if={@worktree_questions != []} class="mb-4">
-        <div style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 12px; margin-bottom: 8px;" />
-        <div :for={q <- @worktree_questions} class="mb-3">
-          <div class="flex items-start gap-2" style="font-size: var(--font-size-sm);">
-            <span style="color: var(--concocting); font-weight: 600; flex-shrink: 0;">?</span>
-            <span style="color: var(--text); font-weight: 500;">{q.title}</span>
-          </div>
-          <div
-            :if={q.notes && q.notes != ""}
-            class="ml-5 mt-1 pl-3"
-            style="border-left: 2px solid var(--border); font-size: var(--font-size-sm); color: var(--dim); white-space: pre-wrap;"
-          >
-            {q.notes}
-          </div>
-        </div>
-      </div>
-
-      <%!-- 7. Actions (only for merge/PR states) --%>
-      <div
-        :if={
-          @loading? || @pending_action || @pr_url ||
-            @task.status in ["brew_done", "done", "closed"] ||
-            @has_preview_config || @dev_server
-        }
-        class="flex items-center gap-3 mb-4 flex-wrap"
-        style="font-size: var(--font-size-sm);"
-      >
-        <%= if @loading? do %>
-          <div class="flex items-center gap-2">
-            <.spinner class="w-3 h-3" />
-            <span style="color: var(--dim);">{loading_label(@loading_action)}</span>
-          </div>
-        <% else %>
-          <%= if @pending_action do %>
-            <span style="color: var(--concocting);">
-              {cond do
-                match?({:local_merge, _, _}, @pending_action) -> "merge locally (no PR)?"
-                match?({:direct_merge, _, _}, @pending_action) -> "merge directly?"
-                true -> "merge this PR?"
-              end}
-            </span>
-            <button phx-click="confirm-merge" class="action-pill">confirm</button>
-            <button phx-click="cancel-merge" class="action-text">cancel</button>
-          <% else %>
-            <%= if @task.status == "merged" do %>
-              <span style="color: var(--bottled);">merged</span>
-            <% end %>
-            <%= if @task.status == "cancelled" do %>
-              <span style="color: var(--dim);">discarded</span>
-            <% end %>
-            <%= if @task.status in ["brew_done", "done", "closed"] and is_nil(@pr_url) do %>
-              <span class="action-pill" phx-click="promote-to-assaying">c create-pr</span>
-              <span class="action-pill" phx-click="local-merge">g git-merge</span>
-              <span class="action-pill" phx-click="show-diff">d diff</span>
-              <span class="action-pill" phx-click="close-task">x close</span>
-            <% end %>
-            <span
-              :if={@pr_url && @task.status not in ["merged", "cancelled"]}
-              class="action-pill"
-              phx-click="merge-pr"
-            >
-              m merge
-            </span>
-            <%!-- Preview button: start dev server + open preview panel --%>
-            <%= cond do %>
-              <% @dev_server && @dev_server.status == :running -> %>
-                <span
-                  class="action-pill"
+                  style="color: var(--accent);"
                   phx-click="show-preview"
                   phx-value-port={@dev_port}
                 >
-                  p preview :{@dev_port}
+                  &middot; :{@dev_port} &#x2197;
                 </span>
-              <% @dev_server && @dev_server.status == :starting -> %>
-                <span class="action-pill" style="color: var(--concocting); cursor: default;">
-                  p preview starting...
+                <span
+                  :if={
+                    @working_agent && @working_agent.status == :working && !@working_agent.sandboxed
+                  }
+                  style="color: var(--error); font-weight: 500;"
+                >
+                  &middot; unsandboxed
                 </span>
-              <% @has_preview_config -> %>
-                <span class="action-pill" phx-click="preview-worktree">p preview</span>
-              <% true -> %>
-            <% end %>
-          <% end %>
-        <% end %>
-      </div>
-
-      <%!-- 8. PR link --%>
-      <div :if={@pr_url} class="mb-5">
-        <div class="section-header mb-2">PULL REQUEST</div>
-        <a
-          href={@pr_url}
-          target="_blank"
-          style="color: var(--accent); font-size: var(--font-size-sm); text-decoration: none;"
-        >
-          {@pr_url}
-        </a>
-      </div>
-
-      <%!-- 9. Description --%>
-      <div :if={@task.description && @task.description != ""} class="mb-5">
-        <div class="section-header mb-2">DESCRIPTION</div>
-        <%= if @editing_field == :description do %>
-          <.form for={%{}} phx-submit="save-edit">
-            <input type="hidden" name="field" value="description" />
-            <textarea
-              name="value"
-              rows="4"
-              autofocus
-              phx-focus="input-focus"
-              phx-blur="input-blur"
-              class="moonlight-input w-full"
-            >{@task.description}</textarea>
-            <div class="flex items-center gap-2 mt-1">
-              <button type="submit" class="action-pill">save</button>
-              <button type="button" phx-click="cancel-edit" class="action-text">cancel</button>
+              </div>
             </div>
-          </.form>
-        <% else %>
+            <button
+              phx-click="deselect-task"
+              class="cursor-pointer flex-shrink-0"
+              style="color: var(--muted); font-size: var(--font-size-xs);"
+            >
+              esc
+            </button>
+          </div>
+        </div>
+
+        <%!-- 2. Progress bar --%>
+        <div :if={@total_children > 0} class="mb-1">
+          <div class="flex items-center gap-2">
+            <div
+              class="flex-1 rounded-full overflow-hidden"
+              style="height: 4px; background: var(--border);"
+            >
+              <div style={"width: #{if @total_children > 0, do: round(@done_children / @total_children * 100), else: 0}%; height: 100%; background: var(--concocting); border-radius: 9999px; transition: width 0.3s ease;"} />
+            </div>
+            <span style="font-size: var(--font-size-xs); color: var(--muted); flex-shrink: 0;">
+              {@done_children}/{@total_children}
+            </span>
+          </div>
+        </div>
+
+        <%!-- 3. Done tasks summary --%>
+        <div
+          :if={@done_children > 0}
+          class="mb-1"
+          style="font-size: var(--font-size-xs); color: var(--dim);"
+        >
+          <span style="color: var(--accent);">&#x25CF;</span>
+          {@done_children} done
+        </div>
+
+        <%!-- 4. Done tasks listed with checkmarks --%>
+        <div :if={@done_tasks != []} class="mb-1" style="font-size: var(--font-size-sm);">
           <div
-            phx-click="start-edit"
-            phx-value-field="description"
-            class="cursor-pointer"
-            style="color: var(--dim); font-size: var(--font-size-sm); white-space: pre-wrap;"
+            :for={task <- @done_tasks}
+            class="flex items-center gap-2 py-0.5 cursor-pointer hover:opacity-80"
+            phx-click="open-child-task"
+            phx-value-id={task.id}
           >
-            {@task.description}
+            <span style="color: var(--accent);">✓</span>
+            <span style="color: var(--muted); text-decoration: line-through;">{task.title}</span>
+          </div>
+        </div>
+
+        <%!-- 5. Active task (highlighted) --%>
+        <div :if={@active_task} class="detail-active-task mb-1">
+          <div
+            class="flex items-center gap-2 cursor-pointer"
+            phx-click="open-child-task"
+            phx-value-id={@active_task.id}
+          >
+            <span style="color: var(--concocting);">
+              <.braille_spinner id="detail-active-task-spin" offset={2} />
+            </span>
+            <span style="color: var(--text); font-weight: 500; font-size: var(--font-size-sm);">
+              {@active_task.title}
+            </span>
+            <span
+              :if={@brewer_label}
+              class="ml-auto"
+              style="color: var(--muted); font-size: var(--font-size-xxs);"
+            >
+              {@brewer_label}
+            </span>
+          </div>
+        </div>
+
+        <%!-- 6. Queued tasks — tree chars, with J/K reorder --%>
+        <div :if={@pending_tasks != []} class="mb-2" style="font-size: var(--font-size-sm);">
+          <%= for {child, idx} <- Enum.with_index(@pending_tasks) do %>
+            <% is_last = idx == length(@pending_tasks) - 1 %>
+            <% focused? = @focused_child_idx == idx %>
+            <div
+              class={["flex items-center gap-2 py-0.5 group", focused? && "rounded"]}
+              style={
+                if focused?,
+                  do:
+                    "background: color-mix(in srgb, var(--concocting) 10%, transparent); margin: 0 -4px; padding-left: 4px; padding-right: 4px;",
+                  else: ""
+              }
+            >
+              <span style="color: var(--border); font-family: monospace; font-size: var(--font-size-xs); width: 16px; text-align: center; flex-shrink: 0;">
+                {if is_last, do: "└─", else: "├─"}
+              </span>
+              <span style={
+                if(focused?, do: "color: var(--concocting);", else: "color: var(--muted);")
+              }>
+                {if focused?, do: "●", else: "○"}
+              </span>
+              <span
+                class="cursor-pointer hover:opacity-80 flex-1 min-w-0 truncate"
+                style={
+                  if(focused?,
+                    do: "color: var(--text); font-weight: 500;",
+                    else: "color: var(--muted);"
+                  )
+                }
+                phx-click="open-child-task"
+                phx-value-id={child.id}
+              >
+                {child.title}
+              </span>
+              <span
+                class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0 transition-opacity"
+                style="font-size: var(--font-size-xxs); color: var(--dim);"
+              >
+                <button
+                  :if={idx > 0}
+                  phx-click="reorder-child-task"
+                  phx-value-id={child.id}
+                  phx-value-dir="up"
+                  phx-value-swap-id={Enum.at(@pending_tasks, idx - 1).id}
+                  class="cursor-pointer px-0.5 hover:opacity-80"
+                  title="Move up"
+                >
+                  ▲
+                </button>
+                <button
+                  :if={!is_last}
+                  phx-click="reorder-child-task"
+                  phx-value-id={child.id}
+                  phx-value-dir="down"
+                  phx-value-swap-id={Enum.at(@pending_tasks, idx + 1).id}
+                  class="cursor-pointer px-0.5 hover:opacity-80"
+                  title="Move down"
+                >
+                  ▼
+                </button>
+              </span>
+            </div>
+          <% end %>
+        </div>
+
+        <%!-- Merge conflict auto-fix warning --%>
+        <% merge_fix_tasks =
+          Enum.filter(@children, fn c ->
+            String.contains?(c.title || "", "merge conflict")
+          end) %>
+        <details
+          :if={merge_fix_tasks != []}
+          class="mb-4 rounded"
+          style="background: color-mix(in srgb, var(--concocting) 12%, transparent); border: 1px solid color-mix(in srgb, var(--concocting) 30%, transparent); font-size: var(--font-size-sm);"
+        >
+          <summary class="px-3 py-2 cursor-pointer select-none list-none flex items-center gap-1">
+            <span
+              class="merge-arrow inline-block transition-transform duration-150"
+              style="font-size: 0.65em; color: var(--dim);"
+            >
+              ▶
+            </span>
+            <span style="color: var(--concocting); font-weight: 600;">
+              &#x26A0; merge conflicts auto-fixed
+            </span>
+            <span style="color: var(--dim);">
+              &mdash; review decisions
+            </span>
+          </summary>
+          <div
+            class="px-3 pb-2"
+            style="color: var(--fg); border-top: 1px solid color-mix(in srgb, var(--concocting) 20%, transparent);"
+          >
+            <div :for={task <- merge_fix_tasks} class="mt-2">
+              <div :if={task.notes && task.notes != ""}>
+                <pre
+                  class="whitespace-pre-wrap break-words"
+                  style="font-size: var(--font-size-xs); color: var(--muted); line-height: 1.5; margin: 0;"
+                >{task.notes}</pre>
+              </div>
+              <div
+                :if={is_nil(task.notes) || task.notes == ""}
+                style="color: var(--dim); font-size: var(--font-size-xs);"
+              >
+                No resolution notes recorded.
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <%!-- 5. Activity stream (agent output live, or notes as historical stream) --%>
+        <%= if @agent_output != [] do %>
+          <%!-- Live brewer stream --%>
+          <div class="mb-4">
+            <div
+              class="mb-3"
+              style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 12px;"
+            >
+              <span style="color: var(--muted); font-size: var(--font-size-xs);">
+                &mdash; {@brewer_label || "brewer"} assigned to {String.slice(@task.id || "", 0..9)}
+              </span>
+            </div>
+            <div
+              id="agent-output-inline"
+              class="detail-brewer-log"
+              phx-hook="ScrollBottom"
+            >
+              <div :for={line <- Enum.take(@agent_output, -60)}>
+                <.brewer_log_line line={line} />
+              </div>
+            </div>
+            <div :if={@working_agent && @working_agent.status == :working} class="mt-1">
+              <span style="color: var(--concocting); font-size: var(--font-size-sm);">
+                <.braille_spinner id="detail-working-spin" offset={1} /> working...
+              </span>
+            </div>
+          </div>
+        <% else %>
+          <%!-- Historical notes rendered as stream --%>
+          <div :if={@task.notes && @task.notes != ""} class="mb-4">
+            <div
+              class="mb-3"
+              style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 12px;"
+            />
+            <div
+              id="task-notes-stream"
+              class="detail-brewer-log"
+            >
+              <div :for={line <- String.split(@task.notes || "", "\n")}>
+                <.brewer_log_line line={line} />
+              </div>
+            </div>
+            <.copy_button target="#task-notes-stream" />
           </div>
         <% end %>
-      </div>
+
+        <%!-- 6. Oracle Q&A for this worktree --%>
+        <div :if={@worktree_questions != []} class="mb-4">
+          <div style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 12px; margin-bottom: 8px;" />
+          <div :for={q <- @worktree_questions} class="mb-3">
+            <div class="flex items-start gap-2" style="font-size: var(--font-size-sm);">
+              <span style="color: var(--concocting); font-weight: 600; flex-shrink: 0;">?</span>
+              <span style="color: var(--text); font-weight: 500;">{q.title}</span>
+            </div>
+            <div
+              :if={q.notes && q.notes != ""}
+              class="ml-5 mt-1 pl-3"
+              style="border-left: 2px solid var(--border); font-size: var(--font-size-sm); color: var(--dim); white-space: pre-wrap;"
+            >
+              {q.notes}
+            </div>
+          </div>
+        </div>
+
+        <%!-- 7. Actions (only for merge/PR states) --%>
+        <div
+          :if={
+            @loading? || @pending_action || @pr_url ||
+              @task.status in ["brew_done", "done", "closed"] ||
+              @has_preview_config || @dev_server
+          }
+          class="flex items-center gap-3 mb-4 flex-wrap"
+          style="font-size: var(--font-size-sm);"
+        >
+          <%= if @loading? do %>
+            <div class="flex items-center gap-2">
+              <.spinner class="w-3 h-3" />
+              <span style="color: var(--dim);">{loading_label(@loading_action)}</span>
+            </div>
+          <% else %>
+            <%= if @pending_action do %>
+              <span style="color: var(--concocting);">
+                {cond do
+                  match?({:local_merge, _, _}, @pending_action) -> "merge locally (no PR)?"
+                  match?({:direct_merge, _, _}, @pending_action) -> "merge directly?"
+                  true -> "merge this PR?"
+                end}
+              </span>
+              <button phx-click="confirm-merge" class="action-pill">confirm</button>
+              <button phx-click="cancel-merge" class="action-text">cancel</button>
+            <% else %>
+              <%= if @task.status == "merged" do %>
+                <span style="color: var(--bottled);">merged</span>
+              <% end %>
+              <%= if @task.status == "cancelled" do %>
+                <span style="color: var(--dim);">discarded</span>
+              <% end %>
+              <%= if @task.status in ["brew_done", "done", "closed"] and is_nil(@pr_url) do %>
+                <span class="action-pill" phx-click="promote-to-assaying">c create-pr</span>
+                <span class="action-pill" phx-click="local-merge">g git-merge</span>
+                <span class="action-pill" phx-click="show-diff">d diff</span>
+                <span class="action-pill" phx-click="close-task">x close</span>
+              <% end %>
+              <span
+                :if={@pr_url && @task.status not in ["merged", "cancelled"]}
+                class="action-pill"
+                phx-click="merge-pr"
+              >
+                m merge
+              </span>
+              <%!-- Preview button: start dev server + open preview panel --%>
+              <%= cond do %>
+                <% @dev_server && @dev_server.status == :running -> %>
+                  <span
+                    class="action-pill"
+                    phx-click="show-preview"
+                    phx-value-port={@dev_port}
+                  >
+                    p preview :{@dev_port}
+                  </span>
+                <% @dev_server && @dev_server.status == :starting -> %>
+                  <span class="action-pill" style="color: var(--concocting); cursor: default;">
+                    p preview starting...
+                  </span>
+                <% @has_preview_config -> %>
+                  <span class="action-pill" phx-click="preview-worktree">p preview</span>
+                <% true -> %>
+              <% end %>
+            <% end %>
+          <% end %>
+        </div>
+
+        <%!-- 8. PR link --%>
+        <div :if={@pr_url} class="mb-5">
+          <div class="section-header mb-2">PULL REQUEST</div>
+          <a
+            href={@pr_url}
+            target="_blank"
+            style="color: var(--accent); font-size: var(--font-size-sm); text-decoration: none;"
+          >
+            {@pr_url}
+          </a>
+        </div>
+
+        <%!-- 9. Description --%>
+        <div :if={@task.description && @task.description != ""} class="mb-5">
+          <div class="section-header mb-2">DESCRIPTION</div>
+          <%= if @editing_field == :description do %>
+            <.form for={%{}} phx-submit="save-edit">
+              <input type="hidden" name="field" value="description" />
+              <textarea
+                name="value"
+                rows="4"
+                autofocus
+                phx-focus="input-focus"
+                phx-blur="input-blur"
+                class="moonlight-input w-full"
+              >{@task.description}</textarea>
+              <div class="flex items-center gap-2 mt-1">
+                <button type="submit" class="action-pill">save</button>
+                <button type="button" phx-click="cancel-edit" class="action-text">cancel</button>
+              </div>
+            </.form>
+          <% else %>
+            <div
+              phx-click="start-edit"
+              phx-value-field="description"
+              class="cursor-pointer"
+              style="color: var(--dim); font-size: var(--font-size-sm); white-space: pre-wrap;"
+            >
+              {@task.description}
+            </div>
+          <% end %>
+        </div>
       <% end %>
     </div>
     """
@@ -1814,7 +1828,9 @@ defmodule ApothecaryWeb.DashboardComponents do
       <div class="flex items-start justify-between">
         <div class="flex-1 min-w-0">
           <div class="flex items-start gap-2">
-            <span style={"color: #{@status_color}; font-weight: 700; font-size: var(--font-size-title); flex-shrink: 0;"}>?</span>
+            <span style={"color: #{@status_color}; font-weight: 700; font-size: var(--font-size-title); flex-shrink: 0;"}>
+              ?
+            </span>
             <span style="font-size: var(--font-size-title); font-weight: 600; color: var(--text);">
               {@task.title}
             </span>
@@ -2117,7 +2133,9 @@ defmodule ApothecaryWeb.DashboardComponents do
     # Build a lookup from worktree id to worktree for branch name display
     wt_lookup =
       assigns.worktrees_by_status
-      |> Enum.flat_map(fn {_status, groups} -> Enum.map(groups, fn g -> {g.worktree.id, g.worktree} end) end)
+      |> Enum.flat_map(fn {_status, groups} ->
+        Enum.map(groups, fn g -> {g.worktree.id, g.worktree} end)
+      end)
       |> Map.new()
 
     # Build sources: expand each dev server's ports into separate entries
@@ -2142,7 +2160,11 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> Enum.flat_map(fn {id, %{ports: ports}} ->
         wt = Map.get(wt_lookup, id)
         branch = (wt && wt.git_branch) || (wt && wt.title)
-        short_label = if branch, do: branch |> String.replace_leading("worktree/", ""), else: id |> to_string() |> String.replace_leading("wt-", "") |> String.slice(0, 6)
+
+        short_label =
+          if branch,
+            do: branch |> String.replace_leading("worktree/", ""),
+            else: id |> to_string() |> String.replace_leading("wt-", "") |> String.slice(0, 6)
 
         Enum.map(ports, fn %{port: p, name: name} ->
           label = if length(ports) > 1, do: "#{short_label}:#{name}", else: short_label
@@ -2731,7 +2753,10 @@ defmodule ApothecaryWeb.DashboardComponents do
             phx-click="diff-select-file"
             phx-value-idx={idx}
           >
-            <span class={["flex-1 truncate", idx == @diff.selected_file && "font-medium"]} style={"color: #{if idx == @diff.selected_file, do: "var(--text)", else: "var(--dim)"};"}>
+            <span
+              class={["flex-1 truncate", idx == @diff.selected_file && "font-medium"]}
+              style={"color: #{if idx == @diff.selected_file, do: "var(--text)", else: "var(--dim)"};"}
+            >
               {diff_file_name(file.path)}
             </span>
             <span class="shrink-0 tabular-nums" style="font-size: var(--font-size-xxs);">
@@ -2763,18 +2788,30 @@ defmodule ApothecaryWeb.DashboardComponents do
                   style={sbs_row_bg(row, :left)}
                 >
                   <%= if row.type == :hunk do %>
-                    <div class="flex-1 px-2 py-0.5" style="background: rgba(90, 122, 130, 0.12); color: var(--dim); font-style: italic;">
+                    <div
+                      class="flex-1 px-2 py-0.5"
+                      style="background: rgba(90, 122, 130, 0.12); color: var(--dim); font-style: italic;"
+                    >
                       {hunk_label(row.left.text)}
                     </div>
                   <% else %>
-                    <div class="shrink-0 select-none text-right tabular-nums" style="width: 48px; padding: 0 6px; color: var(--muted); opacity: 0.5;">
+                    <div
+                      class="shrink-0 select-none text-right tabular-nums"
+                      style="width: 48px; padding: 0 6px; color: var(--muted); opacity: 0.5;"
+                    >
                       {if(row.left, do: row.left.old_line, else: "")}
                     </div>
                     <div class="shrink-0 text-center select-none" style="width: 16px;">
-                      <span :if={row.left && row.left.type == :del} style="color: var(--error); font-weight: 700;">-</span>
+                      <span
+                        :if={row.left && row.left.type == :del}
+                        style="color: var(--error); font-weight: 700;"
+                      >
+                        -
+                      </span>
                     </div>
                     <div class="flex-1 whitespace-pre" style={sbs_text_style(row.left)}>
-                      {sbs_line_content(row.left)}</div>
+                      {sbs_line_content(row.left)}
+                    </div>
                   <% end %>
                 </div>
               </div>
@@ -2786,18 +2823,30 @@ defmodule ApothecaryWeb.DashboardComponents do
                   style={sbs_row_bg(row, :right)}
                 >
                   <%= if row.type == :hunk do %>
-                    <div class="flex-1 px-2 py-0.5" style="background: rgba(90, 122, 130, 0.12); color: var(--dim); font-style: italic;">
+                    <div
+                      class="flex-1 px-2 py-0.5"
+                      style="background: rgba(90, 122, 130, 0.12); color: var(--dim); font-style: italic;"
+                    >
                       {hunk_label(row.right.text)}
                     </div>
                   <% else %>
-                    <div class="shrink-0 select-none text-right tabular-nums" style="width: 48px; padding: 0 6px; color: var(--muted); opacity: 0.5;">
+                    <div
+                      class="shrink-0 select-none text-right tabular-nums"
+                      style="width: 48px; padding: 0 6px; color: var(--muted); opacity: 0.5;"
+                    >
                       {if(row.right, do: row.right.new_line, else: "")}
                     </div>
                     <div class="shrink-0 text-center select-none" style="width: 16px;">
-                      <span :if={row.right && row.right.type == :add} style="color: var(--accent); font-weight: 700;">+</span>
+                      <span
+                        :if={row.right && row.right.type == :add}
+                        style="color: var(--accent); font-weight: 700;"
+                      >
+                        +
+                      </span>
                     </div>
                     <div class="flex-1 whitespace-pre" style={sbs_text_style(row.right)}>
-                      {sbs_line_content(row.right)}</div>
+                      {sbs_line_content(row.right)}
+                    </div>
                   <% end %>
                 </div>
               </div>

@@ -40,16 +40,21 @@ defmodule Apothecary.DiffParser do
         case line.type do
           :hunk ->
             {old_start, new_start} = parse_hunk_header(line.text)
-            {[Map.merge(line, %{old_line: nil, new_line: nil}) | acc], old_start, new_start, adds, dels}
+
+            {[Map.merge(line, %{old_line: nil, new_line: nil}) | acc], old_start, new_start, adds,
+             dels}
 
           :ctx ->
-            {[Map.merge(line, %{old_line: old_ln, new_line: new_ln}) | acc], old_ln + 1, new_ln + 1, adds, dels}
+            {[Map.merge(line, %{old_line: old_ln, new_line: new_ln}) | acc], old_ln + 1,
+             new_ln + 1, adds, dels}
 
           :add ->
-            {[Map.merge(line, %{old_line: nil, new_line: new_ln}) | acc], old_ln, new_ln + 1, adds + 1, dels}
+            {[Map.merge(line, %{old_line: nil, new_line: new_ln}) | acc], old_ln, new_ln + 1,
+             adds + 1, dels}
 
           :del ->
-            {[Map.merge(line, %{old_line: old_ln, new_line: nil}) | acc], old_ln + 1, new_ln, adds, dels + 1}
+            {[Map.merge(line, %{old_line: old_ln, new_line: nil}) | acc], old_ln + 1, new_ln,
+             adds, dels + 1}
         end
       end)
 
@@ -118,17 +123,34 @@ defmodule Apothecary.DiffParser do
       {:init, []},
       fn line, {mode, acc} ->
         case {mode, line.type} do
-          {:init, :del} -> {:cont, {:del, [line]}}
-          {:init, :add} -> {:cont, {:add, [line]}}
-          {:init, _} -> {:cont, {:init, []}, {:init, [line]}}
-          {:del, :del} -> {:cont, {:del, [line | acc]}}
-          {:del, :add} -> {:cont, {:change, {Enum.reverse(acc), [line]}}}
-          {:del, _} -> {:cont, {:del, Enum.reverse(acc)}, {:init, [line]}}
-          {:add, :add} -> {:cont, {:add, [line | acc]}}
-          {:add, _} -> {:cont, {:add, Enum.reverse(acc)}, {:init, [line]}}
+          {:init, :del} ->
+            {:cont, {:del, [line]}}
+
+          {:init, :add} ->
+            {:cont, {:add, [line]}}
+
+          {:init, _} ->
+            {:cont, {:init, []}, {:init, [line]}}
+
+          {:del, :del} ->
+            {:cont, {:del, [line | acc]}}
+
+          {:del, :add} ->
+            {:cont, {:change, {Enum.reverse(acc), [line]}}}
+
+          {:del, _} ->
+            {:cont, {:del, Enum.reverse(acc)}, {:init, [line]}}
+
+          {:add, :add} ->
+            {:cont, {:add, [line | acc]}}
+
+          {:add, _} ->
+            {:cont, {:add, Enum.reverse(acc)}, {:init, [line]}}
+
           {:change, :add} ->
             {dels, adds} = acc
             {:cont, {:change, {dels, [line | adds]}}}
+
           {:change, _} ->
             {dels, adds} = acc
             {:cont, {:change, {dels, Enum.reverse(adds)}}, {:init, [line]}}

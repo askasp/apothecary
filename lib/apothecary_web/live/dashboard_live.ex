@@ -390,7 +390,9 @@ defmodule ApothecaryWeb.DashboardLive do
           end)
 
         if agent do
-          {tagged_lines, pending} = tag_response_lines(lines, socket.assigns.pending_user_question)
+          {tagged_lines, pending} =
+            tag_response_lines(lines, socket.assigns.pending_user_question)
+
           output = (socket.assigns.agent_output ++ tagged_lines) |> Enum.take(-200)
 
           {:noreply,
@@ -1163,8 +1165,11 @@ defmodule ApothecaryWeb.DashboardLive do
       end
 
     case result do
-      {:ok, _} -> {:noreply, put_flash(socket, :info, "Restarting preview...")}
-      {:error, reason} -> {:noreply, put_flash(socket, :error, "Restart failed: #{inspect(reason)}")}
+      {:ok, _} ->
+        {:noreply, put_flash(socket, :info, "Restarting preview...")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Restart failed: #{inspect(reason)}")}
     end
   end
 
