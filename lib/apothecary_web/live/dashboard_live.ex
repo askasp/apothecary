@@ -1243,6 +1243,32 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("stop-worktree", _params, socket) do
+    worktree_id = socket.assigns.selected_task_id
+
+    # Find the brewer working on this worktree
+    agent =
+      Enum.find(socket.assigns.agents, fn a ->
+        a.current_worktree && to_string(a.current_worktree.id) == to_string(worktree_id)
+      end)
+
+    case agent do
+      nil ->
+        # No active brewer — just requeue the worktree
+        Worktrees.unclaim(worktree_id)
+        {:noreply, put_flash(socket, :info, "Worktree requeued (no active brewer)")}
+
+      %{pid: pid} when is_pid(pid) ->
+        Apothecary.BrewerSupervisor.stop_brewer(pid)
+        Worktrees.unclaim(worktree_id)
+        {:noreply, put_flash(socket, :info, "Brewer stopped, worktree requeued")}
+
+      _ ->
+        {:noreply, put_flash(socket, :error, "Could not stop brewer")}
+    end
+  end
+
+  @impl true
   def handle_event("show-diff", _params, socket) do
     case selected_worktree(socket) do
       nil -> {:noreply, socket}

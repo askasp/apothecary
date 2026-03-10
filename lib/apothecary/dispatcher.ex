@@ -483,7 +483,15 @@ defmodule Apothecary.Dispatcher do
         }
 
       current > target ->
-        {to_stop, to_keep} = Enum.split(pool.agent_pids, current - target)
+        # Prefer stopping idle brewers first so active work isn't interrupted
+        idle_set = MapSet.new(pool.idle_agents)
+
+        sorted_pids =
+          Enum.sort_by(pool.agent_pids, fn pid ->
+            if MapSet.member?(idle_set, pid), do: 0, else: 1
+          end)
+
+        {to_stop, to_keep} = Enum.split(sorted_pids, current - target)
         Enum.each(to_stop, &Apothecary.BrewerSupervisor.stop_brewer/1)
 
         pool = %{

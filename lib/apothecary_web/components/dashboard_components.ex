@@ -1616,11 +1616,11 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </div>
 
-      <%!-- 7. Actions (only for merge/PR states) --%>
+      <%!-- 7. Actions --%>
       <div
         :if={
-          @loading? || @pending_action || @pr_url ||
-            @task.status in ["brew_done", "done", "closed"] ||
+          @loading? || @pending_action || @pr_url || @working_agent ||
+            @task.status in ["brew_done", "done", "closed", "open", "ready", "in_progress", "claimed", "revision_needed"] ||
             @has_preview_config || @dev_server
         }
         class="flex items-center gap-3 mb-4 flex-wrap"
@@ -1649,12 +1649,29 @@ defmodule ApothecaryWeb.DashboardComponents do
             <%= if @task.status == "cancelled" do %>
               <span style="color: var(--dim);">discarded</span>
             <% end %>
+            <%!-- Running worktree: stop + close --%>
+            <%= if @working_agent do %>
+              <span class="action-pill" phx-click="stop-worktree" style="color: var(--danger, #ef4444);">
+                s stop
+              </span>
+            <% end %>
+            <%!-- Idle/queued worktree: requeue + close --%>
+            <%= if is_nil(@working_agent) and @task.status in ["in_progress", "claimed"] do %>
+              <span class="action-pill" phx-click="requeue">r requeue</span>
+            <% end %>
             <%= if @task.status in ["brew_done", "done", "closed"] and is_nil(@pr_url) do %>
               <span class="action-pill" phx-click="promote-to-assaying">c create-pr</span>
               <span class="action-pill" phx-click="local-merge">g git-merge</span>
               <span class="action-pill" phx-click="show-diff">d diff</span>
-              <span class="action-pill" phx-click="close-task">x close</span>
             <% end %>
+            <%!-- Close action for non-terminal states --%>
+            <span
+              :if={@task.status not in ["merged", "cancelled", "pr_open"] and is_nil(@working_agent)}
+              class="action-pill"
+              phx-click="close-task"
+            >
+              x close
+            </span>
             <span
               :if={@pr_url && @task.status not in ["merged", "cancelled"]}
               class="action-pill"
