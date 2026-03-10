@@ -1015,6 +1015,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :adding_task_to, :string, default: nil
   attr :search_mode, :boolean, default: false
   attr :search_query, :string, default: ""
+  attr :questions, :list, default: []
 
   def worktree_tree(assigns) do
     # Map status groups to display categories
@@ -1047,6 +1048,34 @@ defmodule ApothecaryWeb.DashboardComponents do
         {brewing, assaying, queued, bottled, discarded}
       end
 
+    # Build question entries in tree_group format
+    filtered_questions =
+      assigns.questions
+      |> Enum.sort_by(fn q -> q.created_at || "" end, :desc)
+      |> then(fn qs ->
+        if query != "" do
+          Enum.filter(qs, fn q ->
+            title = (q.title || q.id) |> String.downcase()
+            String.contains?(title, query)
+          end)
+        else
+          qs
+        end
+      end)
+
+    # Only show root questions (not follow-ups) in the tree
+    root_questions =
+      Enum.filter(filtered_questions, fn q -> is_nil(q.parent_question_id) end)
+
+    {pending_questions, answered_questions} =
+      Enum.split_with(root_questions, fn q -> q.status in ["open", "in_progress"] end)
+
+    pending_q_entries =
+      Enum.map(pending_questions, fn q -> %{worktree: q, tasks: [], agent: nil, dev_server: nil} end)
+
+    answered_q_entries =
+      Enum.map(answered_questions, fn q -> %{worktree: q, tasks: [], agent: nil, dev_server: nil} end)
+
     assigns =
       assigns
       |> assign(:brewing, brewing)
@@ -1054,6 +1083,8 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> assign(:queued, queued)
       |> assign(:bottled, bottled)
       |> assign(:discarded, discarded)
+      |> assign(:pending_q_entries, pending_q_entries)
+      |> assign(:answered_q_entries, answered_q_entries)
 
     total_count =
       length(brewing) + length(assaying) + length(queued) + length(bottled) + length(discarded)
@@ -1193,9 +1224,43 @@ defmodule ApothecaryWeb.DashboardComponents do
         />
       <% end %>
 
+      <%!-- Questions group --%>
+      <%= if @pending_q_entries != [] || @answered_q_entries != [] do %>
+        <div style="border-top: 1px solid var(--border); margin: 6px 0;" />
+        <%!-- Pending questions (thinking) --%>
+        <.tree_group
+          :if={@pending_q_entries != []}
+          label="questions"
+          count={length(@pending_q_entries)}
+          color="var(--accent)"
+          entries={@pending_q_entries}
+          dot="?"
+          dot_class="dot-pulse"
+          title_color="var(--text)"
+          card_ids={@card_ids}
+          selected_card={@selected_card}
+          adding_task_to={@adding_task_to}
+          animated_header_dot={true}
+        />
+        <%!-- Answered questions --%>
+        <.tree_group
+          :if={@answered_q_entries != []}
+          label={if @pending_q_entries == [], do: "questions", else: nil}
+          count={if @pending_q_entries == [], do: length(@answered_q_entries), else: 0}
+          color="var(--dim)"
+          entries={@answered_q_entries}
+          dot="?"
+          dot_class=""
+          title_color="var(--dim)"
+          card_ids={@card_ids}
+          selected_card={@selected_card}
+          adding_task_to={@adding_task_to}
+        />
+      <% end %>
+
       <%!-- Empty state --%>
       <div
-        :if={@brewing == [] && @assaying == [] && @queued == [] && @bottled == [] && @discarded == []}
+        :if={@brewing == [] && @assaying == [] && @queued == [] && @bottled == [] && @discarded == [] && @pending_q_entries == [] && @answered_q_entries == []}
         class="py-6"
         style="color: var(--muted); font-size: var(--font-size-sm);"
       >
@@ -1313,6 +1378,136 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :follow_up_question_id, :string, default: nil
 
   def worktree_detail(assigns) do
+    # Render question-specific view when kind is "question"
+    if Map.get(assigns.task, :kind) == "question" do
+      question_detail(assigns)
+    else
+      worktree_detail_inner(assigns)
+    end
+  end
+
+  defp question_detail(assigns) do
+    answer = question_answer(assigns.task)
+    time_ago = format_relative_time(assigns.task.created_at)
+    is_thinking = assigns.task.status in ["open", "in_progress"]
+
+    assigns =
+      assigns
+      |> assign(:answer, answer)
+      |> assign(:time_ago, time_ago)
+      |> assign(:is_thinking, is_thinking)
+
+    ~H"""
+    <div class="px-4 py-4 scroll-main overflow-y-auto flex-1">
+      <%!-- Question title --%>
+      <div class="mb-4">
+        <div class="flex items-start justify-between">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span style="color: var(--accent); font-weight: 600; font-size: var(--font-size-title);">?</span>
+              <span style="font-size: var(--font-size-title); font-weight: 600; color: var(--text);">
+                {@task.title}
+              </span>
+            </div>
+            <div
+              class="flex items-center gap-1 mt-1"
+              style="font-size: var(--font-size-xs); color: var(--muted);"
+            >
+              <span>{@task.id}</span>
+              <span :if={@time_ago}>&middot; {@time_ago}</span>
+              <span :if={@task.status == "done"} style="color: var(--accent);">&middot; answered</span>
+              <span :if={@is_thinking} style="color: var(--concocting);">&middot; thinking</span>
+            </div>
+          </div>
+          <button
+            phx-click="deselect-task"
+            class="cursor-pointer flex-shrink-0"
+            style="color: var(--muted); font-size: var(--font-size-xs);"
+          >
+            esc
+          </button>
+        </div>
+      </div>
+
+      <%!-- Answer --%>
+      <%= if @answer != "" do %>
+        <div
+          id={"q-detail-answer-#{@task.id}"}
+          class="px-3 py-3 question-answer"
+          style={[
+            "border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);",
+            "background: color-mix(in srgb, var(--surface) 80%, transparent);",
+            "border-radius: 0 6px 6px 0;",
+            "font-size: var(--font-size-sm); color: var(--dim);",
+            "white-space: pre-wrap; line-height: 1.6;"
+          ]}
+        >
+          {@answer}
+        </div>
+        <div class="mt-2 flex items-center gap-2">
+          <.copy_button target={"#q-detail-answer-#{@task.id}"} />
+          <button
+            phx-click="toggle-follow-up"
+            phx-value-question-id={@task.id}
+            style="color: var(--muted); font-size: var(--font-size-xs);"
+            class="hover:underline cursor-pointer"
+          >
+            follow up
+          </button>
+        </div>
+        <%!-- Follow-up input --%>
+        <%= if @follow_up_question_id == @task.id do %>
+          <form
+            phx-submit="submit-follow-up"
+            id={"follow-up-form-#{@task.id}"}
+            class="mt-3 flex items-center gap-2 px-3 py-2"
+            style="font-size: var(--font-size-sm); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 6px;"
+          >
+            <input type="hidden" name="parent_question_id" value={@task.id} />
+            <span style="color: var(--accent); font-weight: 600;">?</span>
+            <input
+              type="text"
+              name="follow_up_text"
+              placeholder="follow-up question..."
+              autofocus
+              class="flex-1 bg-transparent outline-none"
+              style="color: var(--text); border: none; padding: 2px 0; font-size: var(--font-size-sm);"
+            />
+            <span style="color: var(--muted); font-size: var(--font-size-xs);">
+              enter &middot; esc close
+            </span>
+          </form>
+        <% end %>
+      <% else %>
+        <%!-- Thinking state --%>
+        <div
+          :if={@is_thinking}
+          class="pl-3 flex items-center gap-2 py-4"
+          style="border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); font-size: var(--font-size-sm); color: var(--muted);"
+        >
+          <.braille_spinner id={"q-detail-spin-#{@task.id}"} offset={0} />
+          <span>thinking...</span>
+        </div>
+      <% end %>
+
+      <%!-- Follow-up questions thread --%>
+      <% grouped = group_questions_threaded(@worktree_questions) %>
+      <div :if={grouped != []} class="mt-6">
+        <div style="border-top: 1px solid var(--border); padding-top: 16px; margin-bottom: 8px;" />
+        <div :for={thread <- grouped} class="mb-4">
+          <.question_thread_item
+            :for={q <- thread}
+            q={q}
+            depth={q.__depth__ || 0}
+            follow_up_id={@follow_up_question_id}
+          />
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp worktree_detail_inner(assigns) do
     pr_url = Map.get(assigns.task, :pr_url)
     status_group = task_status_group(assigns.task)
     status_color = group_color(status_group)

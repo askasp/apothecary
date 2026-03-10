@@ -232,7 +232,8 @@ defmodule ApothecaryWeb.DashboardLive do
       build_card_ids(
         worktrees_by_status,
         socket.assigns[:collapsed_done] != false,
-        socket.assigns[:collapsed_discarded] != false
+        socket.assigns[:collapsed_discarded] != false,
+        questions
       )
     )
     |> assign(:known_task_ids, extract_task_ids(task_state.tasks))
@@ -351,12 +352,20 @@ defmodule ApothecaryWeb.DashboardLive do
     # Rebuild groups with updated dev server info
     task_state = scoped_get_state(socket)
     agents = socket.assigns.agents
-    worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
+
+    {questions, task_items} =
+      Enum.split_with(task_state.tasks, fn item ->
+        String.starts_with?(to_string(item.id), "wt-") and
+          Map.get(item, :kind) == "question"
+      end)
+
+    worktrees_by_status = build_worktree_groups(task_items, agents, dev_servers)
 
     socket =
       socket
       |> assign(:dev_servers, dev_servers)
       |> assign(:worktrees_by_status, worktrees_by_status)
+      |> assign(:questions, questions)
       |> rebuild_card_ids(worktrees_by_status)
 
     # Auto-open preview with logs when a dev server enters error state
@@ -3686,7 +3695,7 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  defp build_card_ids(worktrees_by_status, collapsed_done, collapsed_discarded) do
+  defp build_card_ids(worktrees_by_status, collapsed_done, collapsed_discarded, questions \\ []) do
     sort_by_priority = fn entries ->
       entries
       |> Enum.sort_by(fn e -> e.worktree.priority || 99 end)
@@ -3719,7 +3728,12 @@ defmodule ApothecaryWeb.DashboardLive do
         |> Enum.map(fn e -> e.worktree.id end)
       end
 
-    brewing ++ assaying ++ stockroom ++ done ++ discarded
+    question_ids =
+      questions
+      |> Enum.sort_by(fn q -> q.created_at || "" end, :desc)
+      |> Enum.map(& &1.id)
+
+    brewing ++ assaying ++ stockroom ++ done ++ discarded ++ question_ids
   end
 
   defp rebuild_card_ids(socket, worktrees_by_status) do
@@ -3730,7 +3744,8 @@ defmodule ApothecaryWeb.DashboardLive do
       build_card_ids(
         worktrees_by_status,
         socket.assigns.collapsed_done,
-        socket.assigns[:collapsed_discarded] != false
+        socket.assigns[:collapsed_discarded] != false,
+        socket.assigns[:questions] || []
       )
 
     found_idx =
@@ -3947,6 +3962,7 @@ defmodule ApothecaryWeb.DashboardLive do
                       adding_task_to={@adding_task_to}
                       search_mode={@search_mode}
                       search_query={@search_query}
+                      questions={@questions}
                     />
 
                     <%!-- Open existing worktree button --%>
@@ -3992,7 +4008,8 @@ defmodule ApothecaryWeb.DashboardLive do
                         loading_action={@loading_action}
                         worktree_questions={
                           Enum.filter(@questions, fn q ->
-                            Map.get(q, :parent_worktree_id) == @selected_task_id
+                            Map.get(q, :parent_worktree_id) == @selected_task_id or
+                              Map.get(q, :parent_question_id) == @selected_task_id
                           end)
                         }
                         follow_up_question_id={@follow_up_question_id}
