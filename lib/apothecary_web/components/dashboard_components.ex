@@ -2892,7 +2892,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     notes = q.notes || ""
 
     notes
-    |> String.trim_leading("Answer:\n")
+    |> String.replace(~r/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]\s*/, "")
     |> String.trim()
   end
 

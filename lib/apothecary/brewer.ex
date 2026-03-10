@@ -229,7 +229,7 @@ defmodule Apothecary.Brewer do
       answer =
         output
         |> Enum.reject(&String.starts_with?(&1, "[tool: "))
-        |> Enum.join("\n")
+        |> Enum.join("")
         |> String.trim()
 
       Apothecary.Worktrees.add_note(worktree_id, answer)
@@ -1037,8 +1037,8 @@ defmodule Apothecary.Brewer do
       {:ok, %{"type" => "content_block_delta", "delta" => %{"text" => text}}} ->
         [text]
 
-      {:ok, %{"type" => "result", "result" => result}} ->
-        [result]
+      {:ok, %{"type" => "result"}} ->
+        []
 
       {:ok, %{"type" => "tool_use", "tool" => tool}} ->
         ["[tool: #{tool}]"]
