@@ -2454,7 +2454,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           style="border-right: 1px solid var(--border); background: var(--surface);"
         >
           <div
-            class="section-header px-3 py-1.5 flex items-center justify-between"
+            class="section-header px-3 py-1 flex items-center justify-between"
             style="border-bottom: 1px solid var(--border);"
           >
             <span>files ({length(@diff.files)})</span>
@@ -2466,7 +2466,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           <div
             :for={{file, idx} <- Enum.with_index(@diff.files)}
             data-diff-selected={if(idx == @diff.selected_file, do: "true")}
-            class="flex items-center gap-2 px-3 py-1.5 cursor-pointer"
+            class="flex items-center gap-2 px-3 py-1 cursor-pointer"
             style={"font-size: var(--font-size-xs); #{if idx == @diff.selected_file, do: "background: var(--bg); border-left: 2px solid var(--accent);", else: "border-left: 2px solid transparent;"}"}
             phx-click="diff-select-file"
             phx-value-idx={idx}
@@ -2485,7 +2485,7 @@ defmodule ApothecaryWeb.DashboardComponents do
         <div class="flex-1 overflow-auto" id="diff-content-pane">
           <div :if={@current_file} style="font-size: var(--font-size-xs);">
             <div
-              class="sticky top-0 px-4 py-1.5 flex items-center justify-between"
+              class="sticky top-0 px-4 py-1 flex items-center justify-between"
               style="background: var(--surface); border-bottom: 1px solid var(--border); z-index: 1;"
             >
               <span style="color: var(--text); font-weight: 500;">{@current_file.path}</span>
@@ -2494,26 +2494,26 @@ defmodule ApothecaryWeb.DashboardComponents do
                 <span class="ml-1" style="color: var(--error);">-{@current_file.dels}</span>
               </span>
             </div>
-            <div class="flex" style="min-width: max-content;">
+            <div class="flex" style="min-width: max-content; line-height: 18px; font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;">
               <%!-- Left side (old) --%>
-              <div class="flex-1" style="min-width: 0; border-right: 2px solid var(--border);">
+              <div class="flex-1" style="min-width: 0; border-right: 1px solid var(--border);">
                 <div
                   :for={row <- @current_file.rows}
                   class="flex"
                   style={sbs_row_bg(row, :left)}
                 >
                   <%= if row.type == :hunk do %>
-                    <div class="flex-1 px-2 py-0.5" style="background: rgba(90, 122, 130, 0.12); color: var(--dim); font-style: italic;">
+                    <div class="flex-1 px-2" style="background: rgba(90, 122, 130, 0.08); color: var(--dim); font-style: italic; line-height: 22px;">
                       {hunk_label(row.left.text)}
                     </div>
                   <% else %>
-                    <div class="shrink-0 select-none text-right tabular-nums" style="width: 48px; padding: 0 6px; color: var(--muted); opacity: 0.5;">
+                    <div class="shrink-0 select-none text-right tabular-nums" style="width: 36px; padding: 0 4px; color: var(--muted); opacity: 0.5;">
                       {if(row.left, do: row.left.old_line, else: "")}
                     </div>
-                    <div class="shrink-0 text-center select-none" style="width: 16px;">
+                    <div class="shrink-0 text-center select-none" style="width: 12px;">
                       <span :if={row.left && row.left.type == :del} style="color: var(--error); font-weight: 700;">-</span>
                     </div>
-                    <div class="flex-1 whitespace-pre" style={sbs_text_style(row.left)}>
+                    <div class="flex-1 whitespace-pre" style={[sbs_text_style(row.left), "padding: 0 6px 0 0;"]}>
                       {sbs_line_content(row.left)}</div>
                   <% end %>
                 </div>
@@ -2526,17 +2526,17 @@ defmodule ApothecaryWeb.DashboardComponents do
                   style={sbs_row_bg(row, :right)}
                 >
                   <%= if row.type == :hunk do %>
-                    <div class="flex-1 px-2 py-0.5" style="background: rgba(90, 122, 130, 0.12); color: var(--dim); font-style: italic;">
+                    <div class="flex-1 px-2" style="background: rgba(90, 122, 130, 0.08); color: var(--dim); font-style: italic; line-height: 22px;">
                       {hunk_label(row.right.text)}
                     </div>
                   <% else %>
-                    <div class="shrink-0 select-none text-right tabular-nums" style="width: 48px; padding: 0 6px; color: var(--muted); opacity: 0.5;">
+                    <div class="shrink-0 select-none text-right tabular-nums" style="width: 36px; padding: 0 4px; color: var(--muted); opacity: 0.5;">
                       {if(row.right, do: row.right.new_line, else: "")}
                     </div>
-                    <div class="shrink-0 text-center select-none" style="width: 16px;">
+                    <div class="shrink-0 text-center select-none" style="width: 12px;">
                       <span :if={row.right && row.right.type == :add} style="color: var(--accent); font-weight: 700;">+</span>
                     </div>
-                    <div class="flex-1 whitespace-pre" style={sbs_text_style(row.right)}>
+                    <div class="flex-1 whitespace-pre" style={[sbs_text_style(row.right), "padding: 0 6px 0 0;"]}>
                       {sbs_line_content(row.right)}</div>
                   <% end %>
                 </div>
