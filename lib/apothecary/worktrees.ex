@@ -280,6 +280,7 @@ defmodule Apothecary.Worktrees do
          pr_url: nil,
          mcp_servers: attrs[:mcp_servers],
          kind: Map.get(attrs, :kind, "task"),
+         parent_question_id: attrs[:parent_question_id],
          created_at: now,
          updated_at: now,
          blockers: [],
