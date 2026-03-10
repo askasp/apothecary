@@ -2398,7 +2398,8 @@ defmodule ApothecaryWeb.DashboardComponents do
 
     current_file =
       if diff.files != [] do
-        Enum.at(diff.files, diff.selected_file)
+        file = Enum.at(diff.files, diff.selected_file)
+        if file, do: Map.put(file, :rows, Apothecary.DiffParser.to_side_by_side(file.lines))
       end
 
     assigns =
@@ -2480,8 +2481,8 @@ defmodule ApothecaryWeb.DashboardComponents do
           </div>
         </div>
 
-        <%!-- Diff content --%>
-        <div class="flex-1 overflow-y-auto" id="diff-content-pane">
+        <%!-- Diff content (side-by-side) --%>
+        <div class="flex-1 overflow-auto" id="diff-content-pane">
           <div :if={@current_file} style="font-size: var(--font-size-xs);">
             <div
               class="sticky top-0 px-4 py-1.5 flex items-center justify-between"
@@ -2493,27 +2494,53 @@ defmodule ApothecaryWeb.DashboardComponents do
                 <span class="ml-1" style="color: var(--error);">-{@current_file.dels}</span>
               </span>
             </div>
-            <div
-              :for={line <- @current_file.lines}
-              class="flex"
-              style={diff_line_bg(line.type)}
-            >
-              <%!-- Line number gutter --%>
-              <div class="shrink-0 select-none text-right tabular-nums" style={"width: 90px; padding: 0 8px; color: var(--muted); opacity: 0.6; border-right: 1px solid #{if line.type == :hunk, do: "transparent", else: "var(--border)"};"}>
-                <%= if line.type == :hunk do %>
-                  <span style="color: var(--dim); font-style: italic;">{hunk_label(line.text)}</span>
-                <% else %>
-                  <span style="display: inline-block; width: 40px;">{line.old_line || ""}</span>
-                  <span style="display: inline-block; width: 40px;">{line.new_line || ""}</span>
-                <% end %>
+            <div class="flex" style="min-width: max-content;">
+              <%!-- Left side (old) --%>
+              <div class="flex-1" style="min-width: 0; border-right: 2px solid var(--border);">
+                <div
+                  :for={row <- @current_file.rows}
+                  class="flex"
+                  style={sbs_row_bg(row, :left)}
+                >
+                  <%= if row.type == :hunk do %>
+                    <div class="flex-1 px-2 py-0.5" style="background: rgba(90, 122, 130, 0.12); color: var(--dim); font-style: italic;">
+                      {hunk_label(row.left.text)}
+                    </div>
+                  <% else %>
+                    <div class="shrink-0 select-none text-right tabular-nums" style="width: 48px; padding: 0 6px; color: var(--muted); opacity: 0.5;">
+                      {if(row.left, do: row.left.old_line, else: "")}
+                    </div>
+                    <div class="shrink-0 text-center select-none" style="width: 16px;">
+                      <span :if={row.left && row.left.type == :del} style="color: var(--error); font-weight: 700;">-</span>
+                    </div>
+                    <div class="flex-1 whitespace-pre" style={sbs_text_style(row.left)}>
+                      {sbs_line_content(row.left)}</div>
+                  <% end %>
+                </div>
               </div>
-              <%!-- Change indicator --%>
-              <div class="shrink-0 text-center select-none" style="width: 20px;">
-                <span style={diff_indicator_style(line.type)}>{diff_indicator(line.type)}</span>
+              <%!-- Right side (new) --%>
+              <div class="flex-1" style="min-width: 0;">
+                <div
+                  :for={row <- @current_file.rows}
+                  class="flex"
+                  style={sbs_row_bg(row, :right)}
+                >
+                  <%= if row.type == :hunk do %>
+                    <div class="flex-1 px-2 py-0.5" style="background: rgba(90, 122, 130, 0.12); color: var(--dim); font-style: italic;">
+                      {hunk_label(row.right.text)}
+                    </div>
+                  <% else %>
+                    <div class="shrink-0 select-none text-right tabular-nums" style="width: 48px; padding: 0 6px; color: var(--muted); opacity: 0.5;">
+                      {if(row.right, do: row.right.new_line, else: "")}
+                    </div>
+                    <div class="shrink-0 text-center select-none" style="width: 16px;">
+                      <span :if={row.right && row.right.type == :add} style="color: var(--accent); font-weight: 700;">+</span>
+                    </div>
+                    <div class="flex-1 whitespace-pre" style={sbs_text_style(row.right)}>
+                      {sbs_line_content(row.right)}</div>
+                  <% end %>
+                </div>
               </div>
-              <%!-- Line content --%>
-              <div class="flex-1 whitespace-pre" style={diff_text_style(line.type)}>
-                {diff_line_content(line)}</div>
             </div>
           </div>
         </div>
@@ -2541,21 +2568,6 @@ defmodule ApothecaryWeb.DashboardComponents do
     end
   end
 
-  defp diff_line_content(%{type: :hunk, text: text}) do
-    case Regex.run(~r/@@ .+? @@(.*)/, text) do
-      [_, context] -> String.trim(context)
-      _ -> ""
-    end
-  end
-
-  defp diff_line_content(%{type: type, text: text}) when type in [:add, :del] do
-    # Strip the leading +/- since we show it in the indicator column
-    String.slice(text, 1..-1//1)
-  end
-
-  defp diff_line_content(%{text: " " <> rest}), do: rest
-  defp diff_line_content(%{text: text}), do: text
-
   defp hunk_label(text) do
     case Regex.run(~r/@@ -(\d+),?\d* \+(\d+),?\d* @@/, text) do
       [_, old, new] -> "#{old}:#{new}"
@@ -2563,24 +2575,31 @@ defmodule ApothecaryWeb.DashboardComponents do
     end
   end
 
-  defp diff_indicator(:add), do: "+"
-  defp diff_indicator(:del), do: "-"
-  defp diff_indicator(:hunk), do: ""
-  defp diff_indicator(_), do: " "
+  # Side-by-side diff helpers
 
-  defp diff_line_bg(:add), do: "background: rgba(90, 170, 154, 0.08);"
-  defp diff_line_bg(:del), do: "background: rgba(196, 90, 90, 0.08);"
-  defp diff_line_bg(:hunk), do: "background: rgba(90, 122, 130, 0.12);"
-  defp diff_line_bg(_), do: ""
+  defp sbs_row_bg(%{type: :hunk}, _side), do: ""
 
-  defp diff_text_style(:add), do: "color: var(--accent);"
-  defp diff_text_style(:del), do: "color: var(--error);"
-  defp diff_text_style(:hunk), do: "color: var(--dim); font-style: italic;"
-  defp diff_text_style(_), do: "color: var(--text); opacity: 0.7;"
+  defp sbs_row_bg(%{left: nil}, :left), do: "background: rgba(90, 122, 130, 0.04);"
+  defp sbs_row_bg(%{left: %{type: :del}}, :left), do: "background: rgba(196, 90, 90, 0.1);"
+  defp sbs_row_bg(_, :left), do: ""
 
-  defp diff_indicator_style(:add), do: "color: var(--accent); font-weight: 700;"
-  defp diff_indicator_style(:del), do: "color: var(--error); font-weight: 700;"
-  defp diff_indicator_style(_), do: ""
+  defp sbs_row_bg(%{right: nil}, :right), do: "background: rgba(90, 122, 130, 0.04);"
+  defp sbs_row_bg(%{right: %{type: :add}}, :right), do: "background: rgba(90, 170, 154, 0.1);"
+  defp sbs_row_bg(_, :right), do: ""
+
+  defp sbs_text_style(nil), do: ""
+  defp sbs_text_style(%{type: :del}), do: "color: var(--error);"
+  defp sbs_text_style(%{type: :add}), do: "color: var(--accent);"
+  defp sbs_text_style(_), do: "color: var(--text); opacity: 0.7;"
+
+  defp sbs_line_content(nil), do: ""
+
+  defp sbs_line_content(%{type: type, text: text}) when type in [:add, :del] do
+    String.slice(text, 1..-1//1)
+  end
+
+  defp sbs_line_content(%{text: " " <> rest}), do: rest
+  defp sbs_line_content(%{text: text}), do: text
 
   # ── Which-key Help Overlay ───────────────────────────────
 

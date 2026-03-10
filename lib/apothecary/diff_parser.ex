@@ -95,4 +95,80 @@ defmodule Apothecary.DiffParser do
   defp classify_line(" " <> _ = line), do: %{type: :ctx, text: line}
   defp classify_line(""), do: nil
   defp classify_line(line), do: %{type: :ctx, text: line}
+
+  @doc """
+  Convert a file's lines into side-by-side row pairs.
+
+  Returns a list of rows where each row is:
+    %{left: line_or_nil, right: line_or_nil, type: :ctx | :change | :hunk}
+
+  Consecutive del/add blocks are paired together. Unmatched dels get an empty
+  right side and vice versa. Context lines appear on both sides.
+  """
+  def to_side_by_side(lines) do
+    lines
+    |> chunk_by_type()
+    |> Enum.flat_map(&pair_chunk/1)
+  end
+
+  defp chunk_by_type(lines) do
+    # Group consecutive dels and adds together, ctx/hunk lines are standalone
+    Enum.chunk_while(
+      lines,
+      {:init, []},
+      fn line, {mode, acc} ->
+        case {mode, line.type} do
+          {:init, :del} -> {:cont, {:del, [line]}}
+          {:init, :add} -> {:cont, {:add, [line]}}
+          {:init, _} -> {:cont, {:init, []}, {:init, [line]}}
+          {:del, :del} -> {:cont, {:del, [line | acc]}}
+          {:del, :add} -> {:cont, {:change, {Enum.reverse(acc), [line]}}}
+          {:del, _} -> {:cont, {:del, Enum.reverse(acc)}, {:init, [line]}}
+          {:add, :add} -> {:cont, {:add, [line | acc]}}
+          {:add, _} -> {:cont, {:add, Enum.reverse(acc)}, {:init, [line]}}
+          {:change, :add} ->
+            {dels, adds} = acc
+            {:cont, {:change, {dels, [line | adds]}}}
+          {:change, _} ->
+            {dels, adds} = acc
+            {:cont, {:change, {dels, Enum.reverse(adds)}}, {:init, [line]}}
+        end
+      end,
+      fn
+        {:init, []} -> {:cont, []}
+        {:init, [line]} -> {:cont, {:init, [line]}, {:init, []}}
+        {:del, acc} -> {:cont, {:del, Enum.reverse(acc)}, {:init, []}}
+        {:add, acc} -> {:cont, {:add, Enum.reverse(acc)}, {:init, []}}
+        {:change, {dels, adds}} -> {:cont, {:change, {dels, Enum.reverse(adds)}}, {:init, []}}
+      end
+    )
+  end
+
+  defp pair_chunk({:init, [line]}) do
+    case line.type do
+      :hunk -> [%{left: line, right: line, type: :hunk}]
+      :ctx -> [%{left: line, right: line, type: :ctx}]
+      :add -> [%{left: nil, right: line, type: :change}]
+      :del -> [%{left: line, right: nil, type: :change}]
+    end
+  end
+
+  defp pair_chunk({:del, dels}) do
+    Enum.map(dels, fn d -> %{left: d, right: nil, type: :change} end)
+  end
+
+  defp pair_chunk({:add, adds}) do
+    Enum.map(adds, fn a -> %{left: nil, right: a, type: :change} end)
+  end
+
+  defp pair_chunk({:change, {dels, adds}}) do
+    max_len = max(length(dels), length(adds))
+    padded_dels = dels ++ List.duplicate(nil, max_len - length(dels))
+    padded_adds = adds ++ List.duplicate(nil, max_len - length(adds))
+
+    Enum.zip(padded_dels, padded_adds)
+    |> Enum.map(fn {d, a} -> %{left: d, right: a, type: :change} end)
+  end
+
+  defp pair_chunk(_), do: []
 end
