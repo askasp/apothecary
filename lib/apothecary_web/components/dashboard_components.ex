@@ -1063,9 +1063,11 @@ defmodule ApothecaryWeb.DashboardComponents do
         end
       end)
 
-    # Only show root questions (not follow-ups) in the tree
+    # Only show standalone root questions in the tree (not follow-ups or worktree-attached)
     root_questions =
-      Enum.filter(filtered_questions, fn q -> is_nil(q.parent_question_id) end)
+      Enum.filter(filtered_questions, fn q ->
+        is_nil(q.parent_question_id) and is_nil(Map.get(q, :parent_worktree_id))
+      end)
 
     {pending_questions, answered_questions} =
       Enum.split_with(root_questions, fn q -> q.status in ["open", "in_progress"] end)
