@@ -1129,7 +1129,10 @@ defmodule Apothecary.Worktrees do
   defp compute_ready_worktrees(worktrees) do
     # Pre-fetch all worktrees into a status map for O(1) lookups
     wt_status_map = Map.new(worktrees, fn wt -> {wt.id, wt.status} end)
-    Enum.filter(worktrees, &worktree_ready?(&1, wt_status_map))
+
+    worktrees
+    |> Enum.filter(&worktree_ready?(&1, wt_status_map))
+    |> Enum.sort_by(fn wt -> {wt.priority || 99, wt.created_at || ""} end)
   end
 
   defp worktree_ready?(

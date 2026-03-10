@@ -780,9 +780,16 @@ defmodule Apothecary.Brewer do
       try do
         script_exe = System.find_executable("script")
 
+        # Questions get --disallowedTools to enforce read-only behavior
+        question_restriction =
+          if worktree.kind == "question",
+            do: " --disallowedTools Edit,Write,NotebookEdit",
+            else: ""
+
         claude_cmd =
           "'#{claude_exe}' -p \"$APOTHECARY_PROMPT\" " <>
-            "--dangerously-skip-permissions --verbose --output-format stream-json"
+            "--dangerously-skip-permissions --verbose --output-format stream-json" <>
+            question_restriction
 
         {cmd, sandboxed} =
           maybe_sandbox_wrap(claude_cmd, agent.worktree_path, agent.project_dir, agent.id)
