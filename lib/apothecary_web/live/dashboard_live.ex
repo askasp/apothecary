@@ -60,6 +60,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:children, [])
       |> assign(:editing_field, nil)
       |> assign(:editing_child_id, nil)
+      |> assign(:child_task_parent_id, nil)
       |> assign(:working_agent, nil)
       |> assign(:agent_output, [])
       |> assign(:pending_user_question, false)
@@ -951,6 +952,35 @@ defmodule ApothecaryWeb.DashboardLive do
   @impl true
   def handle_event("select-task", %{"id" => id}, socket) do
     {:noreply, push_patch(socket, to: project_path(socket) <> "?task=#{id}")}
+  end
+
+  @impl true
+  def handle_event("open-child-task", %{"id" => task_id}, socket) do
+    # Store the current worktree as parent so we can navigate back
+    parent_id = socket.assigns.selected_task_id
+
+    socket =
+      socket
+      |> assign(:child_task_parent_id, parent_id)
+      |> select_task(task_id)
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("back-to-parent", _params, socket) do
+    parent_id = socket.assigns[:child_task_parent_id]
+
+    socket =
+      if parent_id do
+        socket
+        |> assign(:child_task_parent_id, nil)
+        |> select_task(parent_id)
+      else
+        socket
+      end
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -2251,6 +2281,14 @@ defmodule ApothecaryWeb.DashboardLive do
       socket.assigns.show_help ->
         assign(socket, :show_help, false)
 
+      socket.assigns[:child_task_parent_id] ->
+        # Navigate back to parent worktree from child task view
+        parent_id = socket.assigns.child_task_parent_id
+
+        socket
+        |> assign(:child_task_parent_id, nil)
+        |> select_task(parent_id)
+
       socket.assigns.focused_pane == :detail ->
         assign(socket, :focused_pane, :tree)
 
@@ -3165,6 +3203,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:children, [])
     |> assign(:editing_field, nil)
     |> assign(:editing_child_id, nil)
+    |> assign(:child_task_parent_id, nil)
     |> assign(:working_agent, nil)
     |> assign(:agent_output, [])
     |> assign(:pending_user_question, false)
@@ -3807,19 +3846,26 @@ defmodule ApothecaryWeb.DashboardLive do
                 >
                   <div class="flex-1 overflow-y-auto scroll-main">
                     <%= if @selected_task && @selected_task_id do %>
-                      <.worktree_detail
-                        task={@selected_task}
-                        children={@children}
-                        editing_field={@editing_field}
-                        editing_child_id={@editing_child_id}
-                        working_agent={@working_agent}
-                        agent_output={@agent_output}
-                        dev_server={@dev_servers[@selected_task_id]}
-                        has_preview_config={@has_preview_config}
-                        pending_action={@pending_action}
-                        loading_action={@loading_action}
-                        worktree_questions={[]}
-                      />
+                      <%= if @child_task_parent_id do %>
+                        <.task_detail
+                          task={@selected_task}
+                          parent_id={@child_task_parent_id}
+                        />
+                      <% else %>
+                        <.worktree_detail
+                          task={@selected_task}
+                          children={@children}
+                          editing_field={@editing_field}
+                          editing_child_id={@editing_child_id}
+                          working_agent={@working_agent}
+                          agent_output={@agent_output}
+                          dev_server={@dev_servers[@selected_task_id]}
+                          has_preview_config={@has_preview_config}
+                          pending_action={@pending_action}
+                          loading_action={@loading_action}
+                          worktree_questions={[]}
+                        />
+                      <% end %>
                     <% else %>
                       <div
                         class="h-full flex items-center justify-center"

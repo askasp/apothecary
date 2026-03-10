@@ -1485,7 +1485,12 @@ defmodule ApothecaryWeb.DashboardComponents do
 
       <%!-- 4. Done tasks listed with checkmarks --%>
       <div :if={@done_tasks != []} class="mb-1" style="font-size: var(--font-size-sm);">
-        <div :for={task <- @done_tasks} class="flex items-center gap-2 py-0.5">
+        <div
+          :for={task <- @done_tasks}
+          class="flex items-center gap-2 py-0.5 cursor-pointer hover:opacity-80"
+          phx-click="open-child-task"
+          phx-value-id={task.id}
+        >
           <span style="color: var(--accent);">✓</span>
           <span style="color: var(--muted); text-decoration: line-through;">{task.title}</span>
         </div>
@@ -1493,7 +1498,11 @@ defmodule ApothecaryWeb.DashboardComponents do
 
       <%!-- 5. Active task (highlighted) --%>
       <div :if={@active_task} class="detail-active-task mb-1">
-        <div class="flex items-center gap-2">
+        <div
+          class="flex items-center gap-2 cursor-pointer"
+          phx-click="open-child-task"
+          phx-value-id={@active_task.id}
+        >
           <span style="color: var(--concocting);">
             <.braille_spinner id="detail-active-task-spin" offset={2} />
           </span>
@@ -1510,11 +1519,15 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </div>
 
-      <%!-- 6. Queued tasks — tree chars, no hover --%>
+      <%!-- 6. Queued tasks — tree chars --%>
       <div :if={@pending_tasks != []} class="mb-2" style="font-size: var(--font-size-sm);">
         <%= for {child, idx} <- Enum.with_index(@pending_tasks) do %>
           <% is_last = idx == length(@pending_tasks) - 1 %>
-          <div class="flex items-center gap-2 py-0.5">
+          <div
+            class="flex items-center gap-2 py-0.5 cursor-pointer hover:opacity-80"
+            phx-click="open-child-task"
+            phx-value-id={child.id}
+          >
             <span style="color: var(--border); font-family: monospace; font-size: var(--font-size-xs); width: 16px; text-align: center; flex-shrink: 0;">
               {if is_last, do: "└─", else: "├─"}
             </span>
@@ -1843,6 +1856,100 @@ defmodule ApothecaryWeb.DashboardComponents do
       >
         {@task.description}
       </div>
+    </div>
+    """
+  end
+
+  # Task detail sub-component — shows individual task work details
+  attr :task, :map, required: true
+  attr :parent_id, :string, required: true
+
+  def task_detail(assigns) do
+    status_group = task_status_group(assigns.task)
+    status_color = group_color(status_group)
+    status_dot = group_dot(status_group)
+    time_ago = format_relative_time(assigns.task.created_at)
+
+    assigns =
+      assigns
+      |> assign(:status_group, status_group)
+      |> assign(:status_color, status_color)
+      |> assign(:status_dot, status_dot)
+      |> assign(:time_ago, time_ago)
+
+    ~H"""
+    <div class="px-4 py-4 scroll-main overflow-y-auto flex-1">
+      <%!-- Back to parent --%>
+      <div class="mb-3">
+        <button
+          phx-click="back-to-parent"
+          class="cursor-pointer flex items-center gap-1"
+          style="color: var(--muted); font-size: var(--font-size-xs);"
+        >
+          <span>&larr;</span>
+          <span>back to worktree</span>
+        </button>
+      </div>
+
+      <%!-- Title + Status --%>
+      <div class="mb-4">
+        <div class="flex items-start justify-between">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span style={"color: #{@status_color};"}>{@status_dot}</span>
+              <span style="font-size: var(--font-size-title); font-weight: 600; color: var(--text);">
+                {@task.title}
+              </span>
+            </div>
+            <div
+              class="flex items-center gap-1 mt-1"
+              style="font-size: var(--font-size-xs); color: var(--muted);"
+            >
+              <span>{@task.id}</span>
+              <span>&middot; {@status_group}</span>
+              <span :if={@time_ago}>&middot; {@time_ago}</span>
+            </div>
+          </div>
+          <button
+            phx-click="back-to-parent"
+            class="cursor-pointer flex-shrink-0"
+            style="color: var(--muted); font-size: var(--font-size-xs);"
+          >
+            esc
+          </button>
+        </div>
+      </div>
+
+      <%!-- Description --%>
+      <div :if={@task.description && @task.description != ""} class="mb-4">
+        <div class="section-header mb-2">DESCRIPTION</div>
+        <div style="color: var(--dim); font-size: var(--font-size-sm); white-space: pre-wrap;">
+          {@task.description}
+        </div>
+      </div>
+
+      <%!-- Notes / work log --%>
+      <%= if @task.notes && @task.notes != "" do %>
+        <div class="mb-4">
+          <div class="section-header mb-2">WORK LOG</div>
+          <div
+            id="task-work-log"
+            class="detail-brewer-log"
+          >
+            <div :for={line <- String.split(@task.notes || "", "\n")}>
+              <.brewer_log_line line={line} />
+            </div>
+          </div>
+          <.copy_button target="#task-work-log" />
+        </div>
+      <% else %>
+        <div
+          class="py-6 text-center"
+          style="color: var(--dim); font-size: var(--font-size-sm);"
+        >
+          no work logged for this task yet
+        </div>
+      <% end %>
     </div>
     """
   end
