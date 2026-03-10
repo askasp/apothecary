@@ -16,6 +16,8 @@ defmodule Apothecary.DevServer do
   @topic "dev_servers:updates"
   @max_output_lines 50
   @shutdown_timeout_ms 10_000
+  @health_check_interval_ms 500
+  @health_check_max_attempts 240
 
   # --- Client API ---
 
@@ -237,7 +239,7 @@ defmodule Apothecary.DevServer do
             (server.output ++ lines)
             |> Enum.take(-@max_output_lines)
 
-          server = %{server | output: output, status: :running}
+          server = %{server | output: output}
           state = put_in(state.servers[wt_id], server)
           broadcast_update(wt_id, server)
           {:noreply, state}
@@ -313,6 +315,45 @@ defmodule Apothecary.DevServer do
     end
   end
 
+  # Health check: poll TCP port to detect when the service is actually ready
+  @impl true
+  def handle_info({:health_check, wt_id, port, attempt}, state) do
+    case Map.get(state.servers, wt_id) do
+      %{status: :starting} = server ->
+        if tcp_port_open?(port) do
+          Logger.info("Dev server for #{wt_id} is ready on port #{port}")
+          server = %{server | status: :running}
+          state = put_in(state.servers[wt_id], server)
+          broadcast_update(wt_id, server)
+          {:noreply, state}
+        else
+          if attempt < @health_check_max_attempts do
+            Process.send_after(
+              self(),
+              {:health_check, wt_id, port, attempt + 1},
+              @health_check_interval_ms
+            )
+
+            {:noreply, state}
+          else
+            # Timeout — transition to running anyway so the user can try
+            Logger.warning(
+              "Dev server for #{wt_id} health check timed out after #{attempt} attempts, showing preview anyway"
+            )
+
+            server = %{server | status: :running}
+            state = put_in(state.servers[wt_id], server)
+            broadcast_update(wt_id, server)
+            {:noreply, state}
+          end
+        end
+
+      _ ->
+        # Server is no longer starting (stopped, running, or removed) — stop checking
+        {:noreply, state}
+    end
+  end
+
   @impl true
   def handle_info(msg, state) do
     Logger.debug("DevServer received unexpected message: #{inspect(msg)}")
@@ -356,10 +397,17 @@ defmodule Apothecary.DevServer do
         # Spawn main command as Erlang Port
         case spawn_command(config.command, worktree_path, env) do
           {:ok, port} ->
-            server = %{server | status: :running, port: port}
+            server = %{server | status: :starting, port: port}
             state = put_in(state.servers[wt_id], server)
             state = %{state | port_to_wt: Map.put(state.port_to_wt, port, wt_id)}
             broadcast_update(wt_id, server)
+            # Schedule health check to detect when the port is actually listening
+            Process.send_after(
+              self(),
+              {:health_check, wt_id, base_port, 0},
+              @health_check_interval_ms
+            )
+
             {state, {:ok, base_port}}
 
           {:error, reason} ->
@@ -543,6 +591,19 @@ defmodule Apothecary.DevServer do
       String.contains?(output, "port is already allocated") or
       String.contains?(output, "Address already in use") or
       String.contains?(output, "bind EADDRINUSE")
+  end
+
+  # --- Private: Health Check ---
+
+  defp tcp_port_open?(port) do
+    case :gen_tcp.connect(~c"localhost", port, [], 500) do
+      {:ok, socket} ->
+        :gen_tcp.close(socket)
+        true
+
+      {:error, _} ->
+        false
+    end
   end
 
   # --- Private: Helpers ---
