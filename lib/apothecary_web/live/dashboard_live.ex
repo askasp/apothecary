@@ -2485,6 +2485,23 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
+  defp handle_hotkey("X", socket) do
+    # Abort a running brew — find worktree ID from detail panel or hovered card
+    wt_id = socket.assigns.selected_task_id || selected_card_id(socket.assigns)
+
+    if wt_id && String.starts_with?(to_string(wt_id), "wt-") do
+      case Dispatcher.abort_worktree(wt_id) do
+        :ok ->
+          put_flash(socket, :info, "Brew aborted on #{wt_id}")
+
+        {:error, :not_found} ->
+          put_flash(socket, :error, "No active brew found on #{wt_id}")
+      end
+    else
+      socket
+    end
+  end
+
   defp handle_hotkey("m", socket) do
     task = socket.assigns.selected_task
 
@@ -2727,18 +2744,34 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("J", socket) do
-    # Reorder: move selected worktree down in priority
-    if socket.assigns.selected_task_id do
-      handle_event("change-priority", %{"dir" => "down"}, socket) |> elem(1)
+    # Reorder: move selected item down in priority
+    # Works from detail panel (selected_task_id) or hovered card (selected_card_id)
+    id = socket.assigns.selected_task_id || selected_card_id(socket.assigns)
+
+    if id do
+      task = fetch_priority_task(id, socket)
+      current = (task && task.priority) || 3
+      new_priority = min(current + 1, 4)
+
+      if new_priority != current, do: Worktrees.update_priority(id, new_priority)
+      socket
     else
       socket
     end
   end
 
   defp handle_hotkey("K", socket) do
-    # Reorder: move selected worktree up in priority
-    if socket.assigns.selected_task_id do
-      handle_event("change-priority", %{"dir" => "up"}, socket) |> elem(1)
+    # Reorder: move selected item up in priority
+    # Works from detail panel (selected_task_id) or hovered card (selected_card_id)
+    id = socket.assigns.selected_task_id || selected_card_id(socket.assigns)
+
+    if id do
+      task = fetch_priority_task(id, socket)
+      current = (task && task.priority) || 3
+      new_priority = max(current - 1, 0)
+
+      if new_priority != current, do: Worktrees.update_priority(id, new_priority)
+      socket
     else
       socket
     end
@@ -3308,6 +3341,17 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   # --- Helpers ---
+
+  defp fetch_priority_task(id, socket) do
+    if id == socket.assigns.selected_task_id do
+      socket.assigns.selected_task
+    else
+      case Worktrees.show(id) do
+        {:ok, t} -> t
+        _ -> nil
+      end
+    end
+  end
 
   defp worktree_id_at(card_ids, idx) do
     case Enum.at(card_ids, idx) do
