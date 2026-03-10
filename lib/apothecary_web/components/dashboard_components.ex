@@ -925,7 +925,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     {mode, mode_color, placeholder} =
       cond do
         assigns.worktree_mode ->
-          {"worktree", "var(--reviewing)", "worktree name · esc cancel"}
+          {"draft", "var(--accent)", "draft name · add tasks then start · esc cancel"}
 
         assigns.adding_task_to ->
           {"task", "var(--queued)", "add task to queue · ?question · esc cancel"}
@@ -1012,6 +1012,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     pr = assigns.worktrees_by_status["pr"] || []
     ready = assigns.worktrees_by_status["ready"] || []
     blocked = assigns.worktrees_by_status["blocked"] || []
+    draft = assigns.worktrees_by_status["draft"] || []
     done = assigns.worktrees_by_status["done"] || []
     discarded = assigns.worktrees_by_status["discarded"] || []
 
@@ -1023,7 +1024,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     # Apply search filter
     query = String.downcase(assigns.search_query || "")
 
-    {brewing, assaying, queued, bottled, discarded} =
+    {brewing, assaying, queued, draft, bottled, discarded} =
       if query != "" do
         f = fn entries ->
           Enum.filter(entries, fn e ->
@@ -1032,9 +1033,9 @@ defmodule ApothecaryWeb.DashboardComponents do
           end)
         end
 
-        {f.(brewing), f.(assaying), f.(queued), f.(bottled), f.(discarded)}
+        {f.(brewing), f.(assaying), f.(queued), f.(draft), f.(bottled), f.(discarded)}
       else
-        {brewing, assaying, queued, bottled, discarded}
+        {brewing, assaying, queued, draft, bottled, discarded}
       end
 
     assigns =
@@ -1042,11 +1043,13 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> assign(:brewing, brewing)
       |> assign(:assaying, assaying)
       |> assign(:queued, queued)
+      |> assign(:draft, draft)
       |> assign(:bottled, bottled)
       |> assign(:discarded, discarded)
 
     total_count =
-      length(brewing) + length(assaying) + length(queued) + length(bottled) + length(discarded)
+      length(brewing) + length(assaying) + length(queued) + length(draft) + length(bottled) +
+        length(discarded)
 
     # Count idle agents
     idle_count =
@@ -1070,8 +1073,11 @@ defmodule ApothecaryWeb.DashboardComponents do
         <span :if={@assaying != []} style="color: var(--assaying); font-weight: 600;">
           {length(@assaying)} reviewing
         </span>
+        <span :if={@draft != []} style="color: var(--accent); font-weight: 600;">
+          {length(@draft)} drafts
+        </span>
         <span style="color: var(--muted);">
-          <span :if={@brewing != [] || @assaying != []}>&middot; </span>{@total_count} total
+          <span :if={@brewing != [] || @assaying != [] || @draft != []}>&middot; </span>{@total_count} total
         </span>
         <span :if={@idle_count > 0} style="color: var(--muted);">
           &middot; {@idle_count} idle
@@ -1131,6 +1137,21 @@ defmodule ApothecaryWeb.DashboardComponents do
         adding_task_to={@adding_task_to}
       />
 
+      <%!-- Draft group --%>
+      <.tree_group
+        :if={@draft != []}
+        label="drafts"
+        count={length(@draft)}
+        color="var(--accent)"
+        entries={@draft}
+        dot="◇"
+        dot_class=""
+        title_color="var(--accent)"
+        card_ids={@card_ids}
+        selected_card={@selected_card}
+        adding_task_to={@adding_task_to}
+      />
+
       <%!-- Bottled group (collapsed by default) --%>
       <%= if @bottled != [] do %>
         <div
@@ -1185,7 +1206,7 @@ defmodule ApothecaryWeb.DashboardComponents do
 
       <%!-- Empty state --%>
       <div
-        :if={@brewing == [] && @assaying == [] && @queued == [] && @bottled == [] && @discarded == []}
+        :if={@brewing == [] && @assaying == [] && @queued == [] && @draft == [] && @bottled == [] && @discarded == []}
         class="py-6"
         style="color: var(--muted); font-size: var(--font-size-sm);"
       >
@@ -1620,7 +1641,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       <div
         :if={
           @loading? || @pending_action || @pr_url ||
-            @task.status in ["brew_done", "done", "closed"] ||
+            @task.status in ["brew_done", "done", "closed", "draft"] ||
             @has_preview_config || @dev_server
         }
         class="flex items-center gap-3 mb-4 flex-wrap"
@@ -1648,6 +1669,12 @@ defmodule ApothecaryWeb.DashboardComponents do
             <% end %>
             <%= if @task.status == "cancelled" do %>
               <span style="color: var(--dim);">discarded</span>
+            <% end %>
+            <%= if @task.status == "draft" do %>
+              <span class="action-pill" phx-click="start-draft" style="color: var(--concocting);">
+                ▶ start
+              </span>
+              <span class="action-pill" phx-click="close-task">x close</span>
             <% end %>
             <%= if @task.status in ["brew_done", "done", "closed"] and is_nil(@pr_url) do %>
               <span class="action-pill" phx-click="promote-to-assaying">c create-pr</span>
@@ -2983,6 +3010,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       s when s in ["in_progress", "claimed"] -> "brewing"
       s when s in ["brew_done", "pr_open", "revision_needed"] -> "reviewing"
       "merged" -> "bottled"
+      "draft" -> "draft"
       s when s in ["done", "closed", "cancelled"] -> "discarded"
       _ -> "queued"
     end
@@ -2991,6 +3019,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp group_color("brewing"), do: "var(--concocting)"
   defp group_color("reviewing"), do: "var(--assaying)"
   defp group_color("bottled"), do: "var(--bottled)"
+  defp group_color("draft"), do: "var(--accent)"
   defp group_color("discarded"), do: "var(--dim)"
   defp group_color("queued"), do: "var(--muted)"
   defp group_color(_), do: "var(--dim)"
@@ -2998,6 +3027,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp group_dot("brewing"), do: "◉"
   defp group_dot("reviewing"), do: "◎"
   defp group_dot("bottled"), do: "●"
+  defp group_dot("draft"), do: "◇"
   defp group_dot("discarded"), do: "✕"
   defp group_dot("queued"), do: "○"
   defp group_dot(_), do: "·"

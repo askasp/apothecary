@@ -14,7 +14,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @pubsub Apothecary.PubSub
 
-  @group_order ~w(running ready blocked pr done discarded)
+  @group_order ~w(running ready blocked pr draft done discarded)
 
   @impl true
   def mount(_params, _session, socket) do
@@ -1243,6 +1243,17 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("start-draft", _params, socket) do
+    case Worktrees.update_status(socket.assigns.selected_task_id, "open") do
+      {:ok, _} ->
+        {:noreply, put_flash(socket, :info, "Worktree started — queued for dispatch")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to start: #{inspect(reason)}")}
+    end
+  end
+
+  @impl true
   def handle_event("show-diff", _params, socket) do
     case selected_worktree(socket) do
       nil -> {:noreply, socket}
@@ -1699,6 +1710,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
         case Worktrees.create_worktree(%{
                title: text,
+               status: "draft",
                priority: 3,
                project_id: project_id
              }) do
@@ -1707,7 +1719,7 @@ defmodule ApothecaryWeb.DashboardLive do
              socket
              |> assign(:worktree_mode, false)
              |> select_task(item.id)
-             |> put_flash(:info, "Worktree created: #{text} — add tasks to start")}
+             |> put_flash(:info, "Draft created: #{text} — add tasks then start")}
 
           _ ->
             {:noreply, put_flash(socket, :error, "Failed to create worktree")}
@@ -3332,6 +3344,7 @@ defmodule ApothecaryWeb.DashboardLive do
           wt.status in ["blocked", "merge_conflict"] -> "blocked"
           wt.status == "pr_open" -> "pr"
           wt.status == "revision_needed" -> "ready"
+          wt.status == "draft" -> "draft"
           wt.status == "merged" -> "done"
           wt.status in ["done", "closed", "cancelled"] -> "discarded"
           true -> "ready"
