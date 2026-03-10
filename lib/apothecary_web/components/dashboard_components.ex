@@ -1361,9 +1361,22 @@ defmodule ApothecaryWeb.DashboardComponents do
       |> assign(:done_tasks, done_tasks)
       |> assign(:active_task, active_task)
       |> assign(:pending_tasks, pending_tasks)
+      |> assign(:is_question, Map.get(assigns.task, :kind) == "question")
 
     ~H"""
     <div class="px-4 py-4 scroll-main overflow-y-auto flex-1">
+      <%!-- Question-type worktree: Q&A focused view --%>
+      <%= if @is_question do %>
+        <.question_detail
+          task={@task}
+          working_agent={@working_agent}
+          agent_output={@agent_output}
+          brewer_label={@brewer_label}
+          status_color={@status_color}
+          status_group={@status_group}
+          time_ago={@time_ago}
+        />
+      <% else %>
       <%!-- 1. Title + Status --%>
       <div class="mb-3">
         <div class="flex items-start justify-between">
@@ -1729,6 +1742,106 @@ defmodule ApothecaryWeb.DashboardComponents do
             {@task.description}
           </div>
         <% end %>
+      </div>
+      <% end %>
+    </div>
+    """
+  end
+
+  # Question detail sub-component
+  attr :task, :map, required: true
+  attr :working_agent, :map, default: nil
+  attr :agent_output, :list, default: []
+  attr :brewer_label, :string, default: nil
+  attr :status_color, :string, default: "var(--muted)"
+  attr :status_group, :string, default: "queued"
+  attr :time_ago, :string, default: nil
+
+  defp question_detail(assigns) do
+    ~H"""
+    <%!-- Question header --%>
+    <div class="mb-4">
+      <div class="flex items-start justify-between">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-start gap-2">
+            <span style={"color: #{@status_color}; font-weight: 700; font-size: var(--font-size-title); flex-shrink: 0;"}>?</span>
+            <span style="font-size: var(--font-size-title); font-weight: 600; color: var(--text);">
+              {@task.title}
+            </span>
+          </div>
+          <div
+            class="flex items-center gap-1 mt-1 ml-5"
+            style="font-size: var(--font-size-xs); color: var(--muted);"
+          >
+            <span>{@task.id}</span>
+            <span :if={@brewer_label}>&middot; {@brewer_label}</span>
+            <span :if={@time_ago}>&middot; {@time_ago}</span>
+          </div>
+        </div>
+        <button
+          phx-click="deselect-task"
+          class="cursor-pointer flex-shrink-0"
+          style="color: var(--muted); font-size: var(--font-size-xs);"
+        >
+          esc
+        </button>
+      </div>
+    </div>
+
+    <%!-- Response area --%>
+    <%= if @agent_output != [] do %>
+      <%!-- Live agent stream --%>
+      <div class="mb-4">
+        <div
+          id="agent-output-inline"
+          class="detail-brewer-log"
+          phx-hook="ScrollBottom"
+        >
+          <div :for={line <- Enum.take(@agent_output, -60)}>
+            <.brewer_log_line line={line} />
+          </div>
+        </div>
+        <div :if={@working_agent && @working_agent.status == :working} class="mt-2">
+          <span style="color: var(--concocting); font-size: var(--font-size-sm);">
+            <.braille_spinner id="question-working-spin" offset={1} /> thinking...
+          </span>
+        </div>
+      </div>
+    <% else %>
+      <%!-- Historical response from notes --%>
+      <%= if @task.notes && @task.notes != "" do %>
+        <div class="mb-4">
+          <div
+            id="question-response"
+            class="detail-brewer-log"
+          >
+            <div :for={line <- String.split(@task.notes || "", "\n")}>
+              <.brewer_log_line line={line} />
+            </div>
+          </div>
+          <.copy_button target="#question-response" />
+        </div>
+      <% else %>
+        <div
+          class="py-8 text-center"
+          style="color: var(--dim); font-size: var(--font-size-sm);"
+        >
+          <%= if @status_group == "queued" do %>
+            waiting for an available agent...
+          <% else %>
+            no response yet
+          <% end %>
+        </div>
+      <% end %>
+    <% end %>
+
+    <%!-- Description if present --%>
+    <div :if={@task.description && @task.description != ""} class="mb-4">
+      <div
+        class="pl-5"
+        style="color: var(--dim); font-size: var(--font-size-sm); white-space: pre-wrap; border-left: 2px solid var(--border);"
+      >
+        {@task.description}
       </div>
     </div>
     """
