@@ -42,6 +42,26 @@ defmodule Apothecary.WorktreeManager do
     GenServer.cast(__MODULE__, {:release, worktree_id})
   end
 
+  @doc "List worktree directories on disk for a project. Returns list of {id, path} tuples."
+  def list_on_disk(project_dir) do
+    base = worktrees_dir(project_dir)
+
+    if File.dir?(base) do
+      case File.ls(base) do
+        {:ok, entries} ->
+          entries
+          |> Enum.filter(fn entry -> File.dir?(Path.join(base, entry)) end)
+          |> Enum.sort()
+          |> Enum.map(fn dir_name -> {dir_name, Path.join(base, dir_name)} end)
+
+        _ ->
+          []
+      end
+    else
+      []
+    end
+  end
+
   @doc "Get the worktrees base directory for a project."
   def worktrees_dir(project_dir) do
     # Use a short hash of the expanded path to avoid collisions between

@@ -8,6 +8,7 @@ defmodule ApothecaryWeb.DashboardLive do
     FileTree,
     Git,
     Worktrees,
+    WorktreeManager,
     Dispatcher,
     Projects
   }
@@ -98,6 +99,7 @@ defmodule ApothecaryWeb.DashboardLive do
       # Adopt worktree modal
       |> assign(:show_adopt_worktree, false)
       |> assign(:adopt_worktree_error, nil)
+      |> assign(:adopt_disk_worktrees, [])
       # Pane focus
       |> assign(:focused_pane, :tree)
       # Task inline input
@@ -1986,10 +1988,28 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @impl true
   def handle_event("show-adopt-worktree", _params, socket) do
+    # Scan disk for worktree directories under the current project
+    disk_worktrees =
+      case socket.assigns.current_project do
+        %{path: path} when is_binary(path) ->
+          known_ids =
+            Worktrees.list_worktrees(project_id: socket.assigns.current_project.id)
+            |> MapSet.new(& &1.id)
+
+          WorktreeManager.list_on_disk(path)
+          |> Enum.map(fn {id, full_path} ->
+            %{id: id, path: full_path, tracked: MapSet.member?(known_ids, id)}
+          end)
+
+        _ ->
+          []
+      end
+
     {:noreply,
      assign(socket,
        show_adopt_worktree: true,
-       adopt_worktree_error: nil
+       adopt_worktree_error: nil,
+       adopt_disk_worktrees: disk_worktrees
      )}
   end
 
@@ -4018,6 +4038,7 @@ defmodule ApothecaryWeb.DashboardLive do
       <.adopt_worktree_modal
         :if={@show_adopt_worktree}
         error={@adopt_worktree_error}
+        disk_worktrees={@adopt_disk_worktrees}
       />
     </Layouts.app>
     """

@@ -2393,6 +2393,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   # ── Adopt Worktree Modal ────────────────────────────────
 
   attr :error, :string, default: nil
+  attr :disk_worktrees, :list, default: []
 
   def adopt_worktree_modal(assigns) do
     ~H"""
@@ -2408,21 +2409,46 @@ defmodule ApothecaryWeb.DashboardComponents do
         phx-key="Escape"
       >
         <div class="section-header mb-3">OPEN EXISTING WORKTREE</div>
+
+        <%= if @disk_worktrees != [] do %>
+          <div class="mb-3">
+            <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">
+              worktrees on disk
+            </div>
+            <div
+              class="flex flex-col gap-px overflow-y-auto"
+              style="max-height: 240px; border: 1px solid var(--border);"
+            >
+              <button
+                :for={wt <- @disk_worktrees}
+                type="button"
+                phx-click="adopt-worktree"
+                phx-value-path={wt.path}
+                class={[
+                  "cursor-pointer w-full text-left px-2 py-1.5 transition-colors",
+                  "hover:brightness-125"
+                ]}
+                style="background: var(--surface-raised); font-size: var(--font-size-xs);"
+              >
+                <span style="color: var(--foreground);">{wt.id}</span>
+                <span :if={wt.tracked} style="color: var(--muted);"> (tracked)</span>
+              </button>
+            </div>
+          </div>
+        <% end %>
+
         <form phx-submit="adopt-worktree" id="adopt-worktree-form">
           <div class="mb-3">
             <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">
-              path to worktree directory
+              or enter path manually
             </div>
             <input
               type="text"
               name="path"
               placeholder="~/.apothecary/worktrees/..."
-              autofocus
+              autofocus={@disk_worktrees == []}
               class="moonlight-input w-full"
             />
-          </div>
-          <div class="mb-2" style="color: var(--muted); font-size: var(--font-size-xs);">
-            enter the path to an existing git worktree. if tasks and state are stored in mnesia they will be loaded, otherwise a clean worktree will be created.
           </div>
           <p :if={@error} style="color: var(--error); font-size: var(--font-size-xs);" class="mb-2">
             {@error}
