@@ -369,7 +369,25 @@ defmodule Apothecary.Dispatcher do
           state = %{state | question_pids: MapSet.delete(state.question_pids, pid)}
 
           # Question brewers don't need failure tracking / respawn
+          # but we must clean up the stuck question worktree
           if is_question do
+            if brewer_state do
+              wt = Map.get(brewer_state, :current_worktree)
+
+              if wt do
+                Logger.warning(
+                  "Question brewer crashed, closing question #{wt.id} with error note"
+                )
+
+                Apothecary.Worktrees.add_note(
+                  wt.id,
+                  "Question brewer crashed unexpectedly."
+                )
+
+                Apothecary.Worktrees.close_worktree(wt.id)
+              end
+            end
+
             brewer_projects = Map.delete(state.brewer_projects, pid)
             state = %{state | brewer_projects: brewer_projects}
             put_pool(state, project_id, pool)

@@ -311,14 +311,27 @@ defmodule Apothecary.Brewer do
     end
 
     if state.worktree_id do
-      add_crash_context(
-        state.worktree_id,
-        agent,
-        "Brewer #{agent.id} failed (exit code #{code}).",
-        output
-      )
+      wt = agent.current_worktree
 
-      Apothecary.Worktrees.release_worktree(state.worktree_id)
+      if wt && wt.kind == "question" do
+        # Questions: close with error note so they don't get stuck in "open" forever
+        # (regular dispatch skips questions, so releasing would orphan them)
+        Apothecary.Worktrees.add_note(
+          state.worktree_id,
+          "Failed to answer question (exit code #{code})."
+        )
+
+        Apothecary.Worktrees.close_worktree(state.worktree_id)
+      else
+        add_crash_context(
+          state.worktree_id,
+          agent,
+          "Brewer #{agent.id} failed (exit code #{code}).",
+          output
+        )
+
+        Apothecary.Worktrees.release_worktree(state.worktree_id)
+      end
     end
 
     agent = %{agent | status: :error, output: output}
@@ -360,14 +373,25 @@ defmodule Apothecary.Brewer do
     Port.close(port)
 
     if state.worktree_id do
-      add_crash_context(
-        state.worktree_id,
-        agent,
-        "Brewer #{agent.id} killed by watchdog (stuck for #{div(@stuck_timeout_ms, 60_000)} min).",
-        agent.output
-      )
+      wt = agent.current_worktree
 
-      Apothecary.Worktrees.release_worktree(state.worktree_id)
+      if wt && wt.kind == "question" do
+        Apothecary.Worktrees.add_note(
+          state.worktree_id,
+          "Question timed out (no response for #{div(@stuck_timeout_ms, 60_000)} min)."
+        )
+
+        Apothecary.Worktrees.close_worktree(state.worktree_id)
+      else
+        add_crash_context(
+          state.worktree_id,
+          agent,
+          "Brewer #{agent.id} killed by watchdog (stuck for #{div(@stuck_timeout_ms, 60_000)} min).",
+          agent.output
+        )
+
+        Apothecary.Worktrees.release_worktree(state.worktree_id)
+      end
     end
 
     agent = %{agent | status: :error, output: agent.output ++ ["[Killed by watchdog: stuck]"]}

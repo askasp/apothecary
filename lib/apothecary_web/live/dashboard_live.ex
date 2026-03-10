@@ -1,6 +1,8 @@
 defmodule ApothecaryWeb.DashboardLive do
   use ApothecaryWeb, :live_view
 
+  require Logger
+
   alias Apothecary.{
     Brewer,
     DevServer,
@@ -1691,14 +1693,26 @@ defmodule ApothecaryWeb.DashboardLive do
 
       case Worktrees.create_worktree(attrs) do
         {:ok, item} when not is_nil(item) ->
-          if project_id do
-            Dispatcher.dispatch_question(project_id, item.id)
-          end
+          result =
+            if project_id do
+              Dispatcher.dispatch_question(project_id, item.id)
+            else
+              {:error, :no_project}
+            end
 
-          {:noreply,
-           socket
-           |> assign(:follow_up_question_id, nil)
-           |> put_flash(:info, "Follow-up question submitted")}
+          case result do
+            :ok ->
+              {:noreply,
+               socket
+               |> assign(:follow_up_question_id, nil)
+               |> put_flash(:info, "Follow-up question submitted")}
+
+            {:error, reason} ->
+              Logger.warning("Follow-up question dispatch failed for #{item.id}: #{inspect(reason)}")
+              Worktrees.add_note(item.id, "Failed to dispatch: #{inspect(reason)}")
+              Worktrees.close_worktree(item.id)
+              {:noreply, put_flash(socket, :error, "Follow-up question failed to dispatch")}
+          end
 
         _ ->
           {:noreply, put_flash(socket, :error, "Failed to submit follow-up")}
@@ -3335,11 +3349,23 @@ defmodule ApothecaryWeb.DashboardLive do
       case Worktrees.create_worktree(attrs) do
         {:ok, item} when not is_nil(item) ->
           # Dispatch immediately with a one-off brewer
-          if project_id do
-            Dispatcher.dispatch_question(project_id, item.id)
-          end
+          result =
+            if project_id do
+              Dispatcher.dispatch_question(project_id, item.id)
+            else
+              {:error, :no_project}
+            end
 
-          {:noreply, put_flash(socket, :info, "Question submitted")}
+          case result do
+            :ok ->
+              {:noreply, put_flash(socket, :info, "Question submitted")}
+
+            {:error, reason} ->
+              Logger.warning("Question dispatch failed for #{item.id}: #{inspect(reason)}")
+              Worktrees.add_note(item.id, "Failed to dispatch: #{inspect(reason)}")
+              Worktrees.close_worktree(item.id)
+              {:noreply, put_flash(socket, :error, "Question failed to dispatch")}
+          end
 
         {:ok, nil} ->
           {:noreply, put_flash(socket, :error, "Failed to submit question")}
