@@ -1696,7 +1696,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
       # ? prefix asks a question in the focused worktree's context
       String.starts_with?(text, "?") && socket.assigns.selected_task_id ->
-        create_question_for_worktree(text, socket)
+        create_question_for_worktree(text, images, socket)
 
       # Chat input with a focused worktree: add task
       socket.assigns.selected_task_id ->
@@ -3056,7 +3056,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
   # --- Input handlers ---
 
-  defp create_question_for_worktree(text, socket) do
+  defp create_question_for_worktree(text, images, socket) do
     question_text = text |> String.trim_leading("?") |> String.trim()
 
     if question_text == "" do
@@ -3068,12 +3068,16 @@ defmodule ApothecaryWeb.DashboardLive do
       project_id =
         if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
 
+      description = build_description_with_images("", images)
+
       attrs = %{
         title: question_text,
         kind: "question",
         priority: 2,
         project_id: project_id
       }
+
+      attrs = if description, do: Map.put(attrs, :description, description), else: attrs
 
       attrs =
         if worktree_id, do: Map.put(attrs, :parent_worktree_id, worktree_id), else: attrs
