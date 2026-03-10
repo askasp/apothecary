@@ -1234,13 +1234,17 @@ defmodule ApothecaryWeb.DashboardComponents do
             data-selected={if(selected?, do: "true")}
           >
             <div class="flex items-center gap-1.5">
-              <%!-- Status dot --%>
-              <%= if @animated_header_dot && entry.agent do %>
-                <span style={"color: #{@color}; flex-shrink: 0;"}>
-                  <.braille_spinner id={"wt-spin-#{wt.id}"} offset={card_num * 3} />
-                </span>
+              <%!-- Status dot / question indicator --%>
+              <%= if Map.get(wt, :kind) == "question" do %>
+                <span style={"color: #{@color}; flex-shrink: 0; font-weight: 600;"}>?</span>
               <% else %>
-                <span class={@dot_class} style={"color: #{@color}; flex-shrink: 0;"}>{@dot}</span>
+                <%= if @animated_header_dot && entry.agent do %>
+                  <span style={"color: #{@color}; flex-shrink: 0;"}>
+                    <.braille_spinner id={"wt-spin-#{wt.id}"} offset={card_num * 3} />
+                  </span>
+                <% else %>
+                  <span class={@dot_class} style={"color: #{@color}; flex-shrink: 0;"}>{@dot}</span>
+                <% end %>
               <% end %>
               <%!-- Card number --%>
               <span style="color: var(--muted); font-size: var(--font-size-xs); min-width: 12px;">
@@ -2117,7 +2121,6 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :active_tab, :atom, default: :workbench
   attr :show_project_switcher, :boolean, default: false
   attr :project_count, :integer, default: 0
-  attr :questions, :list, default: []
   attr :agents, :list, default: []
   attr :input_focused, :boolean, default: false
   attr :focused_pane, :atom, default: :tree

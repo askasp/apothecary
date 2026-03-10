@@ -205,14 +205,7 @@ defmodule ApothecaryWeb.DashboardLive do
     dev_servers = socket.assigns[:dev_servers] || %{}
     active_task_ids = active_task_ids_from_agents(agents)
 
-    # Separate questions from task worktrees
-    {questions, task_items} =
-      Enum.split_with(task_state.tasks, fn item ->
-        String.starts_with?(to_string(item.id), "wt-") and
-          Map.get(item, :kind) == "question"
-      end)
-
-    worktrees_by_status = build_worktree_groups(task_items, agents, dev_servers)
+    worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
 
     socket
     |> assign(:stats, task_state.stats)
@@ -232,7 +225,6 @@ defmodule ApothecaryWeb.DashboardLive do
     )
     |> assign(:known_task_ids, extract_task_ids(task_state.tasks))
     |> assign(:project_files, load_project_files(project))
-    |> assign(:questions, questions)
   end
 
   # --- PubSub handlers ---
@@ -258,13 +250,7 @@ defmodule ApothecaryWeb.DashboardLive do
     agents = socket.assigns.agents
     active_task_ids = active_task_ids_from_agents(agents)
 
-    {questions, task_items} =
-      Enum.split_with(state.tasks, fn item ->
-        String.starts_with?(to_string(item.id), "wt-") and
-          Map.get(item, :kind) == "question"
-      end)
-
-    worktrees_by_status = build_worktree_groups(task_items, agents, socket.assigns.dev_servers)
+    worktrees_by_status = build_worktree_groups(state.tasks, agents, socket.assigns.dev_servers)
 
     socket =
       socket
@@ -276,7 +262,6 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:orphan_count, compute_orphan_count(state.tasks, active_task_ids))
       |> assign(:worktrees_by_status, worktrees_by_status)
       |> assign(:known_task_ids, new_ids)
-      |> assign(:questions, questions)
       |> rebuild_card_ids(worktrees_by_status)
 
     socket =
@@ -300,13 +285,7 @@ defmodule ApothecaryWeb.DashboardLive do
     task_state = scoped_get_state(socket)
     dev_servers = socket.assigns.dev_servers
 
-    {questions, task_items} =
-      Enum.split_with(task_state.tasks, fn item ->
-        String.starts_with?(to_string(item.id), "wt-") and
-          Map.get(item, :kind) == "question"
-      end)
-
-    worktrees_by_status = build_worktree_groups(task_items, agents, dev_servers)
+    worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
 
     # Extract per-project swarm state for the currently selected project
     project_status = current_project_swarm_status(socket, status)
@@ -319,7 +298,6 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:agents, agents)
       |> assign(:dispatcher_projects, status[:projects] || %{})
       |> assign(:worktrees_by_status, worktrees_by_status)
-      |> assign(:questions, questions)
       |> rebuild_card_ids(worktrees_by_status)
 
     socket =
@@ -3840,11 +3818,7 @@ defmodule ApothecaryWeb.DashboardLive do
                         has_preview_config={@has_preview_config}
                         pending_action={@pending_action}
                         loading_action={@loading_action}
-                        worktree_questions={
-                          Enum.filter(@questions, fn q ->
-                            Map.get(q, :parent_worktree_id) == @selected_task_id
-                          end)
-                        }
+                        worktree_questions={[]}
                       />
                     <% else %>
                       <div
@@ -3920,7 +3894,6 @@ defmodule ApothecaryWeb.DashboardLive do
           active_tab={@active_tab}
           show_project_switcher={@show_project_switcher}
           project_count={length(@projects)}
-          questions={@questions}
           agents={@agents}
           input_focused={@input_focused}
           focused_pane={@focused_pane}
