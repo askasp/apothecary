@@ -532,7 +532,12 @@ defmodule ApothecaryWeb.DashboardComponents do
         <% @dev_server && @dev_server.status == :starting -> %>
           <span style="color: var(--dim);">preview</span>
           &nbsp;
-          <span style="color: var(--concocting);">
+          <span
+            class="cursor-pointer"
+            style="color: var(--concocting);"
+            phx-click="show-preview"
+            phx-value-port={@port}
+          >
             <.braille_spinner id="preview-start-spinner" offset={0} /> starting...
           </span>
         <% @dev_server && @dev_server.status == :error -> %>
@@ -627,7 +632,12 @@ defmodule ApothecaryWeb.DashboardComponents do
               <% end %>
             </div>
           <% @dev_server && @dev_server.status == :starting -> %>
-            <div class="flex items-center gap-2" style="font-size: var(--font-size-sm);">
+            <div
+              class="flex items-center gap-2 cursor-pointer"
+              style="font-size: var(--font-size-sm);"
+              phx-click="show-preview"
+              phx-value-port={@port}
+            >
               <.spinner class="w-3 h-3" />
               <span style="color: var(--concocting);">starting dev server...</span>
             </div>
@@ -1670,8 +1680,13 @@ defmodule ApothecaryWeb.DashboardComponents do
                   p preview :{@dev_port}
                 </span>
               <% @dev_server && @dev_server.status == :starting -> %>
-                <span class="action-pill" style="color: var(--concocting); cursor: default;">
-                  p preview starting...
+                <span
+                  class="action-pill"
+                  style="color: var(--concocting);"
+                  phx-click="show-preview"
+                  phx-value-port={@dev_port}
+                >
+                  <.braille_spinner id="action-preview-spinner" offset={0} /> p preview starting...
                 </span>
               <% @has_preview_config -> %>
                 <span class="action-pill" phx-click="preview-worktree">p preview</span>
@@ -2027,21 +2042,26 @@ defmodule ApothecaryWeb.DashboardComponents do
             </div>
           </div>
         <% @server_status == :starting -> %>
-          <div class="flex-1 min-h-0 flex items-center justify-center">
-            <div class="text-center">
-              <div style="color: var(--concocting); font-size: 24px;" class="mb-3">
+          <div class="flex-1 min-h-0 flex flex-col">
+            <div class="flex items-center gap-2 px-4 py-3" style="border-bottom: 1px solid var(--border);">
+              <div style="color: var(--concocting); font-size: 18px;">
                 <.braille_spinner id="preview-panel-spinner" offset={0} />
               </div>
               <div style="color: var(--dim); font-size: var(--font-size-sm);">
                 starting preview server...
               </div>
-              <div
-                :if={@output != []}
-                class="mt-3 text-left mx-auto"
-                style="max-width: 400px; font-size: var(--font-size-xs); color: var(--muted); font-family: var(--font-mono);"
-              >
-                {List.last(@output)}
-              </div>
+            </div>
+            <div
+              id="preview-starting-logs"
+              class="flex-1 min-h-0 overflow-y-auto scroll-main px-4 py-2"
+              style="font-size: var(--font-size-xs); color: var(--dim); white-space: pre-wrap; font-family: var(--font-mono);"
+              phx-hook="ScrollBottom"
+            >
+              <%= if @output == [] do %>
+                <span style="color: var(--muted);">waiting for output...</span>
+              <% else %>
+                {Enum.join(@output, "\n")}
+              <% end %>
             </div>
           </div>
         <% @server_status == :running -> %>
