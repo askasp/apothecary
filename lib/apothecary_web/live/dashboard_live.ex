@@ -2337,6 +2337,9 @@ defmodule ApothecaryWeb.DashboardLive do
       socket.assigns.editing_recipe_id ->
         assign(socket, :editing_recipe_id, nil)
 
+      socket.assigns.follow_up_question_id ->
+        assign(socket, :follow_up_question_id, nil)
+
       socket.assigns.editing_field ->
         assign(socket, :editing_field, nil)
 

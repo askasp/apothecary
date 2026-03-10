@@ -2956,26 +2956,34 @@ defmodule ApothecaryWeb.DashboardComponents do
     answer = question_answer(assigns.q)
     is_follow_up_open = assigns.follow_up_id == assigns.q.id
     indent_ml = if assigns.depth > 0, do: "ml-5", else: ""
+    marker = if assigns.depth > 0, do: "○", else: "?"
 
     assigns =
       assigns
       |> assign(:answer, answer)
       |> assign(:is_follow_up_open, is_follow_up_open)
       |> assign(:indent_ml, indent_ml)
+      |> assign(:marker, marker)
 
     ~H"""
     <div class={[@indent_ml, "mb-3"]}>
       <%!-- Question --%>
       <div class="flex items-start gap-2" style="font-size: var(--font-size-sm);">
-        <span style="color: var(--accent); font-weight: 600; flex-shrink: 0;">?</span>
+        <span style="color: var(--accent); font-weight: 600; flex-shrink: 0;">{@marker}</span>
         <span style="color: var(--text); font-weight: 500;">{@q.title}</span>
       </div>
       <%!-- Answer --%>
       <%= if @answer != "" do %>
         <div
           id={"q-answer-#{@q.id}"}
-          class="ml-5 mt-2 pl-3 question-answer"
-          style="border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); font-size: var(--font-size-sm); color: var(--dim); white-space: pre-wrap; line-height: 1.6;"
+          class="ml-5 mt-2 px-3 py-2 question-answer"
+          style={[
+            "border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);",
+            "background: color-mix(in srgb, var(--surface) 80%, transparent);",
+            "border-radius: 0 6px 6px 0;",
+            "font-size: var(--font-size-sm); color: var(--dim);",
+            "white-space: pre-wrap; line-height: 1.6;"
+          ]}
         >
           {@answer}
         </div>
@@ -2994,8 +3002,9 @@ defmodule ApothecaryWeb.DashboardComponents do
         <%= if @is_follow_up_open do %>
           <form
             phx-submit="submit-follow-up"
-            class="ml-5 mt-2 flex items-center gap-2"
-            style="font-size: var(--font-size-sm);"
+            id={"follow-up-form-#{@q.id}"}
+            class="ml-5 mt-2 flex items-center gap-2 px-3 py-2"
+            style="font-size: var(--font-size-sm); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 6px;"
           >
             <input type="hidden" name="parent_question_id" value={@q.id} />
             <span style="color: var(--accent); font-weight: 600;">?</span>
@@ -3005,10 +3014,10 @@ defmodule ApothecaryWeb.DashboardComponents do
               placeholder="follow-up question..."
               autofocus
               class="flex-1 bg-transparent outline-none"
-              style="color: var(--text); border: none; border-bottom: 1px solid var(--border); padding: 4px 0; font-size: var(--font-size-sm);"
+              style="color: var(--text); border: none; padding: 2px 0; font-size: var(--font-size-sm);"
             />
             <span style="color: var(--muted); font-size: var(--font-size-xs);">
-              enter to send · esc to close
+              enter &middot; esc close
             </span>
           </form>
         <% end %>
