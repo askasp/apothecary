@@ -1520,18 +1520,24 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </div>
 
-      <%!-- 6. Queued tasks — tree chars, with reorder buttons --%>
+      <%!-- 6. Queued tasks — tree chars, with J/K reorder --%>
       <div :if={@pending_tasks != []} class="mb-2" style="font-size: var(--font-size-sm);">
         <%= for {child, idx} <- Enum.with_index(@pending_tasks) do %>
           <% is_last = idx == length(@pending_tasks) - 1 %>
-          <div class="flex items-center gap-2 py-0.5 group">
+          <% focused? = @focused_child_idx == idx %>
+          <div
+            class={["flex items-center gap-2 py-0.5 group", focused? && "rounded"]}
+            style={if focused?, do: "background: color-mix(in srgb, var(--concocting) 10%, transparent); margin: 0 -4px; padding-left: 4px; padding-right: 4px;", else: ""}
+          >
             <span style="color: var(--border); font-family: monospace; font-size: var(--font-size-xs); width: 16px; text-align: center; flex-shrink: 0;">
               {if is_last, do: "└─", else: "├─"}
             </span>
-            <span style="color: var(--muted);">○</span>
+            <span style={if(focused?, do: "color: var(--concocting);", else: "color: var(--muted);")}>
+              {if focused?, do: "●", else: "○"}
+            </span>
             <span
               class="cursor-pointer hover:opacity-80 flex-1 min-w-0 truncate"
-              style="color: var(--muted);"
+              style={if(focused?, do: "color: var(--text); font-weight: 500;", else: "color: var(--muted);")}
               phx-click="open-child-task"
               phx-value-id={child.id}
             >

@@ -3284,6 +3284,7 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:children, children)
     |> assign(:editing_field, nil)
     |> assign(:editing_child_id, nil)
+    |> assign(:focused_child_idx, nil)
     |> assign(:working_agent, nil)
     |> assign(:agent_output, [])
     |> assign(:show_preview, false)
