@@ -1,0 +1,55 @@
+#!/bin/sh
+# Hot-reload all changed Elixir modules in the running dev server.
+# Connects to the BEAM node started by bin/dev and triggers recompilation.
+#
+# Usage: bin/hot_reload          — recompile changed modules
+#        bin/hot_reload --force   — purge and recompile everything
+#
+# Works after git merge, git pull, branch switches, or manual edits.
+# No server restart needed for code changes.
+#
+# NOTE: Changes to config/ files or mix.exs deps still require a restart.
+
+set -e
+
+NODE="apothecary_dev@$(hostname -s)"
+COOKIE="apothecary_dev"
+
+FORCE_FLAG="[]"
+if [ "$1" = "--force" ]; then
+  FORCE_FLAG="[force: true]"
+fi
+
+exec elixir --sname "hot_reload_$$" --cookie "$COOKIE" -e "
+target = :\"$NODE\"
+
+unless Node.connect(target) do
+  IO.puts(:stderr, \"Could not connect to \#{target}. Is bin/dev running?\")
+  System.halt(1)
+end
+
+IO.puts(\"Connected to \#{target}\")
+IO.puts(\"Recompiling...\")
+
+case :rpc.call(target, IEx.Helpers, :recompile, [$FORCE_FLAG]) do
+  :noop ->
+    IO.puts(\"No modules needed recompilation.\")
+
+  {:ok, modules, warnings} ->
+    IO.puts(\"Recompiled \#{length(modules)} module(s).\")
+
+    if warnings != [] do
+      IO.puts(\"\#{length(warnings)} warning(s).\")
+    end
+
+  :ok ->
+    IO.puts(\"Recompilation complete.\")
+
+  {:badrpc, reason} ->
+    IO.puts(:stderr, \"RPC failed: \#{inspect(reason)}\")
+    System.halt(1)
+
+  other ->
+    IO.puts(\"Result: \#{inspect(other)}\")
+end
+"

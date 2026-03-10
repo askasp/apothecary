@@ -1,0 +1,10 @@
+#!/bin/sh
+# Start the Phoenix dev server with a named BEAM node.
+# This enables hot_reload to connect and recompile without restarting.
+#
+# Usage: bin/dev
+#
+# Instead of: mix phx.server
+# Use:        bin/dev
+
+exec elixir --sname apothecary_dev --cookie apothecary_dev -S mix phx.server "$@"

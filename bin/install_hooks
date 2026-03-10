@@ -1,0 +1,20 @@
+#!/bin/sh
+# Install git hooks for automatic hot reloading after merge/pull.
+# Run once: bin/install_hooks
+
+set -e
+
+GIT_DIR=$(git rev-parse --git-dir)
+HOOKS_DIR="$GIT_DIR/hooks"
+mkdir -p "$HOOKS_DIR"
+
+cat > "$HOOKS_DIR/post-merge" << 'HOOK'
+#!/bin/sh
+# Auto hot-reload after git merge/pull if the dev server is running.
+echo "[post-merge] Attempting hot reload..."
+bin/hot_reload 2>/dev/null || echo "[post-merge] Dev server not running, skip hot reload."
+HOOK
+
+chmod +x "$HOOKS_DIR/post-merge"
+echo "Installed post-merge hook to $HOOKS_DIR/post-merge"
+echo "After 'git pull' or 'git merge', changed modules will auto-reload."
