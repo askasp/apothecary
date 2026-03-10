@@ -61,6 +61,7 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:editing_field, nil)
       |> assign(:editing_child_id, nil)
       |> assign(:child_task_parent_id, nil)
+      |> assign(:focused_child_idx, nil)
       |> assign(:working_agent, nil)
       |> assign(:agent_output, [])
       |> assign(:pending_user_question, false)
@@ -1445,6 +1446,32 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event(
+        "reorder-child-task",
+        %{"id" => id, "dir" => dir, "swap-id" => swap_id},
+        socket
+      ) do
+    with {:ok, task_a} <- Worktrees.get_task(id),
+         {:ok, task_b} <- Worktrees.get_task(swap_id) do
+      pri_a = task_a.priority || 3
+      pri_b = task_b.priority || 3
+
+      if pri_a == pri_b do
+        # Same priority — nudge to create ordering
+        case dir do
+          "up" -> Worktrees.update_priority(id, max(pri_a - 1, 0))
+          "down" -> Worktrees.update_priority(id, min(pri_a + 1, 4))
+        end
+      else
+        Worktrees.update_priority(id, pri_b)
+        Worktrees.update_priority(swap_id, pri_a)
+      end
+    end
+
+    {:noreply, refresh_selected_task(socket)}
+  end
+
+  @impl true
   def handle_event("start-edit", %{"field" => field}, socket) do
     {:noreply, assign(socket, :editing_field, String.to_existing_atom(field))}
   end
@@ -2310,7 +2337,7 @@ defmodule ApothecaryWeb.DashboardLive do
         assign(socket, :selected_card, min(socket.assigns.selected_card + 1, max_idx))
 
       socket.assigns.focused_pane == :detail ->
-        push_event(socket, "scroll-detail", %{direction: "down"})
+        navigate_child_task(socket, :down)
 
       true ->
         max_idx = max(length(socket.assigns.card_ids) - 1, 0)
@@ -2329,7 +2356,7 @@ defmodule ApothecaryWeb.DashboardLive do
         assign(socket, :selected_card, max(socket.assigns.selected_card - 1, 0))
 
       socket.assigns.focused_pane == :detail ->
-        push_event(socket, "scroll-detail", %{direction: "up"})
+        navigate_child_task(socket, :up)
 
       socket.assigns.selected_card == 0 ->
         socket
@@ -2769,20 +2796,26 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   defp handle_hotkey("J", socket) do
-    # Reorder: move selected worktree down in priority
-    if socket.assigns.selected_task_id do
-      handle_event("change-priority", %{"dir" => "down"}, socket) |> elem(1)
+    if socket.assigns.focused_pane == :detail && socket.assigns.selected_task_id do
+      reorder_child_task(socket, :down)
     else
-      socket
+      if socket.assigns.selected_task_id do
+        handle_event("change-priority", %{"dir" => "down"}, socket) |> elem(1)
+      else
+        socket
+      end
     end
   end
 
   defp handle_hotkey("K", socket) do
-    # Reorder: move selected worktree up in priority
-    if socket.assigns.selected_task_id do
-      handle_event("change-priority", %{"dir" => "up"}, socket) |> elem(1)
+    if socket.assigns.focused_pane == :detail && socket.assigns.selected_task_id do
+      reorder_child_task(socket, :up)
     else
-      socket
+      if socket.assigns.selected_task_id do
+        handle_event("change-priority", %{"dir" => "up"}, socket) |> elem(1)
+      else
+        socket
+      end
     end
   end
 
@@ -3312,6 +3345,81 @@ defmodule ApothecaryWeb.DashboardLive do
       end
 
     assign(socket, :working_agent, agent)
+  end
+
+  # --- Child task navigation & reordering ---
+
+  defp pending_children(socket) do
+    socket.assigns.children
+    |> Enum.filter(fn c -> c.status not in ["done", "closed", "in_progress"] end)
+    |> Enum.sort_by(fn t -> {t.priority || 99, t.created_at || ""} end)
+  end
+
+  defp navigate_child_task(socket, direction) do
+    pending = pending_children(socket)
+
+    if pending == [] do
+      push_event(socket, "scroll-detail", %{direction: to_string(direction)})
+    else
+      current = socket.assigns[:focused_child_idx]
+      max_idx = length(pending) - 1
+
+      new_idx =
+        case {direction, current} do
+          {:down, nil} -> 0
+          {:down, idx} -> min(idx + 1, max_idx)
+          {:up, nil} -> max_idx
+          {:up, 0} -> nil
+          {:up, idx} -> max(idx - 1, 0)
+        end
+
+      assign(socket, :focused_child_idx, new_idx)
+    end
+  end
+
+  defp reorder_child_task(socket, direction) do
+    pending = pending_children(socket)
+    idx = socket.assigns[:focused_child_idx]
+
+    if is_nil(idx) || pending == [] || idx >= length(pending) do
+      socket
+    else
+      task = Enum.at(pending, idx)
+
+      case direction do
+        :down when idx < length(pending) - 1 ->
+          below = Enum.at(pending, idx + 1)
+          swap_priorities(task, below)
+
+          socket
+          |> assign(:focused_child_idx, idx + 1)
+          |> refresh_selected_task()
+
+        :up when idx > 0 ->
+          above = Enum.at(pending, idx - 1)
+          swap_priorities(task, above)
+
+          socket
+          |> assign(:focused_child_idx, idx - 1)
+          |> refresh_selected_task()
+
+        _ ->
+          socket
+      end
+    end
+  end
+
+  defp swap_priorities(task_a, task_b) do
+    pri_a = task_a.priority || 3
+    pri_b = task_b.priority || 3
+
+    if pri_a == pri_b do
+      Worktrees.update_priority(task_a.id, max(pri_a - 1, 0))
+      Worktrees.update_priority(task_b.id, min(pri_b + 1, 4))
+    else
+      Worktrees.update_priority(task_a.id, pri_b)
+      Worktrees.update_priority(task_b.id, pri_a)
+    end
   end
 
   # --- Worktree grouping (card-based) ---
@@ -3864,6 +3972,7 @@ defmodule ApothecaryWeb.DashboardLive do
                           pending_action={@pending_action}
                           loading_action={@loading_action}
                           worktree_questions={[]}
+                          focused_child_idx={@focused_child_idx}
                         />
                       <% end %>
                     <% else %>

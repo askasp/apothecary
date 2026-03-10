@@ -1304,6 +1304,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :loading_action, :atom, default: nil
   attr :editing_child_id, :string, default: nil
   attr :worktree_questions, :list, default: []
+  attr :focused_child_idx, :integer, default: nil
 
   def worktree_detail(assigns) do
     pr_url = Map.get(assigns.task, :pr_url)
@@ -1519,20 +1520,50 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       </div>
 
-      <%!-- 6. Queued tasks — tree chars --%>
+      <%!-- 6. Queued tasks — tree chars, with reorder buttons --%>
       <div :if={@pending_tasks != []} class="mb-2" style="font-size: var(--font-size-sm);">
         <%= for {child, idx} <- Enum.with_index(@pending_tasks) do %>
           <% is_last = idx == length(@pending_tasks) - 1 %>
-          <div
-            class="flex items-center gap-2 py-0.5 cursor-pointer hover:opacity-80"
-            phx-click="open-child-task"
-            phx-value-id={child.id}
-          >
+          <div class="flex items-center gap-2 py-0.5 group">
             <span style="color: var(--border); font-family: monospace; font-size: var(--font-size-xs); width: 16px; text-align: center; flex-shrink: 0;">
               {if is_last, do: "└─", else: "├─"}
             </span>
             <span style="color: var(--muted);">○</span>
-            <span style="color: var(--muted);">{child.title}</span>
+            <span
+              class="cursor-pointer hover:opacity-80 flex-1 min-w-0 truncate"
+              style="color: var(--muted);"
+              phx-click="open-child-task"
+              phx-value-id={child.id}
+            >
+              {child.title}
+            </span>
+            <span
+              class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0 transition-opacity"
+              style="font-size: var(--font-size-xxs); color: var(--dim);"
+            >
+              <button
+                :if={idx > 0}
+                phx-click="reorder-child-task"
+                phx-value-id={child.id}
+                phx-value-dir="up"
+                phx-value-swap-id={Enum.at(@pending_tasks, idx - 1).id}
+                class="cursor-pointer px-0.5 hover:opacity-80"
+                title="Move up"
+              >
+                ▲
+              </button>
+              <button
+                :if={!is_last}
+                phx-click="reorder-child-task"
+                phx-value-id={child.id}
+                phx-value-dir="down"
+                phx-value-swap-id={Enum.at(@pending_tasks, idx + 1).id}
+                class="cursor-pointer px-0.5 hover:opacity-80"
+                title="Move down"
+              >
+                ▼
+              </button>
+            </span>
           </div>
         <% end %>
       </div>
