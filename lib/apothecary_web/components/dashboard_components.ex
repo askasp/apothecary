@@ -2983,6 +2983,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           <div>
             <div style="color: var(--accent);" class="mb-1">input (insert mode)</div>
             <.hk key="b" desc="new worktree" />
+            <.hk key="i" desc="focus input (insert mode)" />
             <.hk key="c / /" desc="chat mode (message brewer)" />
             <.hk key="n" desc="focus input" />
             <.hk key="a" desc="task mode (add to worktree)" />

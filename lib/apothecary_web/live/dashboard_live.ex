@@ -1749,22 +1749,30 @@ defmodule ApothecaryWeb.DashboardLive do
             {:noreply, put_flash(socket, :error, "Failed to create worktree")}
         end
 
-      # Task-add mode: create task in focused worktree (takes priority over ? prefix)
+      # Task-add mode: ? prefix creates question, + prefix stripped, else task
+      socket.assigns.adding_task_to && String.starts_with?(text, "?") ->
+        create_question_for_worktree(text, socket)
+
       socket.assigns.adding_task_to ->
         wt_id = socket.assigns.adding_task_to
+        clean_text = text |> String.trim_leading("+") |> String.trim()
         description = build_description_with_images("", images)
 
-        case Worktrees.create_task(%{
-               title: text,
-               description: description,
-               worktree_id: wt_id,
-               priority: 3
-             }) do
-          {:ok, item} when not is_nil(item) ->
-            {:noreply, put_flash(socket, :info, "Task added: #{item.title}")}
+        if clean_text != "" do
+          case Worktrees.create_task(%{
+                 title: clean_text,
+                 description: description,
+                 worktree_id: wt_id,
+                 priority: 3
+               }) do
+            {:ok, item} when not is_nil(item) ->
+              {:noreply, put_flash(socket, :info, "Task added: #{item.title}")}
 
-          _ ->
-            {:noreply, put_flash(socket, :error, "Failed to add task")}
+            _ ->
+              {:noreply, put_flash(socket, :error, "Failed to add task")}
+          end
+        else
+          {:noreply, socket}
         end
 
       # Active agent with + prefix: force task creation
@@ -1790,6 +1798,10 @@ defmodule ApothecaryWeb.DashboardLive do
           {:noreply, socket}
         end
 
+      # Active agent with ? prefix: create question instead of sending to agent
+      socket.assigns.working_agent && String.starts_with?(text, "?") ->
+        create_question_for_worktree(text, socket)
+
       # Active agent: send as instruction to brewer
       socket.assigns.working_agent ->
         send_to_agent(text, images, socket)
@@ -1798,22 +1810,27 @@ defmodule ApothecaryWeb.DashboardLive do
       String.starts_with?(text, "?") && socket.assigns.selected_task_id ->
         create_question_for_worktree(text, socket)
 
-      # Chat input with a focused worktree: add task
+      # Chat input with a focused worktree: add task (strip + prefix)
       socket.assigns.selected_task_id ->
         wt_id = socket.assigns.selected_task_id
+        clean_text = text |> String.trim_leading("+") |> String.trim()
         description = build_description_with_images("", images)
 
-        case Worktrees.create_task(%{
-               title: text,
-               description: description,
-               worktree_id: wt_id,
-               priority: 3
-             }) do
-          {:ok, item} when not is_nil(item) ->
-            {:noreply, put_flash(socket, :info, "Task queued: #{item.title}")}
+        if clean_text != "" do
+          case Worktrees.create_task(%{
+                 title: clean_text,
+                 description: description,
+                 worktree_id: wt_id,
+                 priority: 3
+               }) do
+            {:ok, item} when not is_nil(item) ->
+              {:noreply, put_flash(socket, :info, "Task queued: #{item.title}")}
 
-          _ ->
-            {:noreply, put_flash(socket, :error, "Failed to queue task")}
+            _ ->
+              {:noreply, put_flash(socket, :error, "Failed to queue task")}
+          end
+        else
+          {:noreply, socket}
         end
 
       true ->
@@ -2578,6 +2595,13 @@ defmodule ApothecaryWeb.DashboardLive do
     socket
     |> assign(:adding_task_to, nil)
     |> assign(:worktree_mode, false)
+    |> assign(:focused_pane, :detail)
+    |> push_event("focus-primary-input", %{})
+  end
+
+  defp handle_hotkey("i", socket) do
+    # Vim-style insert mode: focus the input
+    socket
     |> assign(:focused_pane, :detail)
     |> push_event("focus-primary-input", %{})
   end
