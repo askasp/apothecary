@@ -10,7 +10,7 @@ defmodule Apothecary.DevServer do
   use GenServer
   require Logger
 
-  alias Apothecary.DevConfig
+  alias Apothecary.{DevConfig, PortProcess}
 
   @pubsub Apothecary.PubSub
   @topic "dev_servers:updates"
@@ -425,52 +425,11 @@ defmodule Apothecary.DevServer do
     end
   end
 
-  defp run_setup(nil, _path, _env), do: :ok
-  defp run_setup("", _path, _env), do: :ok
+  defp run_setup(setup_cmd, worktree_path, env),
+    do: PortProcess.run_setup(setup_cmd, worktree_path, env)
 
-  defp run_setup(setup_cmd, worktree_path, env) do
-    Logger.info("DevServer running setup: #{setup_cmd} in #{worktree_path}")
-
-    try do
-      case System.cmd("sh", ["-c", setup_cmd],
-             cd: worktree_path,
-             env: env,
-             stderr_to_stdout: true
-           ) do
-        {output, 0} ->
-          Logger.info("DevServer setup completed: #{String.slice(output, 0, 200)}")
-          :ok
-
-        {output, code} ->
-          {:error, "exit code #{code}: #{String.slice(output, 0, 500)}"}
-      end
-    rescue
-      e -> {:error, Exception.message(e)}
-    end
-  end
-
-  defp spawn_command(command, worktree_path, env) do
-    sh = System.find_executable("sh") || "/bin/sh"
-
-    charlist_env = Enum.map(env, fn {k, v} -> {String.to_charlist(k), String.to_charlist(v)} end)
-
-    try do
-      port =
-        Port.open({:spawn_executable, sh}, [
-          :binary,
-          :exit_status,
-          :use_stdio,
-          :stderr_to_stdout,
-          {:args, ["-c", command]},
-          {:env, charlist_env},
-          {:cd, to_charlist(worktree_path)}
-        ])
-
-      {:ok, port}
-    rescue
-      e -> {:error, Exception.message(e)}
-    end
-  end
+  defp spawn_command(command, worktree_path, env),
+    do: PortProcess.spawn_command(command, worktree_path, env)
 
   # --- Private: Stop ---
 
@@ -567,44 +526,12 @@ defmodule Apothecary.DevServer do
 
   # --- Private: Error Diagnosis ---
 
-  defp diagnose_error(code, output, base_port) do
-    output_text = Enum.join(output, "\n")
-
-    cond do
-      port_conflict?(output_text) ->
-        "Port conflict (port #{base_port} already in use). Exit code #{code}"
-
-      String.contains?(output_text, "ENOENT") ->
-        "Command not found. Exit code #{code}"
-
-      String.contains?(output_text, "permission denied") ->
-        "Permission denied. Exit code #{code}"
-
-      true ->
-        "Process exited with code #{code}"
-    end
-  end
-
-  defp port_conflict?(output) do
-    String.contains?(output, "EADDRINUSE") or
-      String.contains?(output, "address already in use") or
-      String.contains?(output, "port is already allocated") or
-      String.contains?(output, "Address already in use") or
-      String.contains?(output, "bind EADDRINUSE")
-  end
+  defp diagnose_error(code, output, base_port),
+    do: PortProcess.diagnose_error(code, output, base_port)
 
   # --- Private: Health Check ---
 
-  defp tcp_port_open?(port) do
-    case :gen_tcp.connect(~c"localhost", port, [], 500) do
-      {:ok, socket} ->
-        :gen_tcp.close(socket)
-        true
-
-      {:error, _} ->
-        false
-    end
-  end
+  defp tcp_port_open?(port), do: PortProcess.tcp_port_open?(port)
 
   # --- Private: Helpers ---
 

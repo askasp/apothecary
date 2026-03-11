@@ -49,6 +49,17 @@ config :apothecary,
   claude_path: System.get_env("APOTHECARY_CLAUDE_PATH", "claude"),
   auto_pr: auto_pr
 
+# Platform mode: enables deployments + Caddy reverse proxy integration.
+# Activated by PLATFORM_MODE=true (domain per distillery) and/or PLATFORM_DOMAIN
+# (shared root domain for auto-generated hostnames).
+if System.get_env("PLATFORM_MODE") in ["true", "1"] or System.get_env("PLATFORM_DOMAIN") do
+  config :apothecary, :platform_mode, true
+
+  if platform_domain = System.get_env("PLATFORM_DOMAIN") do
+    config :apothecary, :platform_domain, platform_domain
+  end
+end
+
 if config_env() == :prod do
   # Generate a default SECRET_KEY_BASE for local-tool use.
   # Apothecary is a local dev tool, not a public-facing server,

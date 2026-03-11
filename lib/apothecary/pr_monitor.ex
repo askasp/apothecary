@@ -56,6 +56,10 @@ defmodule Apothecary.PRMonitor do
         Apothecary.Worktrees.add_note(wt.id, "PR merged: #{wt.pr_url}")
         Apothecary.Worktrees.cleanup_merged_worktree(wt.id)
 
+        if Apothecary.platform_mode?() do
+          Apothecary.DeploymentServer.rebuild_for_branch(wt.project_id, "main")
+        end
+
       {:ok, %{"state" => "OPEN", "reviewDecision" => "CHANGES_REQUESTED"}} ->
         Logger.info("PRMonitor: Changes requested on #{wt.id}, marking for revision")
         Apothecary.Worktrees.add_note(wt.id, "PR changes requested — re-dispatching brewer")

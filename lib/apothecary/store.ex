@@ -10,7 +10,8 @@ defmodule Apothecary.Store do
     :apothecary_tasks,
     :apothecary_recipes,
     :apothecary_settings,
-    :apothecary_project_context
+    :apothecary_project_context,
+    :apothecary_deployments
   ]
 
   def start_link(opts \\ []) do
@@ -90,6 +91,13 @@ defmodule Apothecary.Store do
     create_table(:apothecary_project_context,
       attributes: [:key, :project_id, :data],
       index: [:project_id],
+      copies_type: copies_type,
+      node: node
+    )
+
+    create_table(:apothecary_deployments,
+      attributes: [:id, :project_id, :name, :branch, :status, :base_port, :data],
+      index: [:project_id, :status],
       copies_type: copies_type,
       node: node
     )

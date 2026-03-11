@@ -152,6 +152,10 @@ defmodule Apothecary.WorktreeManager do
       {%{path: path, branch: branch, project_dir: proj_dir}, new_worktrees} ->
         Logger.info("Releasing worktree for #{worktree_id}: #{path}")
 
+        if Apothecary.platform_mode?() do
+          Apothecary.CaddyManager.remove_route("preview-#{worktree_id}")
+        end
+
         case Apothecary.Git.remove_worktree(proj_dir, path) do
           {:ok, _} ->
             Logger.info("Successfully removed worktree #{worktree_id} at #{path}")

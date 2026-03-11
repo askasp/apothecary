@@ -3,6 +3,7 @@ defmodule ApothecaryWeb.DashboardLive do
 
   alias Apothecary.{
     Brewer,
+    Deployments,
     DevServer,
     DiffParser,
     FileTree,
@@ -25,6 +26,11 @@ defmodule ApothecaryWeb.DashboardLive do
       Dispatcher.subscribe()
       DevServer.subscribe()
       Projects.subscribe()
+
+      if Apothecary.platform_mode?() do
+        Deployments.subscribe()
+        Apothecary.DeploymentServer.subscribe()
+      end
     end
 
     dispatcher_status = Dispatcher.status()
@@ -116,6 +122,13 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:show_preview_help, false)
       # Theme (actual value set from client via ThemePersist hook)
       |> assign(:theme, "studio")
+      # Platform mode (deployments)
+      |> assign(:platform_mode, Apothecary.platform_mode?())
+      |> assign(:deployments, [])
+      |> assign(:deployment_runtimes, %{})
+      |> assign(:selected_deployment_id, nil)
+      |> assign(:show_deployment_form, false)
+      |> assign(:editing_deployment_env, nil)
       # Load state (will be refined in handle_params)
       |> load_dashboard_state(nil)
 
@@ -241,6 +254,15 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:known_task_ids, extract_task_ids(task_state.tasks))
     |> assign(:project_files, load_project_files(project))
     |> assign(:questions, questions)
+    |> load_deployments(project)
+  end
+
+  defp load_deployments(socket, project) do
+    if socket.assigns.platform_mode && project do
+      assign(socket, :deployments, Deployments.list(project.id))
+    else
+      assign(socket, :deployments, [])
+    end
   end
 
   # --- PubSub handlers ---
@@ -388,6 +410,35 @@ defmodule ApothecaryWeb.DashboardLive do
       end
 
     {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:deployment_update, deployment}, socket) do
+    deployments =
+      socket.assigns.deployments
+      |> Enum.reject(&(&1.id == deployment.id))
+      |> then(fn list ->
+        if socket.assigns.current_project &&
+             deployment.project_id == socket.assigns.current_project.id do
+          [deployment | list] |> Enum.sort_by(& &1.name)
+        else
+          list
+        end
+      end)
+
+    {:noreply, assign(socket, :deployments, deployments)}
+  end
+
+  @impl true
+  def handle_info({:deployment_deleted, deployment}, socket) do
+    deployments = Enum.reject(socket.assigns.deployments, &(&1.id == deployment.id))
+    {:noreply, assign(socket, :deployments, deployments)}
+  end
+
+  @impl true
+  def handle_info({:deployment_server_update, info}, socket) do
+    runtimes = Map.put(socket.assigns.deployment_runtimes, info.deployment_id, info)
+    {:noreply, assign(socket, :deployment_runtimes, runtimes)}
   end
 
   @impl true
@@ -2260,6 +2311,142 @@ defmodule ApothecaryWeb.DashboardLive do
     {:noreply, assign(socket, :recipes, Worktrees.list_recipes())}
   end
 
+  # --- Deployment (Distillery) event handlers ---
+
+  @impl true
+  def handle_event("show-deployment-form", _params, socket) do
+    {:noreply, assign(socket, :show_deployment_form, true)}
+  end
+
+  @impl true
+  def handle_event("cancel-deployment-form", _params, socket) do
+    {:noreply, assign(socket, :show_deployment_form, false)}
+  end
+
+  @impl true
+  def handle_event("create-deployment", %{"name" => name, "branch" => branch} = params, socket) do
+    project = socket.assigns.current_project
+    domain = params["domain"]
+    domain = if domain == "", do: nil, else: domain
+
+    if project do
+      case Deployments.create(project.id, %{name: name, branch: branch, domain: domain}) do
+        {:ok, _dep} ->
+          {:noreply,
+           socket
+           |> assign(:show_deployment_form, false)
+           |> assign(:deployments, Deployments.list(project.id))}
+
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Failed to create deployment: #{inspect(reason)}")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("delete-deployment", %{"id" => id}, socket) do
+    if Apothecary.platform_mode?() do
+      try do
+        Apothecary.DeploymentServer.stop_deployment(id)
+      catch
+        _, _ -> :ok
+      end
+    end
+
+    Deployments.delete(id)
+    project = socket.assigns.current_project
+    deployments = if project, do: Deployments.list(project.id), else: []
+    {:noreply, assign(socket, :deployments, deployments)}
+  end
+
+  @impl true
+  def handle_event("start-deployment", %{"id" => id}, socket) do
+    case Apothecary.DeploymentServer.start_deployment(id) do
+      :ok -> {:noreply, socket}
+      {:error, reason} -> {:noreply, put_flash(socket, :error, "Start failed: #{inspect(reason)}")}
+    end
+  end
+
+  @impl true
+  def handle_event("stop-deployment", %{"id" => id}, socket) do
+    Apothecary.DeploymentServer.stop_deployment(id)
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("rebuild-deployment", %{"id" => id}, socket) do
+    case Apothecary.DeploymentServer.rebuild(id) do
+      :ok -> {:noreply, socket}
+      {:error, reason} -> {:noreply, put_flash(socket, :error, "Rebuild failed: #{inspect(reason)}")}
+    end
+  end
+
+  @impl true
+  def handle_event("select-deployment", %{"id" => id}, socket) do
+    {:noreply, assign(socket, :selected_deployment_id, id)}
+  end
+
+  @impl true
+  def handle_event("edit-deployment-env", %{"id" => id}, socket) do
+    {:noreply, assign(socket, :editing_deployment_env, id)}
+  end
+
+  @impl true
+  def handle_event("close-deployment-env", _params, socket) do
+    {:noreply, assign(socket, :editing_deployment_env, nil)}
+  end
+
+  @impl true
+  def handle_event("save-deployment-env", %{"id" => id, "key" => key, "value" => value}, socket) do
+    case Deployments.set_env_var(id, key, value) do
+      {:ok, _} -> {:noreply, socket}
+      {:error, reason} -> {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
+    end
+  end
+
+  @impl true
+  def handle_event("delete-deployment-env", %{"id" => id, "key" => key}, socket) do
+    case Deployments.delete_env_var(id, key) do
+      {:ok, _} -> {:noreply, socket}
+      {:error, reason} -> {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
+    end
+  end
+
+  @impl true
+  def handle_event("generate-preview-url", %{"worktree_id" => wt_id}, socket) do
+    if Apothecary.platform_mode?() do
+      domain = Apothecary.platform_domain()
+      project = socket.assigns.current_project
+
+      with %{} <- project,
+           {:ok, %{branch: branch}} <- WorktreeManager.get_worktree_info(wt_id),
+           dev_server when not is_nil(dev_server) <- socket.assigns.dev_servers[wt_id] do
+        slug =
+          project.name
+          |> String.downcase()
+          |> String.replace(~r/[^a-z0-9-]/, "-")
+          |> String.trim("-")
+
+        hostname = Apothecary.CaddyManager.build_preview_hostname(branch, slug, domain)
+        target_port = dev_server.base_port
+
+        case Apothecary.CaddyManager.add_route("preview-#{wt_id}", hostname, target_port) do
+          :ok ->
+            {:noreply, put_flash(socket, :info, "Preview URL: https://#{hostname}")}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Failed to add route: #{inspect(reason)}")}
+        end
+      else
+        _ -> {:noreply, put_flash(socket, :error, "Cannot generate URL")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
   defp parse_priority(nil), do: 3
   defp parse_priority(""), do: 3
   defp parse_priority(s) when is_binary(s), do: String.to_integer(s)
@@ -4069,6 +4256,14 @@ defmodule ApothecaryWeb.DashboardLive do
                       show_preview_help={@show_preview_help}
                     />
 
+                    <.distillery_section
+                      :if={@platform_mode && @current_project}
+                      deployments={@deployments}
+                      deployment_runtimes={@deployment_runtimes}
+                      selected_deployment_id={@selected_deployment_id}
+                      show_deployment_form={@show_deployment_form}
+                    />
+
                     <.worktree_tree
                       worktrees_by_status={@worktrees_by_status}
                       agents={@agents}
@@ -4212,6 +4407,7 @@ defmodule ApothecaryWeb.DashboardLive do
           agents={@agents}
           input_focused={@input_focused}
           focused_pane={@focused_pane}
+          platform_mode={@platform_mode}
         />
       </div>
 

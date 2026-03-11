@@ -70,8 +70,9 @@ config :phoenix, :stacktrace_depth, 20
 # Initialize plugs at runtime for faster development compilation
 config :phoenix, :plug_init_mode, :runtime
 
-# Use RAM-only Mnesia in dev so mix phx.server works without disc schema setup
-config :apothecary, mnesia_copies: :ram_copies
+# Use disc_copies so Mnesia data persists across dev restarts
+# Data stored in ~/.apothecary/data/
+config :apothecary, mnesia_copies: :disc_copies
 
 config :phoenix_live_view,
   # Include debug annotations and locations in rendered markup.

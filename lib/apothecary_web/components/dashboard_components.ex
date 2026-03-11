@@ -2494,6 +2494,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :agents, :list, default: []
   attr :input_focused, :boolean, default: false
   attr :focused_pane, :atom, default: :tree
+  attr :platform_mode, :boolean, default: false
 
   def moonlight_status_bar(assigns) do
     running_count = length(assigns.worktrees_by_status["running"] || [])
@@ -2555,6 +2556,8 @@ defmodule ApothecaryWeb.DashboardComponents do
               <span>d diff</span>
               <span style="color: var(--border);">&middot;</span>
               <span>p preview</span>
+              <span :if={@platform_mode} style="color: var(--border);">&middot;</span>
+              <span :if={@platform_mode}>e edit env</span>
               <span style="color: var(--border);">&middot;</span>
               <span>? help</span>
             <% end %>
@@ -3541,4 +3544,196 @@ defmodule ApothecaryWeb.DashboardComponents do
         iso_string
     end
   end
+
+  # ── Distillery Section (Platform Mode) ──────────────────
+
+  attr :deployments, :list, default: []
+  attr :deployment_runtimes, :map, default: %{}
+  attr :selected_deployment_id, :string, default: nil
+  attr :show_deployment_form, :boolean, default: false
+
+  def distillery_section(assigns) do
+    ~H"""
+    <div class="px-3 pt-2 pb-1">
+      <div
+        class="flex items-center justify-between mb-1 px-1"
+        style="font-size: var(--font-size-xs); color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase;"
+      >
+        <span style="font-weight: 600;">&#x2697; distilleries</span>
+        <button
+          phx-click="show-deployment-form"
+          class="cursor-pointer"
+          style="color: var(--dim); font-size: var(--font-size-sm);"
+          title="New distillery"
+        >
+          +
+        </button>
+      </div>
+
+      <%!-- New deployment form --%>
+      <form
+        :if={@show_deployment_form}
+        phx-submit="create-deployment"
+        class="mb-2 px-1"
+        style="font-size: var(--font-size-xs);"
+      >
+        <div class="flex flex-col gap-1">
+          <input
+            type="text"
+            name="name"
+            placeholder="name (e.g. production)"
+            required
+            class="w-full px-2 py-1 rounded"
+            style="background: var(--surface); border: 1px solid var(--border); color: var(--text); font-size: var(--font-size-xs);"
+          />
+          <input
+            type="text"
+            name="branch"
+            placeholder="branch (e.g. main)"
+            value="main"
+            required
+            class="w-full px-2 py-1 rounded"
+            style="background: var(--surface); border: 1px solid var(--border); color: var(--text); font-size: var(--font-size-xs);"
+          />
+          <input
+            type="text"
+            name="domain"
+            placeholder="domain (optional, e.g. myapp.com)"
+            class="w-full px-2 py-1 rounded"
+            style="background: var(--surface); border: 1px solid var(--border); color: var(--text); font-size: var(--font-size-xs);"
+          />
+          <div class="flex gap-1">
+            <button
+              type="submit"
+              class="px-2 py-0.5 rounded cursor-pointer"
+              style="background: var(--concocting); color: var(--bg); font-size: var(--font-size-xs);"
+            >
+              create
+            </button>
+            <button
+              type="button"
+              phx-click="cancel-deployment-form"
+              class="px-2 py-0.5 cursor-pointer"
+              style="color: var(--muted); font-size: var(--font-size-xs);"
+            >
+              cancel
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <%!-- Deployment list --%>
+      <div :for={dep <- @deployments} class="mb-0.5">
+        <div
+          class={"flex items-center gap-2 px-2 py-1 rounded cursor-pointer#{if @selected_deployment_id == dep.id, do: " selected-card", else: ""}"}
+          style={"#{if @selected_deployment_id == dep.id, do: "background: var(--surface-hover);", else: ""}"}
+          phx-click="select-deployment"
+          phx-value-id={dep.id}
+        >
+          <.deployment_status_dot status={dep.status} />
+          <span
+            style={"color: var(--#{deployment_status_color(dep.status)}); font-size: var(--font-size-sm);"}
+          >
+            {dep.name}
+          </span>
+        </div>
+
+        <%!-- Expanded controls when selected --%>
+        <div
+          :if={@selected_deployment_id == dep.id}
+          class="pl-6 pr-2 pb-1"
+          style="font-size: var(--font-size-xs); color: var(--muted);"
+        >
+          <div class="flex items-center gap-1 mb-1">
+            <span>{dep.branch}</span>
+            <span :if={dep.status == "running"} style="color: var(--dim);">
+              &middot; port {dep.base_port}
+            </span>
+          </div>
+          <div
+            :if={dep.domain && dep.domain != ""}
+            class="mb-1"
+            style="color: var(--concocting);"
+          >
+            {dep.domain}
+          </div>
+          <div class="flex items-center gap-1">
+            <button
+              :if={dep.status in ["stopped", "error"]}
+              phx-click="start-deployment"
+              phx-value-id={dep.id}
+              class="px-1.5 py-0.5 rounded cursor-pointer"
+              style="background: var(--surface); border: 1px solid var(--border); color: var(--text);"
+            >
+              start
+            </button>
+            <button
+              :if={dep.status == "running"}
+              phx-click="stop-deployment"
+              phx-value-id={dep.id}
+              class="px-1.5 py-0.5 rounded cursor-pointer"
+              style="background: var(--surface); border: 1px solid var(--border); color: var(--text);"
+            >
+              stop
+            </button>
+            <button
+              :if={dep.status in ["running", "error"]}
+              phx-click="rebuild-deployment"
+              phx-value-id={dep.id}
+              class="px-1.5 py-0.5 rounded cursor-pointer"
+              style="background: var(--surface); border: 1px solid var(--border); color: var(--text);"
+            >
+              rebuild
+            </button>
+            <button
+              phx-click="edit-deployment-env"
+              phx-value-id={dep.id}
+              class="px-1.5 py-0.5 rounded cursor-pointer"
+              style="background: var(--surface); border: 1px solid var(--border); color: var(--text);"
+            >
+              env
+            </button>
+            <button
+              phx-click="delete-deployment"
+              phx-value-id={dep.id}
+              class="px-1.5 py-0.5 rounded cursor-pointer ml-auto"
+              style="color: var(--error);"
+              data-confirm="Delete this deployment?"
+            >
+              &times;
+            </button>
+          </div>
+          <div
+            :if={dep.error}
+            class="mt-1 px-1 py-0.5 rounded"
+            style="background: color-mix(in srgb, var(--error) 10%, transparent); color: var(--error);"
+          >
+            {dep.error}
+          </div>
+        </div>
+      </div>
+
+      <div
+        :if={@deployments == []}
+        class="px-2 py-1"
+        style="font-size: var(--font-size-xs); color: var(--dim);"
+      >
+        no distilleries yet
+      </div>
+
+      <div style="border-bottom: 1px solid var(--border); margin: 4px 0 2px;" />
+    </div>
+    """
+  end
+
+  defp deployment_status_dot(assigns) do
+    ~H"""
+    <span style={"color: var(--#{deployment_status_color(@status)}); font-size: 10px;"}>&#x25CF;</span>
+    """
+  end
+
+  defp deployment_status_color("running"), do: "concocting"
+  defp deployment_status_color("starting"), do: "assaying"
+  defp deployment_status_color("error"), do: "error"
+  defp deployment_status_color(_), do: "dim"
 end
