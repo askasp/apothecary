@@ -167,7 +167,8 @@ defmodule Apothecary.Brewer do
         current_worktree: nil,
         project_dir: nil,
         worktree_path: nil,
-        branch: nil
+        branch: nil,
+        output: []
     }
 
     broadcast_state(agent)
@@ -288,7 +289,8 @@ defmodule Apothecary.Brewer do
         current_worktree: nil,
         project_dir: nil,
         worktree_path: nil,
-        branch: nil
+        branch: nil,
+        output: []
     }
 
     broadcast_state(agent)
@@ -343,7 +345,8 @@ defmodule Apothecary.Brewer do
         | status: :idle,
           current_worktree: nil,
           worktree_path: nil,
-          branch: nil
+          branch: nil,
+          output: []
       }
 
       broadcast_state(agent)
@@ -979,6 +982,9 @@ defmodule Apothecary.Brewer do
     project_digest =
       if project_dir, do: Apothecary.ProjectDigest.generate(project_dir), else: ""
 
+    # Load shared project context from Mnesia so brewers start with accumulated knowledge
+    project_context_section = build_project_context_section(worktree.project_id)
+
     """
     You are an autonomous coding agent working in: #{worktree_path}
 
@@ -989,7 +995,7 @@ defmodule Apothecary.Brewer do
 
     ## Project Structure
     #{project_digest}
-
+    #{project_context_section}
     #{notes_section}
     #{git_context}
     #{revision_section}
@@ -1050,6 +1056,28 @@ defmodule Apothecary.Brewer do
     #{if claude_md != "", do: "## Project Guidelines (CLAUDE.md)\n#{claude_md}", else: ""}
     #{if agents_md != "", do: "## Agent Guidelines (AGENTS.md)\n#{agents_md}", else: ""}
     """
+  end
+
+  defp build_project_context_section(nil), do: ""
+
+  defp build_project_context_section(project_id) do
+    case Apothecary.ProjectContexts.list(project_id) do
+      [] ->
+        ""
+
+      contexts ->
+        entries =
+          Enum.map(contexts, fn ctx ->
+            "### #{ctx.category}\n#{ctx.content}"
+          end)
+
+        """
+        ## Shared Project Context
+        Knowledge saved by other agents working on this project:
+
+        #{Enum.join(entries, "\n\n")}
+        """
+    end
   end
 
   defp build_git_context(nil, _worktree_path), do: ""

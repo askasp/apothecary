@@ -30,7 +30,18 @@ defmodule ApothecaryWeb.AgentLive do
 
   @impl true
   def handle_info({:agent_state, agent}, socket) do
-    {:noreply, assign(socket, :agent, agent)}
+    # When the brewer transitions to idle or starting a new worktree,
+    # clear the local output so old session output doesn't leak into the next one
+    socket =
+      if agent.status in [:idle, :starting] do
+        socket
+        |> assign(:agent, agent)
+        |> assign(:output, [])
+      else
+        assign(socket, :agent, agent)
+      end
+
+    {:noreply, socket}
   end
 
   @impl true
