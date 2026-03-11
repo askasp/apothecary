@@ -100,6 +100,7 @@ defmodule Apothecary.Dispatcher do
     pool = %{pool | status: :running, target_count: count}
     state = put_pool(state, project_id, pool)
     state = scale_project_agents(state, project_id)
+    state = try_dispatch(state)
 
     ensure_dispatch_scheduled(state)
     broadcast(state)
@@ -149,6 +150,7 @@ defmodule Apothecary.Dispatcher do
     pool = %{pool | target_count: count}
     state = put_pool(state, project_id, pool)
     state = scale_project_agents(state, project_id)
+    state = try_dispatch(state)
     broadcast(state)
     {:reply, :ok, state}
   end
@@ -396,7 +398,8 @@ defmodule Apothecary.Dispatcher do
               put_pool(state, project_id, pool)
             else
               state = put_pool(state, project_id, pool)
-              scale_project_agents(state, project_id)
+              state = scale_project_agents(state, project_id)
+              try_dispatch(state)
             end
           end
         else
@@ -424,8 +427,8 @@ defmodule Apothecary.Dispatcher do
         pool ->
           pool = %{pool | backoff_timers: Map.delete(pool.backoff_timers, slot_id)}
           state = put_pool(state, project_id, pool)
-
-          scale_project_agents(state, project_id)
+          state = scale_project_agents(state, project_id)
+          try_dispatch(state)
       end
 
     broadcast(state)
