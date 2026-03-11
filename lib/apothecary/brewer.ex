@@ -56,9 +56,12 @@ defmodule Apothecary.Brewer do
       status: :idle
     }
 
-    Apothecary.Dispatcher.agent_idle(self())
     broadcast_state(state)
 
+    # Note: We do NOT call Dispatcher.agent_idle here. Pool brewers are already
+    # tracked as idle by scale_project_agents, and for question brewers the init
+    # idle would race with dispatch_question's assign — causing the dispatcher to
+    # auto-stop the brewer before it processes the worktree assignment.
     {:ok, %{agent: state, port: nil, buffer: "", worktree_id: nil, watchdog_timer: nil}}
   end
 
