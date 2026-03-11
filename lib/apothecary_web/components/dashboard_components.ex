@@ -2876,10 +2876,18 @@ defmodule ApothecaryWeb.DashboardComponents do
         Enum.at(diff.files, diff.selected_file)
       end
 
+    sbs_rows =
+      if current_file do
+        Apothecary.DiffParser.to_side_by_side(current_file.lines)
+      else
+        []
+      end
+
     assigns =
       assigns
       |> assign(:current_file, current_file)
       |> assign(:diff, diff)
+      |> assign(:sbs_rows, sbs_rows)
 
     ~H"""
     <div class="fixed inset-0 z-50 flex flex-col" style="background: var(--bg);">
@@ -2938,21 +2946,65 @@ defmodule ApothecaryWeb.DashboardComponents do
           </div>
         </div>
 
-        <div class="flex-1 overflow-y-auto" id="diff-content-pane">
-          <div :if={@current_file} style="font-size: var(--font-size-xs);">
+        <%!-- Side-by-side diff content --%>
+        <div class="flex-1 overflow-auto" id="diff-content-pane">
+          <div :if={@current_file}>
             <div
-              class="sticky top-0 px-4 py-1"
-              style="background: var(--surface); border-bottom: 1px solid var(--border); color: var(--dim);"
+              class="sticky top-0 px-4 py-1 z-10"
+              style="background: var(--surface); border-bottom: 1px solid var(--border); color: var(--dim); font-size: var(--font-size-xs);"
             >
               {@current_file.path}
             </div>
-            <div
-              :for={line <- @current_file.lines}
-              class="px-4 whitespace-pre"
-              style={diff_line_style(line.type)}
-            >
-              {line.text}
-            </div>
+            <table class="diff-sbs-table" style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+              <colgroup>
+                <col style="width: 40px;" />
+                <col style="width: calc(50% - 40px);" />
+                <col style="width: 40px;" />
+                <col style="width: calc(50% - 40px);" />
+              </colgroup>
+              <%= for row <- @sbs_rows do %>
+                <%= if row.type == :hunk do %>
+                  <tr style="background: rgba(90, 122, 130, 0.08);">
+                    <td
+                      colspan="4"
+                      class="diff-sbs-hunk"
+                      style="color: var(--dim); font-size: var(--font-size-xxs); padding: 2px 12px; font-family: var(--font-mono, monospace);"
+                    >
+                      {row.text}
+                    </td>
+                  </tr>
+                <% else %>
+                  <tr class="diff-sbs-row">
+                    <%!-- Left side (old) --%>
+                    <td
+                      class="diff-sbs-no select-none"
+                      style={sbs_gutter_style(row, :left)}
+                    >
+                      {if row.left, do: row.left.no}
+                    </td>
+                    <td
+                      class="diff-sbs-code"
+                      style={sbs_cell_style(row, :left)}
+                    >
+                      <span :if={row.left} class="whitespace-pre">{row.left.text}</span>
+                    </td>
+                    <%!-- Right side (new) --%>
+                    <td
+                      class="diff-sbs-no select-none"
+                      style={sbs_gutter_style(row, :right)}
+                    >
+                      {if row.right, do: row.right.no}
+                    </td>
+                    <td
+                      class="diff-sbs-code"
+                      style={sbs_cell_style(row, :right)}
+                    >
+                      <span :if={row.right} class="whitespace-pre">{row.right.text}</span>
+                    </td>
+                  </tr>
+                <% end %>
+              <% end %>
+            </table>
           </div>
         </div>
       </div>
@@ -2967,10 +3019,42 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
-  defp diff_line_style(:add), do: "background: rgba(90, 170, 154, 0.1); color: var(--accent);"
-  defp diff_line_style(:del), do: "background: rgba(196, 90, 90, 0.1); color: var(--error);"
-  defp diff_line_style(:hunk), do: "color: var(--dim); background: rgba(90, 122, 130, 0.1);"
-  defp diff_line_style(_), do: "color: var(--muted);"
+  defp sbs_cell_style(%{type: :change, left: left}, :left) when left != nil do
+    "background: rgba(196, 90, 90, 0.1); color: var(--error); font-size: var(--font-size-xxs); padding: 0 8px; font-family: var(--font-mono, monospace); overflow: hidden; text-overflow: ellipsis; border-right: 1px solid var(--border);"
+  end
+
+  defp sbs_cell_style(%{type: :change, right: right}, :right) when right != nil do
+    "background: rgba(90, 170, 154, 0.1); color: var(--accent); font-size: var(--font-size-xxs); padding: 0 8px; font-family: var(--font-mono, monospace); overflow: hidden; text-overflow: ellipsis;"
+  end
+
+  defp sbs_cell_style(%{type: :change}, side) do
+    base = "background: rgba(90, 90, 90, 0.05); font-size: var(--font-size-xxs); padding: 0 8px; font-family: var(--font-mono, monospace);"
+    if side == :left, do: base <> " border-right: 1px solid var(--border);", else: base
+  end
+
+  defp sbs_cell_style(_row, :left) do
+    "color: var(--muted); font-size: var(--font-size-xxs); padding: 0 8px; font-family: var(--font-mono, monospace); overflow: hidden; text-overflow: ellipsis; border-right: 1px solid var(--border);"
+  end
+
+  defp sbs_cell_style(_row, :right) do
+    "color: var(--muted); font-size: var(--font-size-xxs); padding: 0 8px; font-family: var(--font-mono, monospace); overflow: hidden; text-overflow: ellipsis;"
+  end
+
+  defp sbs_gutter_style(%{type: :change, left: left}, :left) when left != nil do
+    "color: var(--error); background: rgba(196, 90, 90, 0.15); font-size: var(--font-size-xxs); padding: 0 4px; text-align: right; font-family: var(--font-mono, monospace); user-select: none;"
+  end
+
+  defp sbs_gutter_style(%{type: :change, right: right}, :right) when right != nil do
+    "color: var(--accent); background: rgba(90, 170, 154, 0.15); font-size: var(--font-size-xxs); padding: 0 4px; text-align: right; font-family: var(--font-mono, monospace); user-select: none;"
+  end
+
+  defp sbs_gutter_style(%{type: :change}, _side) do
+    "background: rgba(90, 90, 90, 0.05); font-size: var(--font-size-xxs); padding: 0 4px; text-align: right; font-family: var(--font-mono, monospace); user-select: none;"
+  end
+
+  defp sbs_gutter_style(_row, _side) do
+    "color: var(--dim); font-size: var(--font-size-xxs); padding: 0 4px; text-align: right; font-family: var(--font-mono, monospace); user-select: none;"
+  end
 
   # ── Which-key Help Overlay ───────────────────────────────
 
