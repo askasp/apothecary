@@ -1551,7 +1551,23 @@ defmodule ApothecaryWeb.DashboardComponents do
 
     # Split children into done, active (in_progress), and pending
     done_tasks = Enum.filter(assigns.children, fn c -> c.status in ["done", "closed"] end)
-    active_task = Enum.find(assigns.children, fn c -> c.status == "in_progress" end)
+
+    # Don't show active task spinner if the worktree is done brewing
+    brew_finished? = assigns.task.status in ["brew_done", "pr_open", "merged", "done", "closed", "cancelled"]
+
+    active_task =
+      if brew_finished?,
+        do: nil,
+        else: Enum.find(assigns.children, fn c -> c.status == "in_progress" end)
+
+    # When brew is finished, treat remaining in_progress tasks as done
+    done_tasks =
+      if brew_finished? do
+        done_tasks ++
+          Enum.filter(assigns.children, fn c -> c.status == "in_progress" end)
+      else
+        done_tasks
+      end
 
     pending_tasks =
       Enum.filter(assigns.children, fn c ->
@@ -1722,7 +1738,7 @@ defmodule ApothecaryWeb.DashboardComponents do
             >
               no notes
             </div>
-            <%!-- Completion metadata --%>
+            <%!-- Completion metadata + view diff --%>
             <div
               class="mt-1 flex items-center gap-1"
               style="font-size: var(--font-size-xxs); color: var(--dim);"
@@ -1731,6 +1747,14 @@ defmodule ApothecaryWeb.DashboardComponents do
               <span :if={duration}>Completed in {duration}</span>
               <span :if={duration && @brewer_label}>&middot;</span>
               <span :if={@brewer_label}>{@brewer_label}</span>
+              <span>&middot;</span>
+              <span
+                class="cursor-pointer hover:underline"
+                style="color: var(--accent);"
+                phx-click="show-diff"
+              >
+                view diff
+              </span>
             </div>
           </div>
         </div>
