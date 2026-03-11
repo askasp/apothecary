@@ -111,6 +111,8 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:adopt_disk_worktrees, [])
       # Pane focus
       |> assign(:focused_pane, :tree)
+      |> assign(:detail_cursor, -1)
+      |> assign(:focused_detail_id, nil)
       # Task inline input
       |> assign(:adding_task_to, nil)
       # Worktree creation mode
@@ -704,6 +706,8 @@ defmodule ApothecaryWeb.DashboardLive do
          socket
          |> assign(:focused_pane, :tree)
          |> assign(:input_focused, false)
+         |> assign(:detail_cursor, -1)
+         |> assign(:focused_detail_id, nil)
          |> push_event("blur-input", %{})}
 
       key == "l" ->
@@ -711,6 +715,8 @@ defmodule ApothecaryWeb.DashboardLive do
          socket
          |> assign(:focused_pane, :detail)
          |> assign(:input_focused, false)
+         |> assign(:detail_cursor, -1)
+         |> assign(:focused_detail_id, nil)
          |> push_event("blur-input", %{})}
 
       key == "j" ->
@@ -721,18 +727,28 @@ defmodule ApothecaryWeb.DashboardLive do
               socket
               |> assign(:input_focused, false)
               |> assign(:focused_pane, :tree)
+              |> assign(:detail_cursor, -1)
+              |> assign(:focused_detail_id, nil)
               |> push_event("blur-input", %{})
 
             socket.assigns.focused_pane == :tree ->
-              assign(socket, :focused_pane, :detail)
+              socket
+              |> assign(:focused_pane, :detail)
+              |> assign(:detail_cursor, -1)
+              |> assign(:focused_detail_id, nil)
 
             socket.assigns.focused_pane == :detail ->
               socket
               |> assign(:input_focused, true)
+              |> assign(:detail_cursor, -1)
+              |> assign(:focused_detail_id, nil)
               |> push_event("focus-primary-input", %{})
 
             true ->
-              assign(socket, :focused_pane, :tree)
+              socket
+              |> assign(:focused_pane, :tree)
+              |> assign(:detail_cursor, -1)
+              |> assign(:focused_detail_id, nil)
           end
 
         {:noreply, socket}
@@ -745,10 +761,15 @@ defmodule ApothecaryWeb.DashboardLive do
               socket
               |> assign(:input_focused, false)
               |> assign(:focused_pane, :detail)
+              |> assign(:detail_cursor, -1)
+              |> assign(:focused_detail_id, nil)
               |> push_event("blur-input", %{})
 
             socket.assigns.focused_pane == :detail ->
-              assign(socket, :focused_pane, :tree)
+              socket
+              |> assign(:focused_pane, :tree)
+              |> assign(:detail_cursor, -1)
+              |> assign(:focused_detail_id, nil)
 
             true ->
               socket
@@ -1037,12 +1058,20 @@ defmodule ApothecaryWeb.DashboardLive do
 
   @impl true
   def handle_event("focus-tree-pane", _params, socket) do
-    {:noreply, assign(socket, :focused_pane, :tree)}
+    {:noreply,
+     socket
+     |> assign(:focused_pane, :tree)
+     |> assign(:detail_cursor, -1)
+     |> assign(:focused_detail_id, nil)}
   end
 
   @impl true
   def handle_event("focus-detail-pane", _params, socket) do
-    {:noreply, assign(socket, :focused_pane, :detail)}
+    {:noreply,
+     socket
+     |> assign(:focused_pane, :detail)
+     |> assign(:detail_cursor, -1)
+     |> assign(:focused_detail_id, nil)}
   end
 
   @impl true
@@ -1707,12 +1736,15 @@ defmodule ApothecaryWeb.DashboardLive do
   def handle_event("toggle-follow-up", %{"question-id" => qid}, socket) do
     current = socket.assigns.follow_up_question_id
 
-    {:noreply,
-     assign(socket, :follow_up_question_id, if(current == qid, do: nil, else: qid))}
+    {:noreply, assign(socket, :follow_up_question_id, if(current == qid, do: nil, else: qid))}
   end
 
   @impl true
-  def handle_event("submit-follow-up", %{"follow_up_text" => text, "parent_question_id" => parent_qid}, socket) do
+  def handle_event(
+        "submit-follow-up",
+        %{"follow_up_text" => text, "parent_question_id" => parent_qid},
+        socket
+      ) do
     text = String.trim(text)
 
     if text == "" do
@@ -1723,11 +1755,15 @@ defmodule ApothecaryWeb.DashboardLive do
         Enum.find(socket.assigns.questions, fn q -> q.id == parent_qid end)
 
       project_id =
-        if parent_q, do: parent_q.project_id, else:
-          if(socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil)
+        if parent_q,
+          do: parent_q.project_id,
+          else:
+            if(socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil)
 
       parent_worktree_id =
-        if parent_q, do: Map.get(parent_q, :parent_worktree_id), else: socket.assigns.selected_task_id
+        if parent_q,
+          do: Map.get(parent_q, :parent_worktree_id),
+          else: socket.assigns.selected_task_id
 
       attrs = %{
         title: text,
@@ -1738,7 +1774,9 @@ defmodule ApothecaryWeb.DashboardLive do
       }
 
       attrs =
-        if parent_worktree_id, do: Map.put(attrs, :parent_worktree_id, parent_worktree_id), else: attrs
+        if parent_worktree_id,
+          do: Map.put(attrs, :parent_worktree_id, parent_worktree_id),
+          else: attrs
 
       case Worktrees.create_worktree(attrs) do
         {:ok, item} when not is_nil(item) ->
@@ -2364,8 +2402,11 @@ defmodule ApothecaryWeb.DashboardLive do
   @impl true
   def handle_event("start-deployment", %{"id" => id}, socket) do
     case Apothecary.DeploymentServer.start_deployment(id) do
-      :ok -> {:noreply, socket}
-      {:error, reason} -> {:noreply, put_flash(socket, :error, "Start failed: #{inspect(reason)}")}
+      :ok ->
+        {:noreply, socket}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Start failed: #{inspect(reason)}")}
     end
   end
 
@@ -2378,8 +2419,11 @@ defmodule ApothecaryWeb.DashboardLive do
   @impl true
   def handle_event("rebuild-deployment", %{"id" => id}, socket) do
     case Apothecary.DeploymentServer.rebuild(id) do
-      :ok -> {:noreply, socket}
-      {:error, reason} -> {:noreply, put_flash(socket, :error, "Rebuild failed: #{inspect(reason)}")}
+      :ok ->
+        {:noreply, socket}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Rebuild failed: #{inspect(reason)}")}
     end
   end
 
@@ -2624,7 +2668,19 @@ defmodule ApothecaryWeb.DashboardLive do
         assign(socket, :selected_card, min(socket.assigns.selected_card + 1, max_idx))
 
       socket.assigns.focused_pane == :detail ->
-        push_event(socket, "scroll-detail", %{direction: "down"})
+        ids = detail_item_ids(socket)
+
+        if ids == [] do
+          push_event(socket, "scroll-detail", %{direction: "down"})
+        else
+          max_idx = length(ids) - 1
+          new_cursor = min(socket.assigns.detail_cursor + 1, max_idx)
+
+          socket
+          |> assign(:detail_cursor, new_cursor)
+          |> assign(:focused_detail_id, Enum.at(ids, new_cursor))
+          |> push_event("scroll-to-detail-selected", %{})
+        end
 
       true ->
         max_idx = max(length(socket.assigns.card_ids) - 1, 0)
@@ -2643,7 +2699,18 @@ defmodule ApothecaryWeb.DashboardLive do
         assign(socket, :selected_card, max(socket.assigns.selected_card - 1, 0))
 
       socket.assigns.focused_pane == :detail ->
-        push_event(socket, "scroll-detail", %{direction: "up"})
+        ids = detail_item_ids(socket)
+
+        if ids == [] do
+          push_event(socket, "scroll-detail", %{direction: "up"})
+        else
+          new_cursor = max(socket.assigns.detail_cursor - 1, -1)
+
+          socket
+          |> assign(:detail_cursor, new_cursor)
+          |> assign(:focused_detail_id, if(new_cursor >= 0, do: Enum.at(ids, new_cursor)))
+          |> push_event("scroll-to-detail-selected", %{})
+        end
 
       socket.assigns.selected_card == 0 ->
         socket
@@ -2683,6 +2750,17 @@ defmodule ApothecaryWeb.DashboardLive do
 
   defp handle_hotkey("Enter", socket) do
     cond do
+      socket.assigns.focused_pane == :detail && socket.assigns.focused_detail_id ->
+        id = socket.assigns.focused_detail_id
+        expanded = socket.assigns.expanded_detail_items
+
+        expanded =
+          if MapSet.member?(expanded, id),
+            do: MapSet.delete(expanded, id),
+            else: MapSet.put(expanded, id)
+
+        assign(socket, :expanded_detail_items, expanded)
+
       is_nil(socket.assigns.current_project) ->
         if socket.assigns.selected_card >= 0 do
           case Enum.at(socket.assigns.projects, socket.assigns.selected_card) do
@@ -2716,7 +2794,10 @@ defmodule ApothecaryWeb.DashboardLive do
       end
     else
       # Move focus to detail panel (right)
-      assign(socket, :focused_pane, :detail)
+      socket
+      |> assign(:focused_pane, :detail)
+      |> assign(:detail_cursor, -1)
+      |> assign(:focused_detail_id, nil)
     end
   end
 
@@ -2725,13 +2806,19 @@ defmodule ApothecaryWeb.DashboardLive do
       socket
     else
       # Move focus to worktree panel (left)
-      assign(socket, :focused_pane, :tree)
+      socket
+      |> assign(:focused_pane, :tree)
+      |> assign(:detail_cursor, -1)
+      |> assign(:focused_detail_id, nil)
     end
   end
 
   defp handle_hotkey("Backspace", socket) do
     if socket.assigns.focused_pane == :detail do
-      assign(socket, :focused_pane, :tree)
+      socket
+      |> assign(:focused_pane, :tree)
+      |> assign(:detail_cursor, -1)
+      |> assign(:focused_detail_id, nil)
     else
       if socket.assigns.selected_task_id do
         push_patch(socket, to: project_path(socket))
@@ -3453,7 +3540,15 @@ defmodule ApothecaryWeb.DashboardLive do
           [_, path, count, bar] ->
             additions = String.length(String.replace(bar, "-", ""))
             deletions = String.length(String.replace(bar, "+", ""))
-            [%{path: String.trim(path), count: String.to_integer(count), additions: additions, deletions: deletions}]
+
+            [
+              %{
+                path: String.trim(path),
+                count: String.to_integer(count),
+                additions: additions,
+                deletions: deletions
+              }
+            ]
 
           _ ->
             []
@@ -3594,6 +3689,8 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:expanded_detail_items, MapSet.new())
     |> assign(:branch_diff_stat, nil)
     |> assign(:focused_pane, :tree)
+    |> assign(:detail_cursor, -1)
+    |> assign(:focused_detail_id, nil)
     |> assign(:page_title, "Dashboard")
   end
 
@@ -3825,6 +3922,45 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   # Only move adding_task_to target if already in task-add mode (via 'a' hotkey)
+  # Builds the flat list of task IDs in the same order they appear in the detail view
+  defp detail_item_ids(socket) do
+    children = socket.assigns.children
+    task = socket.assigns.selected_task
+
+    brew_finished? =
+      task && task.status in ["brew_done", "pr_open", "merged", "done", "closed", "cancelled"]
+
+    done_ids =
+      children
+      |> Enum.filter(fn c -> c.status in ["done", "closed"] end)
+      |> Enum.map(& &1.id)
+
+    done_ids =
+      if brew_finished? do
+        done_ids ++
+          (children
+           |> Enum.filter(fn c -> c.status == "in_progress" end)
+           |> Enum.map(& &1.id))
+      else
+        done_ids
+      end
+
+    active_ids =
+      if brew_finished?,
+        do: [],
+        else:
+          children
+          |> Enum.filter(fn c -> c.status == "in_progress" end)
+          |> Enum.map(& &1.id)
+
+    pending_ids =
+      children
+      |> Enum.filter(fn c -> c.status not in ["done", "closed", "in_progress"] end)
+      |> Enum.map(& &1.id)
+
+    done_ids ++ active_ids ++ pending_ids
+  end
+
   defp maybe_update_adding_task(socket, idx) do
     if socket.assigns.adding_task_to do
       assign(socket, :adding_task_to, worktree_id_at(socket.assigns.card_ids, idx))
@@ -4328,6 +4464,7 @@ defmodule ApothecaryWeb.DashboardLive do
                         follow_up_question_id={@follow_up_question_id}
                         expanded_detail_items={@expanded_detail_items}
                         branch_diff_stat={@branch_diff_stat}
+                        focused_detail_id={@focused_detail_id}
                       />
                     <% else %>
                       <div

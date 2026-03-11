@@ -137,6 +137,10 @@ let Hooks = {
           el.dispatchEvent(new Event("input", { bubbles: true }))
         }
       })
+      this.handleEvent("scroll-to-detail-selected", () => {
+        const el = document.querySelector("[data-detail-selected]")
+        if (el) el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" })
+      })
       this.handleEvent("scroll-detail", ({ direction }) => {
         const pane = document.getElementById("detail-pane")
         const el = pane && pane.querySelector(".scroll-main")
