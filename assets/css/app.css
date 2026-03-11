@@ -290,6 +290,9 @@ html, body {
 .diff-add  { color: var(--accent); }
 .diff-del  { color: var(--error); }
 
+.diff-sbs-table tr { line-height: 1.3; }
+.diff-sbs-row:hover td { filter: brightness(1.15); }
+
 /* ── File autocomplete dropdown ──────────────────────────── */
 
 .file-ac-item {

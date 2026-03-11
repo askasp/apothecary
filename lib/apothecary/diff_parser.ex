@@ -64,4 +64,68 @@ defmodule Apothecary.DiffParser do
   defp classify_line(" " <> _ = line), do: %{type: :ctx, text: line}
   defp classify_line(""), do: nil
   defp classify_line(line), do: %{type: :ctx, text: line}
+
+  @doc """
+  Convert a list of flat diff lines into side-by-side rows.
+
+  Each row is one of:
+    %{type: :hunk, text: "@@..."}
+    %{type: :ctx, left: %{text: t, no: n}, right: %{text: t, no: n}}
+    %{type: :change, left: %{text: t, no: n} | nil, right: %{text: t, no: n} | nil}
+  """
+  def to_side_by_side(lines) do
+    {rows, _old, _new, pending} =
+      Enum.reduce(lines, {[], 0, 0, []}, fn line, {rows, old_no, new_no, dels} ->
+        case line.type do
+          :hunk ->
+            rows = flush_dels(rows, dels)
+            {old_start, new_start} = parse_hunk_numbers(line.text)
+            {rows ++ [%{type: :hunk, text: line.text}], old_start, new_start, []}
+
+          :del ->
+            {rows, old_no + 1, new_no, dels ++ [%{text: line.text, no: old_no}]}
+
+          :add ->
+            case dels do
+              [del | rest] ->
+                row = %{
+                  type: :change,
+                  left: del,
+                  right: %{text: line.text, no: new_no}
+                }
+
+                {rows ++ [row], old_no, new_no + 1, rest}
+
+              [] ->
+                row = %{type: :change, left: nil, right: %{text: line.text, no: new_no}}
+                {rows ++ [row], old_no, new_no + 1, []}
+            end
+
+          _ ->
+            rows = flush_dels(rows, dels)
+            row = %{
+              type: :ctx,
+              left: %{text: line.text, no: old_no},
+              right: %{text: line.text, no: new_no}
+            }
+
+            {rows ++ [row], old_no + 1, new_no + 1, []}
+        end
+      end)
+
+    flush_dels(rows, pending)
+  end
+
+  defp flush_dels(rows, []), do: rows
+
+  defp flush_dels(rows, dels) do
+    rows ++ Enum.map(dels, fn del -> %{type: :change, left: del, right: nil} end)
+  end
+
+  defp parse_hunk_numbers(text) do
+    case Regex.run(~r/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/, text) do
+      [_, old_s, new_s] -> {String.to_integer(old_s), String.to_integer(new_s)}
+      _ -> {1, 1}
+    end
+  end
 end
