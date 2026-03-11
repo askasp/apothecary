@@ -30,9 +30,12 @@ defmodule Apothecary.MCP.Tools.CompleteTask do
             Apothecary.Worktrees.add_note(task_id, summary)
           end
 
+          # Include remaining tasks so the agent knows what to claim next
+          remaining = remaining_tasks_summary(task.worktree_id, task_id)
+
           response =
             Response.tool()
-            |> Response.text("Task #{closed.id} marked as done.")
+            |> Response.text("Task #{closed.id} marked as done.#{remaining}")
 
           {:reply, response, frame}
 
@@ -57,6 +60,34 @@ defmodule Apothecary.MCP.Tools.CompleteTask do
           |> Response.text("Task #{task_id} not found.")
 
         {:reply, response, frame}
+    end
+  end
+
+  defp remaining_tasks_summary(worktree_id, just_completed_id) do
+    remaining =
+      Apothecary.Worktrees.list_tasks(worktree_id: worktree_id)
+      |> Enum.reject(fn t -> t.status == "done" or t.id == just_completed_id end)
+      |> Enum.sort_by(fn t -> {t.priority || 99, t.created_at || ""} end)
+
+    if remaining == [] do
+      "\n\nAll tasks in this worktree are done!"
+    else
+      lines =
+        Enum.map(remaining, fn t ->
+          icon = if t.status == "blocked", do: "[!]", else: "[ ]"
+          "  #{icon} #{t.id}: #{t.title}"
+        end)
+        |> Enum.join("\n")
+
+      next_claimable =
+        Enum.find(remaining, fn t -> t.status in ["open"] end)
+
+      next_hint =
+        if next_claimable,
+          do: "\n\nNext task to claim: #{next_claimable.id} (#{next_claimable.title})",
+          else: ""
+
+      "\n\nRemaining tasks:\n#{lines}#{next_hint}"
     end
   end
 end
