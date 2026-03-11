@@ -645,6 +645,7 @@ let Hooks = {
   ChatBottomInput: {
     mounted() {
       this.pendingImages = [] // [{path, dataUrl}]
+      this.questionMode = false
       this.mentionActive = false
       this.mentionStart = -1
       this.selectedIndex = 0
@@ -681,11 +682,16 @@ let Hooks = {
         if (e.key === "Enter" && !e.shiftKey && !this.mentionActive) {
           e.preventDefault()
           e.stopPropagation()
-          const text = this.el.value.trim()
+          let text = this.el.value.trim()
+          // Prepend ? back for server routing when in question mode
+          if (this.questionMode && text) {
+            text = "?" + text
+          }
           const images = this.pendingImages.map(img => img.path)
           if (text || images.length > 0) {
             this.pushEvent("submit-input", { text, images })
             this.el.value = ""
+            this.questionMode = false
             this.clearPendingImages()
             this.updateModeBadge("")
           }
@@ -695,9 +701,19 @@ let Hooks = {
           e.preventDefault()
           this.pushEvent("switch-to-task-mode", {})
         }
+        // Pressing ? with empty input activates question mode (strip ? from input, just change pill)
+        if (e.key === "?" && this.el.value === "" && !this.questionMode) {
+          e.preventDefault()
+          this.questionMode = true
+          this.updateModeBadge("?")
+        }
       })
 
       this.el.addEventListener("input", () => {
+        // Reset question mode if input is cleared
+        if (this.questionMode && this.el.value === "") {
+          this.questionMode = false
+        }
         this.updateModeBadge(this.el.value)
         // Check for @ mention
         const pos = this.el.selectionStart
@@ -894,7 +910,7 @@ let Hooks = {
         badge.textContent = "task"
         badge.style.color = taskColor
         badge.style.background = `color-mix(in srgb, ${taskColor} 20%, var(--surface))`
-      } else if (value.startsWith("?")) {
+      } else if (value.startsWith("?") || this.questionMode) {
         const qColor = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#818cf8"
         badge.textContent = "question"
         badge.style.color = qColor

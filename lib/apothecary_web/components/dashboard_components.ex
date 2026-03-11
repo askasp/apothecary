@@ -1784,24 +1784,34 @@ defmodule ApothecaryWeb.DashboardComponents do
               &middot; {follow_ups + 1} msgs
             </span>
           </div>
-          <%!-- Expanded question answer --%>
+          <%!-- Expanded question conversation --%>
           <div
             :if={MapSet.member?(@expanded, q.id)}
-            class="ml-6 mb-2 mt-1"
+            class="mb-3 mt-2 ml-2 px-3 py-3"
+            style="background: color-mix(in srgb, var(--accent) 5%, var(--bg)); border-radius: 6px;"
           >
+            <div
+              style="color: var(--accent); font-size: var(--font-size-xxs); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 8px;"
+            >
+              QUESTION CONVERSATION
+            </div>
+            <div class="flex items-start gap-1.5 mb-2" style="font-size: var(--font-size-xs);">
+              <span style="color: var(--accent); font-weight: 600; flex-shrink: 0;">&rsaquo;</span>
+              <span style="color: var(--text);">{q.title}</span>
+            </div>
             <%= if answer != "" do %>
               <div
                 id={"q-inline-answer-#{q.id}"}
-                class="px-2 py-1"
-                style="border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); font-size: var(--font-size-xs); color: var(--dim); white-space: pre-wrap; line-height: 1.5;"
+                class="ml-3 px-2 py-1.5"
+                style="font-size: var(--font-size-xs); color: var(--dim); white-space: pre-wrap; line-height: 1.6;"
               >
                 {answer}
               </div>
-              <div class="mt-1 flex items-center gap-2">
+              <div class="mt-2 ml-3 flex items-center gap-2">
                 <button
                   phx-click="toggle-follow-up"
                   phx-value-question-id={q.id}
-                  style="color: var(--muted); font-size: var(--font-size-xs);"
+                  style="color: var(--muted); font-size: var(--font-size-xxs);"
                   class="hover:underline cursor-pointer"
                 >
                   follow up
@@ -1812,7 +1822,7 @@ defmodule ApothecaryWeb.DashboardComponents do
                 <form
                   phx-submit="submit-follow-up"
                   id={"follow-up-form-inline-#{q.id}"}
-                  class="mt-2 flex items-center gap-2 px-2 py-1"
+                  class="mt-2 ml-3 flex items-center gap-2 px-2 py-1"
                   style="font-size: var(--font-size-xs); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 6px;"
                 >
                   <input type="hidden" name="parent_question_id" value={q.id} />
@@ -1831,7 +1841,7 @@ defmodule ApothecaryWeb.DashboardComponents do
                 </form>
               <% end %>
             <% else %>
-              <div style="font-size: var(--font-size-xs); color: var(--dim);">
+              <div class="ml-3" style="font-size: var(--font-size-xs); color: var(--dim);">
                 no answer yet
               </div>
             <% end %>
