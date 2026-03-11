@@ -1489,7 +1489,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           class="pl-3 flex items-center gap-2 py-4"
           style="border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); font-size: var(--font-size-sm); color: var(--muted);"
         >
-          <.braille_spinner id={"q-detail-spin-#{@task.id}"} offset={0} />
+          <span style="color: var(--accent);">?</span>
           <span>thinking...</span>
         </div>
       <% end %>
@@ -1882,7 +1882,7 @@ defmodule ApothecaryWeb.DashboardComponents do
               class="ml-auto flex-shrink-0"
               style="font-size: var(--font-size-xxs); color: var(--concocting);"
             >
-              <.braille_spinner id={"q-inline-spin-#{q.id}"} offset={0} />
+              <span style="color: var(--accent);">?</span>
             </span>
           </div>
         <% end %>
@@ -3543,7 +3543,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           class="ml-5 mt-2 pl-3 flex items-center gap-2"
           style="border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); font-size: var(--font-size-sm); color: var(--muted);"
         >
-          <.braille_spinner id={"q-spin-#{@q.id}"} offset={0} />
+          <span style="color: var(--accent);">?</span>
           <span>thinking...</span>
         </div>
       <% end %>
