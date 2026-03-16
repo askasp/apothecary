@@ -120,6 +120,12 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:search_query, "")
       # Preview help
       |> assign(:show_preview_help, false)
+      # Pipeline management
+      |> assign(:show_pipeline_form, false)
+      |> assign(:pipeline_form_name, "")
+      |> assign(:pipeline_form_stages, [])
+      |> assign(:editing_pipeline_name, nil)
+      |> assign(:default_pipeline, nil)
       # Theme (actual value set from client via ThemePersist hook)
       |> assign(:theme, "studio")
       # Platform mode (deployments)
@@ -254,15 +260,20 @@ defmodule ApothecaryWeb.DashboardLive do
     |> assign(:known_task_ids, extract_task_ids(task_state.tasks))
     |> assign(:project_files, load_project_files(project))
     |> assign(:questions, questions)
-    |> assign(:project_pipelines, load_project_pipelines(project))
+    |> then(fn socket ->
+      {pipelines, default} = load_project_pipelines(project)
+
+      socket
+      |> assign(:project_pipelines, pipelines)
+      |> assign(:default_pipeline, default)
+    end)
     |> load_deployments(project)
   end
 
-  defp load_project_pipelines(nil), do: %{}
+  defp load_project_pipelines(nil), do: {%{}, nil}
 
   defp load_project_pipelines(project) do
-    {pipelines, _default} = Worktrees.get_project_pipelines(project.id)
-    pipelines
+    Worktrees.get_project_pipelines(project.id)
   end
 
   defp load_deployments(socket, project) do
@@ -1758,12 +1769,15 @@ defmodule ApothecaryWeb.DashboardLive do
   def handle_event("toggle-follow-up", %{"question-id" => qid}, socket) do
     current = socket.assigns.follow_up_question_id
 
-    {:noreply,
-     assign(socket, :follow_up_question_id, if(current == qid, do: nil, else: qid))}
+    {:noreply, assign(socket, :follow_up_question_id, if(current == qid, do: nil, else: qid))}
   end
 
   @impl true
-  def handle_event("submit-follow-up", %{"follow_up_text" => text, "parent_question_id" => parent_qid}, socket) do
+  def handle_event(
+        "submit-follow-up",
+        %{"follow_up_text" => text, "parent_question_id" => parent_qid},
+        socket
+      ) do
     text = String.trim(text)
 
     if text == "" do
@@ -1774,11 +1788,15 @@ defmodule ApothecaryWeb.DashboardLive do
         Enum.find(socket.assigns.questions, fn q -> q.id == parent_qid end)
 
       project_id =
-        if parent_q, do: parent_q.project_id, else:
-          if(socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil)
+        if parent_q,
+          do: parent_q.project_id,
+          else:
+            if(socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil)
 
       parent_worktree_id =
-        if parent_q, do: Map.get(parent_q, :parent_worktree_id), else: socket.assigns.selected_task_id
+        if parent_q,
+          do: Map.get(parent_q, :parent_worktree_id),
+          else: socket.assigns.selected_task_id
 
       attrs = %{
         title: text,
@@ -1789,7 +1807,9 @@ defmodule ApothecaryWeb.DashboardLive do
       }
 
       attrs =
-        if parent_worktree_id, do: Map.put(attrs, :parent_worktree_id, parent_worktree_id), else: attrs
+        if parent_worktree_id,
+          do: Map.put(attrs, :parent_worktree_id, parent_worktree_id),
+          else: attrs
 
       case Worktrees.create_worktree(attrs) do
         {:ok, item} when not is_nil(item) ->
@@ -2362,6 +2382,158 @@ defmodule ApothecaryWeb.DashboardLive do
     {:noreply, assign(socket, :recipes, Worktrees.list_recipes())}
   end
 
+  # --- Pipeline definition event handlers ---
+
+  @impl true
+  def handle_event("show-pipeline-form", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_pipeline_form, true)
+     |> assign(:pipeline_form_name, "")
+     |> assign(:pipeline_form_stages, [%{"name" => "implement", "kind" => "task", "prompt" => ""}])
+     |> assign(:editing_pipeline_name, nil)}
+  end
+
+  @impl true
+  def handle_event("cancel-pipeline-form", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_pipeline_form, false)
+     |> assign(:editing_pipeline_name, nil)}
+  end
+
+  @impl true
+  def handle_event("edit-pipeline", %{"name" => name}, socket) do
+    stages = Map.get(socket.assigns.project_pipelines, name, [])
+
+    normalized =
+      Enum.map(stages, fn stage ->
+        %{
+          "name" => stage["name"] || stage[:name] || "",
+          "kind" => stage["kind"] || stage[:kind] || "task",
+          "prompt" => stage["prompt"] || stage[:prompt] || ""
+        }
+      end)
+
+    {:noreply,
+     socket
+     |> assign(:show_pipeline_form, true)
+     |> assign(:pipeline_form_name, name)
+     |> assign(:pipeline_form_stages, normalized)
+     |> assign(:editing_pipeline_name, name)}
+  end
+
+  @impl true
+  def handle_event("add-pipeline-stage", _params, socket) do
+    stages =
+      socket.assigns.pipeline_form_stages ++ [%{"name" => "", "kind" => "task", "prompt" => ""}]
+
+    {:noreply, assign(socket, :pipeline_form_stages, stages)}
+  end
+
+  @impl true
+  def handle_event("remove-pipeline-stage", %{"index" => idx_str}, socket) do
+    idx = String.to_integer(idx_str)
+    stages = List.delete_at(socket.assigns.pipeline_form_stages, idx)
+    {:noreply, assign(socket, :pipeline_form_stages, stages)}
+  end
+
+  @impl true
+  def handle_event("save-pipeline-def", %{"pipeline" => params}, socket) do
+    project_id = if socket.assigns.current_project, do: socket.assigns.current_project.id
+
+    if is_nil(project_id) do
+      {:noreply, put_flash(socket, :error, "No project selected")}
+    else
+      name = String.trim(params["name"] || "")
+      original_name = params["original_name"]
+
+      stages =
+        (params["stages"] || %{})
+        |> Enum.sort_by(fn {k, _v} -> String.to_integer(k) end)
+        |> Enum.map(fn {_idx, stage} ->
+          stage_map = %{"name" => stage["name"], "kind" => stage["kind"]}
+
+          if stage["prompt"] && String.trim(stage["prompt"]) != "" do
+            Map.put(stage_map, "prompt", String.trim(stage["prompt"]))
+          else
+            stage_map
+          end
+        end)
+        |> Enum.reject(fn s -> s["name"] == "" or is_nil(s["name"]) end)
+
+      if name == "" do
+        {:noreply, put_flash(socket, :error, "Pipeline name is required")}
+      else
+        # Delete old name if renaming
+        if original_name && original_name != name do
+          Projects.delete_pipeline(project_id, original_name)
+        end
+
+        case Projects.put_pipeline(project_id, name, stages) do
+          {:ok, _} ->
+            {pipelines, default} = load_project_pipelines(socket.assigns.current_project)
+
+            {:noreply,
+             socket
+             |> assign(:show_pipeline_form, false)
+             |> assign(:editing_pipeline_name, nil)
+             |> assign(:project_pipelines, pipelines)
+             |> assign(:default_pipeline, default)
+             |> put_flash(
+               :info,
+               if(original_name, do: "Pipeline updated", else: "Pipeline created")
+             )}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Error: #{inspect(reason)}")}
+        end
+      end
+    end
+  end
+
+  @impl true
+  def handle_event("delete-pipeline-def", %{"name" => name}, socket) do
+    project_id = if socket.assigns.current_project, do: socket.assigns.current_project.id
+
+    if project_id do
+      Projects.delete_pipeline(project_id, name)
+      {pipelines, default} = load_project_pipelines(socket.assigns.current_project)
+
+      {:noreply,
+       socket
+       |> assign(:project_pipelines, pipelines)
+       |> assign(:default_pipeline, default)
+       |> put_flash(:info, "Pipeline '#{name}' deleted")}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("set-default-pipeline", %{"name" => name}, socket) do
+    project_id = if socket.assigns.current_project, do: socket.assigns.current_project.id
+
+    if project_id do
+      Projects.set_default_pipeline(project_id, name)
+      {:noreply, assign(socket, :default_pipeline, name)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("clear-default-pipeline", _params, socket) do
+    project_id = if socket.assigns.current_project, do: socket.assigns.current_project.id
+
+    if project_id do
+      Projects.set_default_pipeline(project_id, nil)
+      {:noreply, assign(socket, :default_pipeline, nil)}
+    else
+      {:noreply, socket}
+    end
+  end
+
   # --- Deployment (Distillery) event handlers ---
 
   @impl true
@@ -2415,8 +2587,11 @@ defmodule ApothecaryWeb.DashboardLive do
   @impl true
   def handle_event("start-deployment", %{"id" => id}, socket) do
     case Apothecary.DeploymentServer.start_deployment(id) do
-      :ok -> {:noreply, socket}
-      {:error, reason} -> {:noreply, put_flash(socket, :error, "Start failed: #{inspect(reason)}")}
+      :ok ->
+        {:noreply, socket}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Start failed: #{inspect(reason)}")}
     end
   end
 
@@ -2429,8 +2604,11 @@ defmodule ApothecaryWeb.DashboardLive do
   @impl true
   def handle_event("rebuild-deployment", %{"id" => id}, socket) do
     case Apothecary.DeploymentServer.rebuild(id) do
-      :ok -> {:noreply, socket}
-      {:error, reason} -> {:noreply, put_flash(socket, :error, "Rebuild failed: #{inspect(reason)}")}
+      :ok ->
+        {:noreply, socket}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Rebuild failed: #{inspect(reason)}")}
     end
   end
 
@@ -3504,7 +3682,15 @@ defmodule ApothecaryWeb.DashboardLive do
           [_, path, count, bar] ->
             additions = String.length(String.replace(bar, "-", ""))
             deletions = String.length(String.replace(bar, "+", ""))
-            [%{path: String.trim(path), count: String.to_integer(count), additions: additions, deletions: deletions}]
+
+            [
+              %{
+                path: String.trim(path),
+                count: String.to_integer(count),
+                additions: additions,
+                deletions: deletions
+              }
+            ]
 
           _ ->
             []
@@ -4270,6 +4456,19 @@ defmodule ApothecaryWeb.DashboardLive do
                     project_path_suggestions={@project_path_suggestions}
                     add_project_error={@add_project_error}
                     selected_project={@selected_card}
+                  />
+                </div>
+              </div>
+            <% @active_tab == :pipelines -> %>
+              <div class="h-full overflow-y-auto scroll-main">
+                <div class="max-w-[540px] mx-auto">
+                  <.pipeline_list
+                    project_pipelines={@project_pipelines}
+                    default_pipeline={@default_pipeline}
+                    show_pipeline_form={@show_pipeline_form}
+                    pipeline_form_name={@pipeline_form_name}
+                    pipeline_form_stages={@pipeline_form_stages}
+                    editing_pipeline_name={@editing_pipeline_name}
                   />
                 </div>
               </div>
