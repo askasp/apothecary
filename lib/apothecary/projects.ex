@@ -68,7 +68,7 @@ defmodule Apothecary.Projects do
     now = DateTime.utc_now() |> DateTime.to_iso8601()
     name = Keyword.get(opts, :name, Path.basename(path))
     type = Keyword.get_lazy(opts, :type, fn -> Project.detect_type(path) end)
-    settings = Keyword.get(opts, :settings, %{})
+    settings = Keyword.get(opts, :settings, %{}) |> seed_pipeline_defaults()
 
     record =
       {:apothecary_projects, id, name, path, :active,
@@ -205,6 +205,120 @@ defmodule Apothecary.Projects do
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  # --- Pipeline Management ---
+
+  @doc "Get pipeline definitions for a project."
+  def get_pipelines(project_id) do
+    case get(project_id) do
+      {:ok, project} ->
+        pipelines = project.settings[:pipelines] || project.settings["pipelines"] || %{}
+        default = project.settings[:default_pipeline] || project.settings["default_pipeline"]
+        {:ok, %{pipelines: pipelines, default: default}}
+
+      error ->
+        error
+    end
+  end
+
+  @doc "Save a pipeline definition for a project."
+  def put_pipeline(project_id, name, stages) when is_binary(name) and is_list(stages) do
+    case get(project_id) do
+      {:ok, project} ->
+        pipelines = project.settings[:pipelines] || project.settings["pipelines"] || %{}
+        pipelines = Map.put(pipelines, name, stages)
+        settings = Map.put(project.settings, :pipelines, pipelines)
+        update(project_id, %{settings: settings})
+
+      error ->
+        error
+    end
+  end
+
+  @doc "Delete a pipeline definition from a project."
+  def delete_pipeline(project_id, name) do
+    case get(project_id) do
+      {:ok, project} ->
+        pipelines = project.settings[:pipelines] || project.settings["pipelines"] || %{}
+        pipelines = Map.delete(pipelines, name)
+
+        settings =
+          project.settings
+          |> Map.put(:pipelines, pipelines)
+          |> maybe_clear_default(name)
+
+        update(project_id, %{settings: settings})
+
+      error ->
+        error
+    end
+  end
+
+  @doc "Set the default pipeline for a project."
+  def set_default_pipeline(project_id, name) do
+    case get(project_id) do
+      {:ok, project} ->
+        settings = Map.put(project.settings, :default_pipeline, name)
+        update(project_id, %{settings: settings})
+
+      error ->
+        error
+    end
+  end
+
+  @doc "Get the default pipeline stages for a project. Returns a list or nil."
+  def default_pipeline_stages(project_id) do
+    case get_pipelines(project_id) do
+      {:ok, %{pipelines: pipelines, default: name}} when is_binary(name) ->
+        Map.get(pipelines, name)
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc "Default pipeline definitions seeded on new projects."
+  def default_pipelines do
+    %{
+      "standard" => [
+        %{name: "implement", kind: "task"},
+        %{name: "self-review", kind: "review",
+          prompt: "Review all changes on this branch against main. Check for:\n" <>
+            "- Unused variables, imports, or dead code\n" <>
+            "- Missing error handling at system boundaries\n" <>
+            "- Inconsistent naming or style\n" <>
+            "- Hardcoded values that should be configurable\n" <>
+            "- Security issues (injection, XSS, etc.)\n" <>
+            "- Overly complex code that could be simplified\n\n" <>
+            "Fix any issues you find directly. If everything looks good, add a note saying so."}
+      ],
+      "thorough" => [
+        %{name: "implement", kind: "task"},
+        %{name: "self-review", kind: "review",
+          prompt: "Review all changes on this branch against main. Fix any code quality issues, " <>
+            "unused code, naming inconsistencies, or missing error handling."},
+        %{name: "test", kind: "task",
+          prompt: "Run the full test suite. Fix any failures. If tests are missing for new " <>
+            "functionality, add them."}
+      ]
+    }
+  end
+
+  # Seed pipeline defaults into settings if not already present
+  defp seed_pipeline_defaults(settings) do
+    if Map.has_key?(settings, :pipelines) || Map.has_key?(settings, "pipelines") do
+      settings
+    else
+      settings
+      |> Map.put(:pipelines, default_pipelines())
+      |> Map.put(:default_pipeline, nil)
+    end
+  end
+
+  defp maybe_clear_default(settings, deleted_name) do
+    current = settings[:default_pipeline] || settings["default_pipeline"]
+    if current == deleted_name, do: Map.put(settings, :default_pipeline, nil), else: settings
+  end
 
   defp generate_id do
     hex = :crypto.strong_rand_bytes(3) |> Base.encode16(case: :lower)
