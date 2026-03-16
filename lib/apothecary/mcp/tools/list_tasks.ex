@@ -21,7 +21,9 @@ defmodule Apothecary.MCP.Tools.ListTasks do
       filters =
         if params[:status], do: Keyword.put(filters, :status, params[:status]), else: filters
 
-      tasks = Apothecary.Worktrees.list_tasks(filters)
+      tasks =
+        Apothecary.Worktrees.list_tasks(filters)
+        |> Enum.reject(&Apothecary.Task.is_readonly_kind?(&1.kind))
 
       text =
         tasks

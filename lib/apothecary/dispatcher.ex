@@ -39,9 +39,9 @@ defmodule Apothecary.Dispatcher do
     GenServer.call(__MODULE__, {:set_agent_count, project_id, count}, 60_000)
   end
 
-  @doc "Dispatch a question immediately with a one-off brewer (doesn't count towards pool)."
-  def dispatch_question(project_id, question_worktree_id) do
-    GenServer.call(__MODULE__, {:dispatch_question, project_id, question_worktree_id}, 60_000)
+  @doc "Nudge the dispatcher to attempt dispatch immediately (e.g. after creating a question/plan)."
+  def nudge_dispatch(project_id) do
+    GenServer.call(__MODULE__, {:nudge_dispatch, project_id}, 60_000)
   end
 
   @doc "Report a brewer as idle and ready for the next worktree."
@@ -83,8 +83,6 @@ defmodule Apothecary.Dispatcher do
       projects: %{},
       # Reverse lookup: pid → project_id
       brewer_projects: %{},
-      # One-off question brewer pids (auto-stop when idle)
-      question_pids: MapSet.new(),
       # Whether periodic dispatch is scheduled
       dispatch_scheduled: false
     }
@@ -156,61 +154,11 @@ defmodule Apothecary.Dispatcher do
   end
 
   @impl true
-  def handle_call({:dispatch_question, project_id, question_wt_id}, _from, state) do
-    Logger.info("Dispatching question #{question_wt_id} for project #{project_id}")
-
-    case Apothecary.Worktrees.get_worktree(question_wt_id) do
-      {:ok, worktree} ->
-        # Spawn a one-off brewer
-        {pids, next_id} = start_n_brewers(state.next_brewer_id, 1)
-
-        case pids do
-          [pid] ->
-            # Track it as a question brewer (auto-stop when idle)
-            pool = get_or_create_pool(state, project_id)
-            agents = Map.put(pool.agents, pid, %{id: next_id - 1, status: :working, sandboxed: false})
-            pool = %{pool | agents: agents}
-
-            state = %{
-              state
-              | next_brewer_id: next_id,
-                brewer_projects: Map.put(state.brewer_projects, pid, project_id),
-                question_pids: MapSet.put(state.question_pids, pid),
-                projects: Map.put(state.projects, project_id, pool)
-            }
-
-            # Claim and assign immediately
-            brewer_id = next_id - 1
-
-            case Apothecary.Worktrees.claim_worktree(worktree.id, brewer_id) do
-              {:ok, claimed} ->
-                project_dir = resolve_project_dir(worktree)
-
-                Apothecary.Brewer.assign_worktree(
-                  pid,
-                  claimed,
-                  project_dir,
-                  nil,
-                  project_dir
-                )
-
-                broadcast(state)
-                {:reply, :ok, state}
-
-              {:error, reason} ->
-                Logger.error("Failed to claim question #{question_wt_id}: #{inspect(reason)}")
-                Apothecary.BrewerSupervisor.stop_brewer(pid)
-                state = %{state | question_pids: MapSet.delete(state.question_pids, pid)}
-                {:reply, {:error, reason}, state}
-            end
-
-          [] ->
-            {:reply, {:error, :brewer_start_failed}, state}
-        end
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-    end
+  def handle_call({:nudge_dispatch, project_id}, _from, state) do
+    Logger.info("Nudging dispatch for project #{project_id}")
+    state = try_dispatch(state)
+    broadcast(state)
+    {:reply, :ok, state}
   end
 
   @impl true
@@ -248,63 +196,37 @@ defmodule Apothecary.Dispatcher do
 
   @impl true
   def handle_cast({:agent_idle, pid}, state) do
-    # One-off question brewers: auto-stop when idle
-    if MapSet.member?(state.question_pids, pid) do
-      Logger.info("Question brewer #{inspect(pid)} finished, stopping")
-      Apothecary.BrewerSupervisor.stop_brewer(pid)
-      project_id = state.brewer_projects[pid]
-      pool = state.projects[project_id]
+    project_id = state.brewer_projects[pid]
 
-      pool =
+    state =
+      if project_id do
+        pool = state.projects[project_id]
+
         if pool do
-          %{pool | agents: Map.delete(pool.agents, pid)}
+          idle =
+            if pid in pool.idle_agents, do: pool.idle_agents, else: [pid | pool.idle_agents]
+
+          pool = %{pool | idle_agents: idle}
+
+          # Reset failure counter on successful idle (brewer completed work)
+          brewer_state = pool.agents[pid]
+          slot_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(pid)
+          failure_tracker = Map.delete(pool.failure_tracker, slot_id)
+
+          pool = %{pool | failure_tracker: failure_tracker}
+          state = put_pool(state, project_id, pool)
+          try_dispatch(state)
         else
-          pool
-        end
-
-      state = %{
-        state
-        | question_pids: MapSet.delete(state.question_pids, pid),
-          brewer_projects: Map.delete(state.brewer_projects, pid)
-      }
-
-      state = if pool, do: put_pool(state, project_id, pool), else: state
-
-      broadcast(state)
-      {:noreply, state}
-    else
-      project_id = state.brewer_projects[pid]
-
-      state =
-        if project_id do
-          pool = state.projects[project_id]
-
-          if pool do
-            idle =
-              if pid in pool.idle_agents, do: pool.idle_agents, else: [pid | pool.idle_agents]
-
-            pool = %{pool | idle_agents: idle}
-
-            # Reset failure counter on successful idle (brewer completed work)
-            brewer_state = pool.agents[pid]
-            slot_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(pid)
-            failure_tracker = Map.delete(pool.failure_tracker, slot_id)
-
-            pool = %{pool | failure_tracker: failure_tracker}
-            state = put_pool(state, project_id, pool)
-            try_dispatch(state)
-          else
-            state
-          end
-        else
-          # Brewer not associated with any project — shouldn't happen but handle gracefully
-          Logger.warning("Brewer #{inspect(pid)} reported idle but has no project association")
           state
         end
+      else
+        # Brewer not associated with any project — shouldn't happen but handle gracefully
+        Logger.warning("Brewer #{inspect(pid)} reported idle but has no project association")
+        state
+      end
 
-      broadcast(state)
-      {:noreply, state}
-    end
+    broadcast(state)
+    {:noreply, state}
   end
 
   @impl true
@@ -359,8 +281,6 @@ defmodule Apothecary.Dispatcher do
             "Brewer #{inspect(slot_id)} (#{inspect(pid)}) in project #{project_id} went down: #{inspect(reason)}"
           )
 
-          is_question = MapSet.member?(state.question_pids, pid)
-
           pool = %{
             pool
             | agent_pids: List.delete(pool.agent_pids, pid),
@@ -368,39 +288,30 @@ defmodule Apothecary.Dispatcher do
               agents: Map.delete(pool.agents, pid)
           }
 
-          state = %{state | question_pids: MapSet.delete(state.question_pids, pid)}
+          pool = record_pool_failure(pool, slot_id)
 
-          # Question brewers don't need failure tracking / respawn
-          if is_question do
-            brewer_projects = Map.delete(state.brewer_projects, pid)
-            state = %{state | brewer_projects: brewer_projects}
-            put_pool(state, project_id, pool)
-          else
-            pool = record_pool_failure(pool, slot_id)
+          brewer_projects = Map.delete(state.brewer_projects, pid)
+          state = %{state | brewer_projects: brewer_projects}
 
-            brewer_projects = Map.delete(state.brewer_projects, pid)
-            state = %{state | brewer_projects: brewer_projects}
+          if should_pool_backoff?(pool, slot_id) do
+            Logger.warning(
+              "Brewer slot #{slot_id} in project #{project_id} hit #{@max_fast_failures} fast failures, " <>
+                "backing off #{div(@backoff_ms, 1000)}s before respawn"
+            )
 
-            if should_pool_backoff?(pool, slot_id) do
-              Logger.warning(
-                "Brewer slot #{slot_id} in project #{project_id} hit #{@max_fast_failures} fast failures, " <>
-                  "backing off #{div(@backoff_ms, 1000)}s before respawn"
+            timer =
+              Process.send_after(
+                self(),
+                {:backoff_expired, project_id, slot_id},
+                @backoff_ms
               )
 
-              timer =
-                Process.send_after(
-                  self(),
-                  {:backoff_expired, project_id, slot_id},
-                  @backoff_ms
-                )
-
-              pool = put_in(pool.backoff_timers[slot_id], timer)
-              put_pool(state, project_id, pool)
-            else
-              state = put_pool(state, project_id, pool)
-              state = scale_project_agents(state, project_id)
-              try_dispatch(state)
-            end
+            pool = put_in(pool.backoff_timers[slot_id], timer)
+            put_pool(state, project_id, pool)
+          else
+            state = put_pool(state, project_id, pool)
+            state = scale_project_agents(state, project_id)
+            try_dispatch(state)
           end
         else
           Map.update!(state, :brewer_projects, &Map.delete(&1, pid))
@@ -566,12 +477,22 @@ defmodule Apothecary.Dispatcher do
   end
 
   defp try_dispatch_project(state, project_id) do
-    case Apothecary.Worktrees.ready_worktrees(project_id: project_id) do
-      [] ->
-        state
+    state =
+      case Apothecary.Worktrees.ready_worktrees(project_id: project_id) do
+        [] ->
+          state
 
-      worktrees ->
-        dispatch_first_available(worktrees, state, project_id)
+        worktrees ->
+          dispatch_first_available(worktrees, state, project_id)
+      end
+
+    # Also dispatch any pending question/plan tasks (only if idle agents remain)
+    pool = state.projects[project_id]
+
+    if pool && pool.idle_agents != [] do
+      try_dispatch_question_tasks(state, project_id)
+    else
+      state
     end
   end
 
@@ -591,57 +512,115 @@ defmodule Apothecary.Dispatcher do
         state
 
       [worktree | rest] ->
-        # Skip questions — they are dispatched immediately via dispatch_question
-        if worktree.kind == "question" do
+        agent_pid = if pool.idle_agents != [], do: hd(pool.idle_agents)
+
+        if is_nil(agent_pid) do
           dispatch_remaining(rest, state, project_id)
         else
-          agent_pid = if pool.idle_agents != [], do: hd(pool.idle_agents)
+          brewer_state = pool.agents[agent_pid]
+          brewer_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(agent_pid)
 
-          if is_nil(agent_pid) do
-            dispatch_remaining(rest, state, project_id)
-          else
-            brewer_state = pool.agents[agent_pid]
-            brewer_id = if brewer_state, do: brewer_state.id, else: :erlang.phash2(agent_pid)
+          case Apothecary.Worktrees.claim_worktree(worktree.id, brewer_id) do
+            {:ok, claimed} ->
+              project_dir = resolve_project_dir(worktree)
 
-            case Apothecary.Worktrees.claim_worktree(worktree.id, brewer_id) do
-              {:ok, claimed} ->
-                project_dir = resolve_project_dir(worktree)
+              case ensure_git_worktree(worktree, project_dir) do
+                {:ok, path, branch} ->
+                  Apothecary.Worktrees.update_worktree(worktree.id, %{
+                    git_path: path,
+                    git_branch: branch
+                  })
 
-                case ensure_git_worktree(worktree, project_dir) do
-                  {:ok, path, branch} ->
-                    Apothecary.Worktrees.update_worktree(worktree.id, %{
-                      git_path: path,
-                      git_branch: branch
-                    })
+                  [_ | rest_idle] = pool.idle_agents
+                  pool = %{pool | idle_agents: rest_idle}
+                  state = put_pool(state, project_id, pool)
 
-                    [_ | rest_idle] = pool.idle_agents
-                    pool = %{pool | idle_agents: rest_idle}
-                    state = put_pool(state, project_id, pool)
+                  Apothecary.Brewer.assign_worktree(
+                    agent_pid,
+                    claimed,
+                    path,
+                    branch,
+                    project_dir
+                  )
 
-                    Apothecary.Brewer.assign_worktree(
-                      agent_pid,
-                      claimed,
-                      path,
-                      branch,
-                      project_dir
-                    )
+                  state
 
-                    state
+                {:error, reason} ->
+                  Logger.error(
+                    "Failed to create git worktree for #{worktree.id}: #{inspect(reason)}"
+                  )
 
-                  {:error, reason} ->
-                    Logger.error(
-                      "Failed to create git worktree for #{worktree.id}: #{inspect(reason)}"
-                    )
+                  Apothecary.Worktrees.release_worktree(worktree.id)
+                  dispatch_remaining(rest, state, project_id)
+              end
 
-                    Apothecary.Worktrees.release_worktree(worktree.id)
-                    dispatch_remaining(rest, state, project_id)
-                end
-
-              {:error, _} ->
-                dispatch_remaining(rest, state, project_id)
-            end
+            {:error, _} ->
+              dispatch_remaining(rest, state, project_id)
           end
         end
+    end
+  end
+
+  # Dispatch pending question/plan tasks to idle brewers
+  defp try_dispatch_question_tasks(state, project_id) do
+    pool = state.projects[project_id]
+
+    if is_nil(pool) or pool.idle_agents == [] do
+      state
+    else
+      tasks = Apothecary.Worktrees.pending_question_tasks(project_id: project_id)
+      do_dispatch_question_tasks(tasks, state, project_id)
+    end
+  end
+
+  defp do_dispatch_question_tasks([], state, _project_id), do: state
+
+  defp do_dispatch_question_tasks([task | rest], state, project_id) do
+    pool = state.projects[project_id]
+
+    if pool.idle_agents == [] do
+      state
+    else
+      agent_pid = hd(pool.idle_agents)
+
+      case Apothecary.Worktrees.claim(task.id) do
+        {:ok, _} ->
+          # Resolve work_dir: parent worktree's git_path, or project dir
+          work_dir = resolve_question_task_work_dir(task)
+          project_dir = resolve_project_dir_for_task(task)
+
+          [_ | rest_idle] = pool.idle_agents
+          pool = %{pool | idle_agents: rest_idle}
+          state = put_pool(state, project_id, pool)
+
+          Apothecary.Brewer.assign_question_task(agent_pid, task, work_dir, project_dir)
+
+          do_dispatch_question_tasks(rest, state, project_id)
+
+        {:error, _} ->
+          do_dispatch_question_tasks(rest, state, project_id)
+      end
+    end
+  end
+
+  defp resolve_question_task_work_dir(task) do
+    case Apothecary.Worktrees.get_worktree(task.worktree_id) do
+      {:ok, %{git_path: git_path}} when not is_nil(git_path) ->
+        if File.dir?(git_path), do: git_path, else: resolve_project_dir_for_task(task)
+
+      {:ok, wt} ->
+        # Fallback to project dir
+        resolve_project_dir(%{project_id: wt.project_id})
+
+      _ ->
+        nil
+    end
+  end
+
+  defp resolve_project_dir_for_task(task) do
+    case Apothecary.Worktrees.get_worktree(task.worktree_id) do
+      {:ok, wt} -> resolve_project_dir(%{project_id: wt.project_id})
+      _ -> nil
     end
   end
 
