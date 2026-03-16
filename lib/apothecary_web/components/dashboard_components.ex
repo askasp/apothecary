@@ -188,7 +188,9 @@ defmodule ApothecaryWeb.DashboardComponents do
             style="border-left: 1px solid var(--border); padding-left: 12px;"
           >
             <button
-              :for={{tab, label} <- [workbench: "workbench", recipes: "recurring"]}
+              :for={
+                {tab, label} <- [workbench: "workbench", recipes: "recurring", pipelines: "pipelines"]
+              }
               phx-click="switch-tab"
               phx-value-tab={tab}
               class="cursor-pointer"
@@ -1046,6 +1048,41 @@ defmodule ApothecaryWeb.DashboardComponents do
         {brewing, assaying, queued, bottled, discarded}
       end
 
+    # Build question entries in tree_group format
+    filtered_questions =
+      assigns.questions
+      |> Enum.sort_by(fn q -> q.created_at || "" end, :desc)
+      |> then(fn qs ->
+        if query != "" do
+          Enum.filter(qs, fn q ->
+            title = (q.title || q.id) |> String.downcase()
+            String.contains?(title, query)
+          end)
+        else
+          qs
+        end
+      end)
+
+    # Only show standalone root questions in the tree (not follow-ups or worktree-attached)
+    root_questions =
+      Enum.filter(filtered_questions, fn q ->
+        is_nil(q.parent_question_id) and is_nil(Map.get(q, :parent_worktree_id))
+      end)
+
+    {pending_questions, answered_questions} =
+      Enum.split_with(root_questions, fn q -> q.status in ["open", "in_progress"] end)
+
+    pending_q_entries =
+      Enum.map(pending_questions, fn q ->
+        %{worktree: q, tasks: [], agent: nil, dev_server: nil}
+      end)
+
+    answered_q_entries =
+      Enum.map(answered_questions, fn q ->
+        %{worktree: q, tasks: [], agent: nil, dev_server: nil}
+      end)
+
+
     assigns =
       assigns
       |> assign(:brewing, brewing)
@@ -1194,7 +1231,10 @@ defmodule ApothecaryWeb.DashboardComponents do
 
       <%!-- Empty state --%>
       <div
-        :if={@brewing == [] && @assaying == [] && @queued == [] && @bottled == [] && @discarded == []}
+        :if={
+          @brewing == [] && @assaying == [] && @queued == [] && @bottled == [] && @discarded == [] &&
+            @pending_q_entries == [] && @answered_q_entries == []
+        }
         class="py-6"
         style="color: var(--muted); font-size: var(--font-size-sm);"
       >
@@ -1320,7 +1360,138 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :project_pipelines, :map, default: %{}
 
   def worktree_detail(assigns) do
-    worktree_detail_inner(assigns)
+    # Render question-specific view when kind is "question"
+    if Map.get(assigns.task, :kind) == "question" do
+      question_detail(assigns)
+    else
+      worktree_detail_inner(assigns)
+    end
+  end
+
+  defp question_detail(assigns) do
+    answer = question_answer(assigns.task)
+    time_ago = format_relative_time(assigns.task.created_at)
+    is_thinking = assigns.task.status in ["open", "in_progress"]
+
+    assigns =
+      assigns
+      |> assign(:answer, answer)
+      |> assign(:time_ago, time_ago)
+      |> assign(:is_thinking, is_thinking)
+
+    ~H"""
+    <div class="px-4 py-4 scroll-main overflow-y-auto flex-1">
+      <%!-- Question title --%>
+      <div class="mb-4">
+        <div class="flex items-start justify-between">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span style="color: var(--accent); font-weight: 600; font-size: var(--font-size-title);">
+                ?
+              </span>
+              <span style="font-size: var(--font-size-title); font-weight: 600; color: var(--text);">
+                {@task.title}
+              </span>
+            </div>
+            <div
+              class="flex items-center gap-1 mt-1"
+              style="font-size: var(--font-size-xs); color: var(--muted);"
+            >
+              <span>{@task.id}</span>
+              <span :if={@time_ago}>&middot; {@time_ago}</span>
+              <span :if={@task.status == "done"} style="color: var(--accent);">
+                &middot; answered
+              </span>
+              <span :if={@is_thinking} style="color: var(--concocting);">&middot; thinking</span>
+            </div>
+          </div>
+          <button
+            phx-click="deselect-task"
+            class="cursor-pointer flex-shrink-0"
+            style="color: var(--muted); font-size: var(--font-size-xs);"
+          >
+            esc
+          </button>
+        </div>
+      </div>
+
+      <%!-- Answer --%>
+      <%= if @answer != "" do %>
+        <div
+          id={"q-detail-answer-#{@task.id}"}
+          class="px-3 py-3 question-answer"
+          style={[
+            "border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);",
+            "background: color-mix(in srgb, var(--surface) 80%, transparent);",
+            "border-radius: 0 6px 6px 0;",
+            "font-size: var(--font-size-sm); color: var(--dim);",
+            "white-space: pre-wrap; line-height: 1.6;"
+          ]}
+        >
+          {@answer}
+        </div>
+        <div class="mt-2 flex items-center gap-2">
+          <.copy_button target={"#q-detail-answer-#{@task.id}"} />
+          <button
+            phx-click="toggle-follow-up"
+            phx-value-question-id={@task.id}
+            style="color: var(--muted); font-size: var(--font-size-xs);"
+            class="hover:underline cursor-pointer"
+          >
+            follow up
+          </button>
+        </div>
+        <%!-- Follow-up input --%>
+        <%= if @follow_up_question_id == @task.id do %>
+          <form
+            phx-submit="submit-follow-up"
+            id={"follow-up-form-#{@task.id}"}
+            class="mt-3 flex items-center gap-2 px-3 py-2"
+            style="font-size: var(--font-size-sm); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 6px;"
+          >
+            <input type="hidden" name="parent_question_id" value={@task.id} />
+            <span style="color: var(--accent); font-weight: 600;">?</span>
+            <input
+              type="text"
+              name="follow_up_text"
+              placeholder="follow-up question..."
+              autofocus
+              class="flex-1 bg-transparent outline-none"
+              style="color: var(--text); border: none; padding: 2px 0; font-size: var(--font-size-sm);"
+            />
+            <span style="color: var(--muted); font-size: var(--font-size-xs);">
+              enter &middot; esc close
+            </span>
+          </form>
+        <% end %>
+      <% else %>
+        <%!-- Thinking state --%>
+        <div
+          :if={@is_thinking}
+          class="pl-3 flex items-center gap-2 py-4"
+          style="border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); font-size: var(--font-size-sm); color: var(--muted);"
+        >
+          <.braille_spinner id={"q-detail-spin-#{@task.id}"} offset={0} />
+          <span>thinking...</span>
+        </div>
+      <% end %>
+
+      <%!-- Follow-up questions thread --%>
+      <% grouped = group_questions_threaded(@worktree_questions) %>
+      <div :if={grouped != []} class="mt-6">
+        <div style="border-top: 1px solid var(--border); padding-top: 16px; margin-bottom: 8px;" />
+        <div :for={thread <- grouped} class="mb-4">
+          <.question_thread_item
+            :for={q <- thread}
+            q={q}
+            depth={q.__depth__ || 0}
+            follow_up_id={@follow_up_question_id}
+          />
+        </div>
+      </div>
+    </div>
+    """
+>>>>>>> 1ea1ea5 (Add pipeline management UI tab for creating/editing/deleting pipelines)
   end
 
   defp worktree_detail_inner(assigns) do
@@ -1365,7 +1536,8 @@ defmodule ApothecaryWeb.DashboardComponents do
     done_tasks = Enum.filter(assigns.children, fn c -> c.status in ["done", "closed"] end)
 
     # Don't show active task spinner if the worktree is done brewing
-    brew_finished? = assigns.task.status in ["brew_done", "pr_open", "merged", "done", "closed", "cancelled"]
+    brew_finished? =
+      assigns.task.status in ["brew_done", "pr_open", "merged", "done", "closed", "cancelled"]
 
     active_task =
       if brew_finished?,
@@ -1483,8 +1655,9 @@ defmodule ApothecaryWeb.DashboardComponents do
                 :if={is_list(@task.pipeline) && length(@task.pipeline) > 0}
                 style="color: var(--accent);"
               >
-                &middot; stage {@task.pipeline_stage + 1}/{length(@task.pipeline)}
-                (<%= pipeline_stage_label(@task) %>)
+                &middot; stage {@task.pipeline_stage + 1}/{length(@task.pipeline)} ({pipeline_stage_label(
+                  @task
+                )})
               </span>
             </div>
           </div>
@@ -1534,7 +1707,13 @@ defmodule ApothecaryWeb.DashboardComponents do
             <span style="color: var(--accent);">✓</span>
             <span style="color: var(--muted);">{task.title}</span>
             <span
-              class={["ml-auto transition-opacity", if(MapSet.member?(@expanded, task.id), do: "opacity-100", else: "opacity-0 group-hover:opacity-100")]}
+              class={[
+                "ml-auto transition-opacity",
+                if(MapSet.member?(@expanded, task.id),
+                  do: "opacity-100",
+                  else: "opacity-0 group-hover:opacity-100"
+                )
+              ]}
               style="font-size: var(--font-size-xxs); color: var(--dim);"
             >
               {if MapSet.member?(@expanded, task.id), do: "▾", else: "▸"}
@@ -1586,6 +1765,8 @@ defmodule ApothecaryWeb.DashboardComponents do
         <%= for q <- @question_tasks_done do %>
           <% answer = question_answer(q) %>
           <% is_plan = Map.get(q, :kind) == "plan" %>
+          <% follow_ups =
+            Enum.count(@worktree_questions, fn fq -> Map.get(fq, :parent_question_id) == q.id end) %>
           <div
             class="flex items-center gap-2 py-0.5 cursor-pointer group"
             phx-click="toggle-detail-expand"
@@ -1599,26 +1780,59 @@ defmodule ApothecaryWeb.DashboardComponents do
             class="mb-3 mt-1 ml-4 px-3 py-2"
             style="border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); background: color-mix(in srgb, var(--surface) 80%, transparent); border-radius: 0 6px 6px 0; font-size: var(--font-size-xs); color: var(--dim); white-space: pre-wrap; line-height: 1.6;"
           >
-            {answer}
-          </div>
-          <div :if={MapSet.member?(@expanded, q.id)} class="ml-4 mt-1 mb-2">
-            <form
-              phx-submit="submit-follow-up"
-              id={"follow-up-form-#{q.id}"}
-              class="flex items-center gap-2 px-2 py-1"
-              style="font-size: var(--font-size-xs); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 6px;"
-            >
-              <input type="hidden" name="parent_question_id" value={q.id} />
-              <span style="color: var(--accent); font-weight: 600;">?</span>
-              <input
-                type="text"
-                name="follow_up_text"
-                placeholder="follow-up..."
-                class="flex-1 bg-transparent outline-none"
-                style="color: var(--text); border: none; padding: 2px 0; font-size: var(--font-size-xs);"
-              />
-              <span style="color: var(--muted); font-size: var(--font-size-xxs);">enter</span>
-            </form>
+            <div style="color: var(--accent); font-size: var(--font-size-xxs); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 8px;">
+              QUESTION CONVERSATION
+            </div>
+            <div class="flex items-start gap-1.5 mb-2" style="font-size: var(--font-size-xs);">
+              <span style="color: var(--accent); font-weight: 600; flex-shrink: 0;">&rsaquo;</span>
+              <span style="color: var(--text);">{q.title}</span>
+            </div>
+            <%= if answer != "" do %>
+              <div
+                id={"q-inline-answer-#{q.id}"}
+                class="ml-3 px-2 py-1.5"
+                style="font-size: var(--font-size-xs); color: var(--dim); white-space: pre-wrap; line-height: 1.6;"
+              >
+                {answer}
+              </div>
+              <div class="mt-2 ml-3 flex items-center gap-2">
+                <button
+                  phx-click="toggle-follow-up"
+                  phx-value-question-id={q.id}
+                  style="color: var(--muted); font-size: var(--font-size-xxs);"
+                  class="hover:underline cursor-pointer"
+                >
+                  follow up
+                </button>
+              </div>
+              <%!-- Follow-up input --%>
+              <%= if @follow_up_question_id == q.id do %>
+                <form
+                  phx-submit="submit-follow-up"
+                  id={"follow-up-form-inline-#{q.id}"}
+                  class="mt-2 ml-3 flex items-center gap-2 px-2 py-1"
+                  style="font-size: var(--font-size-xs); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 6px;"
+                >
+                  <input type="hidden" name="parent_question_id" value={q.id} />
+                  <span style="color: var(--accent); font-weight: 600;">?</span>
+                  <input
+                    type="text"
+                    name="follow_up_text"
+                    placeholder="follow-up..."
+                    autofocus
+                    class="flex-1 bg-transparent outline-none"
+                    style="color: var(--text); border: none; padding: 2px 0; font-size: var(--font-size-xs);"
+                  />
+                  <span style="color: var(--muted); font-size: var(--font-size-xxs);">
+                    enter
+                  </span>
+                </form>
+              <% end %>
+            <% else %>
+              <div class="ml-3" style="font-size: var(--font-size-xs); color: var(--dim);">
+                no answer yet
+              </div>
+            <% end %>
           </div>
         <% end %>
       </div>
@@ -1748,8 +1962,12 @@ defmodule ApothecaryWeb.DashboardComponents do
               <span style="color: var(--dim);" class="truncate flex-1 min-w-0">{file.path}</span>
               <span style="color: var(--muted); flex-shrink: 0;">&vert; {file.count}</span>
               <span style="flex-shrink: 0;">
-                <span :if={file.additions > 0} style="color: var(--accent);">{String.duplicate("+", min(file.additions, 20))}</span>
-                <span :if={file.deletions > 0} style="color: var(--error);">{String.duplicate("-", min(file.deletions, 20))}</span>
+                <span :if={file.additions > 0} style="color: var(--accent);">
+                  {String.duplicate("+", min(file.additions, 20))}
+                </span>
+                <span :if={file.deletions > 0} style="color: var(--error);">
+                  {String.duplicate("-", min(file.deletions, 20))}
+                </span>
               </span>
             </div>
           </div>
@@ -2277,7 +2495,10 @@ defmodule ApothecaryWeb.DashboardComponents do
           </div>
         <% @server_status == :starting -> %>
           <div class="flex-1 min-h-0 flex flex-col">
-            <div class="flex items-center gap-2 px-4 py-3" style="border-bottom: 1px solid var(--border);">
+            <div
+              class="flex items-center gap-2 px-4 py-3"
+              style="border-bottom: 1px solid var(--border);"
+            >
               <div style="color: var(--concocting); font-size: 18px;">
                 <.braille_spinner id="preview-panel-spinner" offset={0} />
               </div>
@@ -2791,7 +3012,10 @@ defmodule ApothecaryWeb.DashboardComponents do
             >
               {@current_file.path}
             </div>
-            <table class="diff-sbs-table" style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+            <table
+              class="diff-sbs-table"
+              style="width: 100%; border-collapse: collapse; table-layout: fixed;"
+            >
               <colgroup>
                 <col style="width: 40px;" />
                 <col style="width: calc(50% - 40px);" />
@@ -2864,7 +3088,9 @@ defmodule ApothecaryWeb.DashboardComponents do
   end
 
   defp sbs_cell_style(%{type: :change}, side) do
-    base = "background: rgba(90, 90, 90, 0.05); font-size: var(--font-size-xxs); padding: 0 8px; font-family: var(--font-mono, monospace);"
+    base =
+      "background: rgba(90, 90, 90, 0.05); font-size: var(--font-size-xxs); padding: 0 8px; font-family: var(--font-mono, monospace);"
+
     if side == :left, do: base <> " border-right: 1px solid var(--border);", else: base
   end
 
@@ -3213,6 +3439,226 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
+  # ── Pipeline Management ──────────────────────────────────
+
+  attr :project_pipelines, :map, required: true
+  attr :default_pipeline, :string, default: nil
+  attr :show_pipeline_form, :boolean, default: false
+  attr :pipeline_form_name, :string, default: ""
+  attr :pipeline_form_stages, :list, default: []
+  attr :editing_pipeline_name, :string, default: nil
+
+  def pipeline_list(assigns) do
+    ~H"""
+    <div class="px-3 py-3">
+      <div class="mb-3" style="font-size: var(--font-size-xs);">
+        <span style="color: var(--dim);">definitions:</span>
+        <span style="color: var(--text);">&nbsp;{map_size(@project_pipelines)}</span>
+        <span :if={@default_pipeline} style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
+        <span :if={@default_pipeline} style="color: var(--dim);">
+          default: <span style="color: var(--accent);">{@default_pipeline}</span>
+        </span>
+      </div>
+
+      <.pipeline_form_panel
+        :if={@show_pipeline_form}
+        name={@pipeline_form_name}
+        stages={@pipeline_form_stages}
+        editing_name={@editing_pipeline_name}
+      />
+
+      <%= if @project_pipelines == %{} and !@show_pipeline_form do %>
+        <div style="color: var(--muted); font-size: var(--font-size-sm);" class="py-6">
+          no pipelines defined yet
+        </div>
+      <% else %>
+        <div :if={!@show_pipeline_form} style="font-size: var(--font-size-sm);">
+          <%= for {name, stages} <- Enum.sort(@project_pipelines) do %>
+            <div
+              class="mb-3 p-2 cursor-pointer"
+              style="border: 1px solid var(--border); border-radius: 4px;"
+              phx-click="edit-pipeline"
+              phx-value-name={name}
+            >
+              <div class="flex items-center justify-between mb-1">
+                <div class="flex items-center gap-2">
+                  <span style="color: var(--text); font-weight: 500;">{name}</span>
+                  <span
+                    :if={@default_pipeline == name}
+                    style="color: var(--accent); font-size: var(--font-size-xs);"
+                  >
+                    default
+                  </span>
+                </div>
+                <div class="flex items-center gap-2" style="font-size: var(--font-size-xs);">
+                  <button
+                    :if={@default_pipeline != name}
+                    phx-click="set-default-pipeline"
+                    phx-value-name={name}
+                    class="action-text"
+                  >
+                    set default
+                  </button>
+                  <button
+                    :if={@default_pipeline == name}
+                    phx-click="clear-default-pipeline"
+                    class="action-text"
+                    style="color: var(--muted);"
+                  >
+                    unset default
+                  </button>
+                  <button
+                    phx-click="delete-pipeline-def"
+                    phx-value-name={name}
+                    class="action-text"
+                    data-confirm={"Delete pipeline '#{name}'?"}
+                  >
+                    delete
+                  </button>
+                </div>
+              </div>
+              <div
+                class="flex items-center gap-1 flex-wrap"
+                style="font-size: var(--font-size-xs); color: var(--dim);"
+              >
+                <span :for={{stage, idx} <- Enum.with_index(stages)} class="flex items-center gap-1">
+                  <span :if={idx > 0}>&rarr;</span>
+                  <span style={
+                    if (stage["kind"] || stage[:kind]) == "review",
+                      do: "color: var(--assaying);",
+                      else: ""
+                  }>
+                    {stage["name"] || stage[:name] || "stage #{idx + 1}"}
+                  </span>
+                </span>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+
+      <div :if={!@show_pipeline_form} class="mt-3">
+        <button
+          phx-click="show-pipeline-form"
+          style="color: var(--muted); font-size: var(--font-size-sm); cursor: pointer;"
+        >
+          + new pipeline
+        </button>
+      </div>
+    </div>
+    """
+  end
+
+  attr :name, :string, required: true
+  attr :stages, :list, required: true
+  attr :editing_name, :string, default: nil
+
+  defp pipeline_form_panel(assigns) do
+    ~H"""
+    <div class="mb-4 p-3" style="border: 1px solid var(--border);">
+      <div class="flex items-center justify-between mb-2">
+        <span class="section-header">
+          {if(@editing_name, do: "EDIT PIPELINE", else: "NEW PIPELINE")}
+        </span>
+        <button phx-click="cancel-pipeline-form" class="action-text">cancel</button>
+      </div>
+      <.form for={%{}} id="pipeline-form" phx-submit="save-pipeline-def">
+        <input :if={@editing_name} type="hidden" name="pipeline[original_name]" value={@editing_name} />
+        <div class="mb-3">
+          <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">name</div>
+          <input
+            type="text"
+            name="pipeline[name]"
+            value={@name}
+            placeholder="e.g. thorough-review"
+            class="moonlight-input w-full"
+            required
+          />
+        </div>
+
+        <div class="mb-2">
+          <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">stages</div>
+          <%= for {stage, idx} <- Enum.with_index(@stages) do %>
+            <div
+              class="mb-2 p-2"
+              style="border: 1px solid var(--border); border-radius: 4px;"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <span style="color: var(--muted); font-size: var(--font-size-xs);">
+                  stage {idx + 1}
+                </span>
+                <button
+                  type="button"
+                  phx-click="remove-pipeline-stage"
+                  phx-value-index={idx}
+                  class="action-text"
+                  style="font-size: var(--font-size-xs);"
+                >
+                  remove
+                </button>
+              </div>
+              <div class="grid grid-cols-2 gap-2 mb-1">
+                <div>
+                  <input
+                    type="text"
+                    name={"pipeline[stages][#{idx}][name]"}
+                    value={stage["name"] || stage[:name] || ""}
+                    placeholder="stage name"
+                    class="moonlight-input w-full"
+                    required
+                  />
+                </div>
+                <div>
+                  <select
+                    name={"pipeline[stages][#{idx}][kind]"}
+                    class="moonlight-input w-full"
+                  >
+                    <option
+                      value="task"
+                      selected={(stage["kind"] || stage[:kind] || "task") == "task"}
+                    >
+                      task (implement)
+                    </option>
+                    <option
+                      value="review"
+                      selected={(stage["kind"] || stage[:kind]) == "review"}
+                    >
+                      review (diff-based)
+                    </option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <textarea
+                  name={"pipeline[stages][#{idx}][prompt]"}
+                  rows="2"
+                  placeholder="optional: custom instructions for this stage"
+                  class="moonlight-input w-full resize-none"
+                  style="font-size: var(--font-size-xs);"
+                >{stage["prompt"] || stage[:prompt] || ""}</textarea>
+              </div>
+            </div>
+          <% end %>
+          <button
+            type="button"
+            phx-click="add-pipeline-stage"
+            class="action-text"
+            style="font-size: var(--font-size-sm);"
+          >
+            + add stage
+          </button>
+        </div>
+
+        <div class="flex justify-end">
+          <button type="submit" class="action-pill">
+            {if(@editing_name, do: "update", else: "create")}
+          </button>
+        </div>
+      </.form>
+    </div>
+    """
+  end
+
   # ── Tab Navigation (for backward compat) ─────────────────
 
   attr :active_tab, :atom, required: true
@@ -3221,7 +3667,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     ~H"""
     <div class="flex items-center gap-3">
       <button
-        :for={{tab, label} <- [workbench: "workbench", recipes: "recurring"]}
+        :for={{tab, label} <- [workbench: "workbench", recipes: "recurring", pipelines: "pipelines"]}
         phx-click="switch-tab"
         phx-value-tab={tab}
         class="cursor-pointer"
@@ -3482,9 +3928,7 @@ defmodule ApothecaryWeb.DashboardComponents do
           phx-value-id={dep.id}
         >
           <.deployment_status_dot status={dep.status} />
-          <span
-            style={"color: var(--#{deployment_status_color(dep.status)}); font-size: var(--font-size-sm);"}
-          >
+          <span style={"color: var(--#{deployment_status_color(dep.status)}); font-size: var(--font-size-sm);"}>
             {dep.name}
           </span>
         </div>
@@ -3579,7 +4023,9 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   defp deployment_status_dot(assigns) do
     ~H"""
-    <span style={"color: var(--#{deployment_status_color(@status)}); font-size: 10px;"}>&#x25CF;</span>
+    <span style={"color: var(--#{deployment_status_color(@status)}); font-size: 10px;"}>
+      &#x25CF;
+    </span>
     """
   end
 
