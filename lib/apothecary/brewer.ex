@@ -40,6 +40,11 @@ defmodule Apothecary.Brewer do
     GenServer.cast(pid, {:send_instruction, text})
   end
 
+  @doc "Assign a question/plan task to this brewer (read-only, no MCP)."
+  def assign_question_task(pid, task, work_dir, project_dir) do
+    GenServer.cast(pid, {:assign_question_task, task, work_dir, project_dir})
+  end
+
   @doc "Abort the current brew — kills the Port, releases the worktree, goes idle."
   def abort(pid) do
     GenServer.cast(pid, :abort)
@@ -59,9 +64,7 @@ defmodule Apothecary.Brewer do
     broadcast_state(state)
 
     # Note: We do NOT call Dispatcher.agent_idle here. Pool brewers are already
-    # tracked as idle by scale_project_agents, and for question brewers the init
-    # idle would race with dispatch_question's assign — causing the dispatcher to
-    # auto-stop the brewer before it processes the worktree assignment.
+    # tracked as idle by scale_project_agents.
     {:ok, %{agent: state, port: nil, buffer: "", worktree_id: nil, watchdog_timer: nil}}
   end
 
@@ -85,31 +88,31 @@ defmodule Apothecary.Brewer do
     broadcast_state(agent)
 
     agent = %{agent | status: :working, output: []}
-    is_question = worktree.kind == "question"
 
+    # Write MCP config so Claude can communicate with the orchestrator
+    extra_mcps = Map.get(worktree, :mcp_servers) || %{}
+    write_mcp_config(worktree_path, agent.id, worktree.id, extra_mcps, project_dir)
+    # Write apothecary CLAUDE.md to the worktree's .claude/ directory
+    write_claude_md(worktree_path)
+    fetched =
+      Apothecary.Worktrees.list_tasks(worktree_id: worktree.id)
+      |> Enum.reject(&Apothecary.Task.is_readonly_kind?(&1.kind))
+
+    # Auto-claim the first open task so the UI immediately shows progress
+    first_open =
+      fetched
+      |> Enum.sort_by(fn t -> {t.priority || 99, t.created_at || ""} end)
+      |> Enum.find(&(&1.status == "open"))
+
+    if first_open, do: Apothecary.Worktrees.claim(first_open.id)
+
+    # Re-fetch to reflect the claimed state in the prompt
     tasks =
-      if is_question do
-        []
+      if first_open do
+        Apothecary.Worktrees.list_tasks(worktree_id: worktree.id)
+        |> Enum.reject(&Apothecary.Task.is_readonly_kind?(&1.kind))
       else
-        # Write MCP config so Claude can communicate with the orchestrator
-        extra_mcps = Map.get(worktree, :mcp_servers) || %{}
-        write_mcp_config(worktree_path, agent.id, worktree.id, extra_mcps, project_dir)
-        # Write apothecary CLAUDE.md to the worktree's .claude/ directory
-        write_claude_md(worktree_path)
-        fetched = Apothecary.Worktrees.list_tasks(worktree_id: worktree.id)
-
-        # Auto-claim the first open task so the UI immediately shows progress
-        first_open =
-          fetched
-          |> Enum.sort_by(fn t -> {t.priority || 99, t.created_at || ""} end)
-          |> Enum.find(&(&1.status == "open"))
-
-        if first_open, do: Apothecary.Worktrees.claim(first_open.id)
-
-        # Re-fetch to reflect the claimed state in the prompt
-        if first_open,
-          do: Apothecary.Worktrees.list_tasks(worktree_id: worktree.id),
-          else: fetched
+        fetched
       end
 
     case spawn_claude(agent, worktree, tasks) do
@@ -137,6 +140,60 @@ defmodule Apothecary.Brewer do
         Apothecary.Worktrees.release_worktree(worktree.id)
         schedule_error_reset()
         {:noreply, %{state | agent: agent, worktree_id: worktree.id}}
+    end
+  end
+
+  @impl true
+  def handle_cast(
+        {:assign_question_task, task, work_dir, project_dir},
+        %{agent: agent} = state
+      ) do
+    Logger.info("Brewer #{agent.id} assigned question-task #{task.id}: #{task.title}")
+
+    agent = %{
+      agent
+      | status: :working,
+        question_task: task,
+        started_at: DateTime.utc_now(),
+        worktree_path: work_dir,
+        project_dir: project_dir,
+        output: []
+    }
+
+    broadcast_state(agent)
+
+    prompt = build_question_task_prompt(task, work_dir)
+
+    Logger.info(
+      "Brewer #{agent.id} spawning question claude (#{byte_size(prompt)} byte prompt) " <>
+        "in #{work_dir}"
+    )
+
+    case spawn_question_claude(agent, prompt, work_dir) do
+      {:ok, port, sandboxed} ->
+        agent = %{agent | sandboxed: sandboxed}
+        watchdog = schedule_watchdog()
+        broadcast_state(agent)
+
+        {:noreply,
+         %{
+           state
+           | agent: agent,
+             port: port,
+             buffer: "",
+             worktree_id: task.worktree_id,
+             watchdog_timer: watchdog
+         }}
+
+      {:error, reason} ->
+        error_msg = "[Failed to spawn claude: #{inspect(reason)}]"
+        Logger.error("Brewer #{agent.id}: #{error_msg}")
+        agent = %{agent | status: :error, output: [error_msg], question_task: nil}
+        broadcast_state(agent)
+        broadcast_output(agent.id, [error_msg])
+        Apothecary.Worktrees.unclaim(task.id)
+        schedule_error_reset()
+        {:noreply, %{state | agent: agent}}
     end
   end
 
@@ -261,21 +318,20 @@ defmodule Apothecary.Brewer do
 
     Logger.info("Brewer #{agent.id} completed worktree #{state.worktree_id}")
 
-    worktree_id = state.worktree_id
-    wt = agent.current_worktree
-
-    if wt && wt.kind == "question" do
-      # Questions: save only text content (filter out tool-use lines) and close
+    if agent.question_task do
+      # Question/plan task: save answer as note and close
       answer =
         output
         |> Enum.reject(&String.starts_with?(&1, "[tool: "))
         |> Enum.join("")
         |> String.trim()
 
-      Apothecary.Worktrees.add_note(worktree_id, answer)
-      Apothecary.Worktrees.close_worktree(worktree_id)
+      task_id = agent.question_task.id
+      Apothecary.Worktrees.add_note(task_id, answer)
+      Apothecary.Worktrees.close(task_id)
     else
-      # Tasks: record session summary, push, and create PR
+      # Regular worktree: record session summary, push, and create PR
+      worktree_id = state.worktree_id
       add_session_summary(worktree_id, agent)
       finalize_worktree(worktree_id, agent)
     end
@@ -287,6 +343,7 @@ defmodule Apothecary.Brewer do
       agent
       | status: :idle,
         current_worktree: nil,
+        question_task: nil,
         project_dir: nil,
         worktree_path: nil,
         branch: nil,
@@ -552,11 +609,11 @@ defmodule Apothecary.Brewer do
       {:ok, _} ->
         Logger.info("Pushed branch for worktree #{worktree_id}")
 
-        # Check if there are remaining open tasks — if so, stay dispatchable
-        # instead of moving to brew_done (which would briefly flash in reviewing
-        # before being re-claimed by the dispatcher)
+        # Check if there are remaining open tasks (excluding question/plan tasks)
+        # — if so, stay dispatchable instead of moving to brew_done
         has_remaining_tasks =
           Apothecary.Worktrees.list_tasks(worktree_id: worktree_id, status: "open")
+          |> Enum.reject(&Apothecary.Task.is_readonly_kind?(&1.kind))
           |> Enum.any?()
 
         if has_remaining_tasks do
@@ -773,10 +830,7 @@ defmodule Apothecary.Brewer do
     unless claude_exe do
       {:error, "Claude Code executable not found: #{claude_path}"}
     else
-      prompt =
-        if worktree.kind == "question",
-          do: build_question_prompt(worktree, agent.worktree_path),
-          else: build_prompt(worktree, tasks, agent.worktree_path)
+      prompt = build_prompt(worktree, tasks, agent.worktree_path)
 
       Logger.info(
         "Brewer #{agent.id} spawning claude (#{byte_size(prompt)} byte prompt) " <>
@@ -786,16 +840,9 @@ defmodule Apothecary.Brewer do
       try do
         script_exe = System.find_executable("script")
 
-        # Questions get --disallowedTools to enforce read-only behavior
-        question_restriction =
-          if worktree.kind == "question",
-            do: " --disallowedTools Edit,Write,NotebookEdit",
-            else: ""
-
         claude_cmd =
           "'#{claude_exe}' -p \"$APOTHECARY_PROMPT\" " <>
-            "--dangerously-skip-permissions --verbose --output-format stream-json" <>
-            question_restriction
+            "--dangerously-skip-permissions --verbose --output-format stream-json"
 
         {cmd, sandboxed} =
           maybe_sandbox_wrap(claude_cmd, agent.worktree_path, agent.project_dir, agent.id)
@@ -837,72 +884,15 @@ defmodule Apothecary.Brewer do
     end
   end
 
-  defp build_question_prompt(worktree, project_dir) do
-    project_digest =
-      if project_dir, do: Apothecary.ProjectDigest.generate(project_dir), else: ""
-
-    # Include parent worktree context if this question is scoped to a branch
-    parent_context =
-      case Map.get(worktree, :parent_worktree_id) do
-        nil ->
-          ""
-
-        parent_id ->
-          case Apothecary.Worktrees.get_worktree(parent_id) do
-            {:ok, parent} ->
-              branch = Map.get(parent, :git_branch, nil)
-              path = Map.get(parent, :git_path, nil)
-
-              context = "\n## Worktree Context\nThis question is about worktree: #{parent.title}"
-              context = if branch, do: context <> "\nBranch: #{branch}", else: context
-              context = if path, do: context <> "\nWorktree path: #{path}", else: context
-              context
-
-            _ ->
-              ""
-          end
+  defp build_qa_chain(question_id, acc) do
+    # Look up both worktree (wt-*) and task (t-*) IDs
+    result =
+      case Apothecary.Worktrees.show(question_id) do
+        {:ok, q} -> {:ok, q}
+        _ -> nil
       end
 
-    # Build conversation history for follow-up questions
-    conversation_context = build_question_conversation(worktree)
-
-    """
-    You are a codebase expert answering a question about the project in: #{project_dir}
-    #{conversation_context}
-    ## Question
-    #{worktree.title}
-    #{if worktree.description && worktree.description != worktree.title, do: "\n#{worktree.description}", else: ""}
-    #{parent_context}
-
-    ## Project Structure
-    #{project_digest}
-
-    ## Rules
-    - This is a READ-ONLY inquiry. Do NOT modify any files.
-    - Do NOT create commits, branches, or PRs.
-    - Do NOT run destructive commands.
-    - Answer the question thoroughly by reading relevant source files.
-    - Be concise but complete. Use code references (file:line) where helpful.
-
-    ## Output Format
-    - Give a direct, well-structured answer. No preamble like "Let me look into this".
-    - Use markdown formatting: headers, bullet points, code blocks with syntax highlighting.
-    - Start with a brief summary, then go into detail if needed.
-    - Keep it focused — answer only what was asked.
-    #{if conversation_context != "", do: "- This is a follow-up question. Reference the previous Q&A context above when relevant.", else: ""}
-    """
-  end
-
-  # Walk up the parent_question_id chain to build conversation history
-  defp build_question_conversation(worktree) do
-    case worktree.parent_question_id do
-      nil -> ""
-      parent_id -> build_qa_chain(parent_id, [])
-    end
-  end
-
-  defp build_qa_chain(question_id, acc) do
-    case Apothecary.Worktrees.get_worktree(question_id) do
+    case result do
       {:ok, q} ->
         answer =
           (q.notes || "")
@@ -914,7 +904,9 @@ defmodule Apothecary.Brewer do
         # Recurse up the chain
         acc = [entry | acc]
 
-        case q.parent_question_id do
+        parent_qid = Map.get(q, :parent_question_id)
+
+        case parent_qid do
           nil -> format_qa_chain(acc)
           parent_id -> build_qa_chain(parent_id, acc)
         end
@@ -934,6 +926,150 @@ defmodule Apothecary.Brewer do
       end)
 
     "\n## Previous Q&A Context\n#{Enum.join(entries, "\n\n---\n\n")}\n"
+  end
+
+  # Build prompt for a question/plan task (used by assign_question_task)
+  defp build_question_task_prompt(task, work_dir) do
+    project_digest =
+      if work_dir, do: Apothecary.ProjectDigest.generate(work_dir), else: ""
+
+    # Build worktree context from parent worktree
+    worktree_context =
+      case Apothecary.Worktrees.get_worktree(task.worktree_id) do
+        {:ok, parent} ->
+          branch = Map.get(parent, :git_branch, nil)
+          path = Map.get(parent, :git_path, nil)
+
+          context = "\n## Worktree Context\nThis is about worktree: #{parent.title}"
+          context = if branch, do: context <> "\nBranch: #{branch}", else: context
+          context = if path, do: context <> "\nWorktree path: #{path}", else: context
+          context
+
+        _ ->
+          ""
+      end
+
+    # Build conversation history for follow-up questions
+    conversation_context =
+      case task.parent_question_id do
+        nil -> ""
+        parent_id -> build_qa_chain(parent_id, [])
+      end
+
+    if task.kind == "plan" do
+      """
+      You are an expert software architect creating a detailed implementation plan for the project in: #{work_dir}
+
+      ## Task
+      #{task.title}
+      #{if task.description && task.description != task.title, do: "\n#{task.description}", else: ""}
+      #{worktree_context}
+
+      ## Project Structure
+      #{project_digest}
+
+      ## Rules
+      - This is a READ-ONLY inquiry. Do NOT modify any files.
+      - Do NOT create commits, branches, or PRs.
+      - Do NOT run destructive commands.
+      - Read relevant source files to understand the codebase before planning.
+
+      ## Output Format
+      Produce a structured implementation plan with:
+
+      1. **Summary** — A brief overview of what needs to be done and why.
+
+      2. **Plan** — Numbered steps, each with:
+         - **Title** — Short description of the step
+         - **Files** — Which files to create/modify
+         - **Details** — What to change and how
+         - **Dependencies** — Which steps must complete first (if any)
+
+      3. **Risks & Considerations** — Potential issues, edge cases, or architectural trade-offs.
+
+      Be concrete and specific. Reference actual file paths, function names, and line numbers where relevant.
+      Keep the plan actionable — each step should be a single unit of work that one developer could complete.
+      """
+    else
+      """
+      You are a codebase expert answering a question about the project in: #{work_dir}
+      #{conversation_context}
+      ## Question
+      #{task.title}
+      #{if task.description && task.description != task.title, do: "\n#{task.description}", else: ""}
+      #{worktree_context}
+
+      ## Project Structure
+      #{project_digest}
+
+      ## Rules
+      - This is a READ-ONLY inquiry. Do NOT modify any files.
+      - Do NOT create commits, branches, or PRs.
+      - Do NOT run destructive commands.
+      - Answer the question thoroughly by reading relevant source files.
+      - Be concise but complete. Use code references (file:line) where helpful.
+
+      ## Output Format
+      - Give a direct, well-structured answer. No preamble like "Let me look into this".
+      - Use markdown formatting: headers, bullet points, code blocks with syntax highlighting.
+      - Start with a brief summary, then go into detail if needed.
+      - Keep it focused — answer only what was asked.
+      #{if conversation_context != "", do: "- This is a follow-up question. Reference the previous Q&A context above when relevant.", else: ""}
+      """
+    end
+  end
+
+  # Spawn Claude for a question task (read-only, no MCP)
+  defp spawn_question_claude(agent, prompt, work_dir) do
+    claude_path = Application.get_env(:apothecary, :claude_path, "claude")
+    claude_exe = System.find_executable(claude_path)
+
+    unless claude_exe do
+      {:error, "Claude Code executable not found: #{claude_path}"}
+    else
+      try do
+        script_exe = System.find_executable("script")
+
+        claude_cmd =
+          "'#{claude_exe}' -p \"$APOTHECARY_PROMPT\" " <>
+            "--dangerously-skip-permissions --verbose --output-format stream-json" <>
+            " --disallowedTools Edit,Write,NotebookEdit"
+
+        {cmd, sandboxed} =
+          maybe_sandbox_wrap(claude_cmd, work_dir, agent.project_dir, agent.id)
+
+        {executable, args} =
+          if script_exe do
+            case :os.type() do
+              {:unix, :darwin} ->
+                {script_exe, ["-q", "/dev/null", "/bin/sh", "-c", cmd]}
+
+              _ ->
+                {script_exe, ["-qfec", cmd, "/dev/null"]}
+            end
+          else
+            sh = System.find_executable("sh") || "/bin/sh"
+            {sh, ["-c", cmd]}
+          end
+
+        port =
+          Port.open({:spawn_executable, executable}, [
+            :binary,
+            :exit_status,
+            :use_stdio,
+            {:args, args},
+            {:env, [{~c"APOTHECARY_PROMPT", String.to_charlist(prompt)}]},
+            {:cd, to_charlist(work_dir)}
+          ])
+
+        Process.send_after(self(), {:accept_permissions, port}, 1_000)
+
+        {:ok, port, sandboxed}
+      rescue
+        e ->
+          {:error, Exception.message(e)}
+      end
+    end
   end
 
   defp build_prompt(worktree, tasks, worktree_path) do

@@ -67,7 +67,6 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:children, [])
       |> assign(:editing_field, nil)
       |> assign(:editing_child_id, nil)
-      |> assign(:follow_up_question_id, nil)
       |> assign(:working_agent, nil)
       |> assign(:agent_output, [])
       |> assign(:diff_view, nil)
@@ -225,14 +224,7 @@ defmodule ApothecaryWeb.DashboardLive do
     dev_servers = socket.assigns[:dev_servers] || %{}
     active_task_ids = active_task_ids_from_agents(agents)
 
-    # Separate questions from task worktrees
-    {questions, task_items} =
-      Enum.split_with(task_state.tasks, fn item ->
-        String.starts_with?(to_string(item.id), "wt-") and
-          Map.get(item, :kind) == "question"
-      end)
-
-    worktrees_by_status = build_worktree_groups(task_items, agents, dev_servers)
+    worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
 
     socket
     |> assign(:stats, task_state.stats)
@@ -247,13 +239,11 @@ defmodule ApothecaryWeb.DashboardLive do
       build_card_ids(
         worktrees_by_status,
         socket.assigns[:collapsed_done] != false,
-        socket.assigns[:collapsed_discarded] != false,
-        questions
+        socket.assigns[:collapsed_discarded] != false
       )
     )
     |> assign(:known_task_ids, extract_task_ids(task_state.tasks))
     |> assign(:project_files, load_project_files(project))
-    |> assign(:questions, questions)
     |> load_deployments(project)
   end
 
@@ -288,13 +278,7 @@ defmodule ApothecaryWeb.DashboardLive do
     agents = socket.assigns.agents
     active_task_ids = active_task_ids_from_agents(agents)
 
-    {questions, task_items} =
-      Enum.split_with(state.tasks, fn item ->
-        String.starts_with?(to_string(item.id), "wt-") and
-          Map.get(item, :kind) == "question"
-      end)
-
-    worktrees_by_status = build_worktree_groups(task_items, agents, socket.assigns.dev_servers)
+    worktrees_by_status = build_worktree_groups(state.tasks, agents, socket.assigns.dev_servers)
 
     socket =
       socket
@@ -304,9 +288,8 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:error, state.error)
       |> assign(:task_count, length(state.tasks))
       |> assign(:orphan_count, compute_orphan_count(state.tasks, active_task_ids))
-      |> assign(:worktrees_by_status, worktrees_by_status)
       |> assign(:known_task_ids, new_ids)
-      |> assign(:questions, questions)
+      |> assign(:worktrees_by_status, worktrees_by_status)
       |> rebuild_card_ids(worktrees_by_status)
 
     socket =
@@ -328,18 +311,11 @@ defmodule ApothecaryWeb.DashboardLive do
 
     # Rebuild card groups since agent assignments affect which lane cards appear in
     task_state = scoped_get_state(socket)
-    dev_servers = socket.assigns.dev_servers
-
-    {questions, task_items} =
-      Enum.split_with(task_state.tasks, fn item ->
-        String.starts_with?(to_string(item.id), "wt-") and
-          Map.get(item, :kind) == "question"
-      end)
-
-    worktrees_by_status = build_worktree_groups(task_items, agents, dev_servers)
 
     # Extract per-project swarm state for the currently selected project
     project_status = current_project_swarm_status(socket, status)
+
+    worktrees_by_status = build_worktree_groups(task_state.tasks, agents, socket.assigns.dev_servers)
 
     socket =
       socket
@@ -349,7 +325,6 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:agents, agents)
       |> assign(:dispatcher_projects, status[:projects] || %{})
       |> assign(:worktrees_by_status, worktrees_by_status)
-      |> assign(:questions, questions)
       |> rebuild_card_ids(worktrees_by_status)
 
     socket =
@@ -376,20 +351,12 @@ defmodule ApothecaryWeb.DashboardLive do
     # Rebuild groups with updated dev server info
     task_state = scoped_get_state(socket)
     agents = socket.assigns.agents
-
-    {questions, task_items} =
-      Enum.split_with(task_state.tasks, fn item ->
-        String.starts_with?(to_string(item.id), "wt-") and
-          Map.get(item, :kind) == "question"
-      end)
-
-    worktrees_by_status = build_worktree_groups(task_items, agents, dev_servers)
+    worktrees_by_status = build_worktree_groups(task_state.tasks, agents, dev_servers)
 
     socket =
       socket
       |> assign(:dev_servers, dev_servers)
       |> assign(:worktrees_by_status, worktrees_by_status)
-      |> assign(:questions, questions)
       |> rebuild_card_ids(worktrees_by_status)
 
     # Auto-open preview with logs when a dev server enters error state
@@ -1704,52 +1671,36 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
-  def handle_event("toggle-follow-up", %{"question-id" => qid}, socket) do
-    current = socket.assigns.follow_up_question_id
-
-    {:noreply,
-     assign(socket, :follow_up_question_id, if(current == qid, do: nil, else: qid))}
-  end
-
-  @impl true
   def handle_event("submit-follow-up", %{"follow_up_text" => text, "parent_question_id" => parent_qid}, socket) do
     text = String.trim(text)
 
     if text == "" do
       {:noreply, socket}
     else
-      # Find the parent question to get its parent_worktree_id and project_id
-      parent_q =
-        Enum.find(socket.assigns.questions, fn q -> q.id == parent_qid end)
+      # Look up parent (could be a task or worktree) to get worktree_id
+      parent_worktree_id =
+        case Worktrees.show(parent_qid) do
+          {:ok, %{worktree_id: wt_id}} when not is_nil(wt_id) -> wt_id
+          {:ok, %{id: id}} -> id
+          _ -> socket.assigns.selected_task_id
+        end
 
       project_id =
-        if parent_q, do: parent_q.project_id, else:
-          if(socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil)
+        if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
 
-      parent_worktree_id =
-        if parent_q, do: Map.get(parent_q, :parent_worktree_id), else: socket.assigns.selected_task_id
-
-      attrs = %{
-        title: text,
-        kind: "question",
-        priority: 2,
-        project_id: project_id,
-        parent_question_id: parent_qid
-      }
-
-      attrs =
-        if parent_worktree_id, do: Map.put(attrs, :parent_worktree_id, parent_worktree_id), else: attrs
-
-      case Worktrees.create_worktree(attrs) do
+      case Worktrees.create_task(%{
+             title: text,
+             worktree_id: parent_worktree_id,
+             kind: "question",
+             priority: 2,
+             parent_question_id: parent_qid
+           }) do
         {:ok, item} when not is_nil(item) ->
           if project_id do
-            Dispatcher.dispatch_question(project_id, item.id)
+            Dispatcher.nudge_dispatch(project_id)
           end
 
-          {:noreply,
-           socket
-           |> assign(:follow_up_question_id, nil)
-           |> put_flash(:info, "Follow-up question submitted")}
+          {:noreply, put_flash(socket, :info, "Follow-up question submitted")}
 
         _ ->
           {:noreply, put_flash(socket, :error, "Failed to submit follow-up")}
@@ -1800,9 +1751,12 @@ defmodule ApothecaryWeb.DashboardLive do
             {:noreply, put_flash(socket, :error, "Failed to create worktree")}
         end
 
-      # Task-add mode: ? prefix creates question, + prefix stripped, else task
+      # Task-add mode: ? prefix creates question, ! prefix creates plan, + prefix stripped, else task
       socket.assigns.adding_task_to && String.starts_with?(text, "?") ->
-        create_question_for_worktree(text, socket)
+        create_readonly_worktree(text, "?", "question", "Question submitted", socket)
+
+      socket.assigns.adding_task_to && String.starts_with?(text, "!") ->
+        create_readonly_worktree(text, "!", "plan", "Plan requested", socket)
 
       socket.assigns.adding_task_to ->
         wt_id = socket.assigns.adding_task_to
@@ -1851,7 +1805,11 @@ defmodule ApothecaryWeb.DashboardLive do
 
       # Active agent with ? prefix: create question instead of sending to agent
       socket.assigns.working_agent && String.starts_with?(text, "?") ->
-        create_question_for_worktree(text, socket)
+        create_readonly_worktree(text, "?", "question", "Question submitted", socket)
+
+      # Active agent with ! prefix: create plan instead of sending to agent
+      socket.assigns.working_agent && String.starts_with?(text, "!") ->
+        create_readonly_worktree(text, "!", "plan", "Plan requested", socket)
 
       # Active agent: send as instruction to brewer
       socket.assigns.working_agent ->
@@ -1859,7 +1817,11 @@ defmodule ApothecaryWeb.DashboardLive do
 
       # ? prefix asks a question in the focused worktree's context
       String.starts_with?(text, "?") && socket.assigns.selected_task_id ->
-        create_question_for_worktree(text, socket)
+        create_readonly_worktree(text, "?", "question", "Question submitted", socket)
+
+      # ! prefix creates a plan in the focused worktree's context
+      String.starts_with?(text, "!") && socket.assigns.selected_task_id ->
+        create_readonly_worktree(text, "!", "plan", "Plan requested", socket)
 
       # Chat input with a focused worktree: add task (strip + prefix)
       socket.assigns.selected_task_id ->
@@ -2578,9 +2540,6 @@ defmodule ApothecaryWeb.DashboardLive do
 
       socket.assigns.editing_recipe_id ->
         assign(socket, :editing_recipe_id, nil)
-
-      socket.assigns.follow_up_question_id ->
-        assign(socket, :follow_up_question_id, nil)
 
       socket.assigns.editing_field ->
         assign(socket, :editing_field, nil)
@@ -3497,42 +3456,49 @@ defmodule ApothecaryWeb.DashboardLive do
 
   # --- Input handlers ---
 
-  defp create_question_for_worktree(text, socket) do
-    question_text = text |> String.trim_leading("?") |> String.trim()
+  defp create_readonly_worktree(text, prefix, kind, flash_msg, socket) do
+    clean_text = text |> String.trim_leading(prefix) |> String.trim()
 
-    if question_text == "" do
+    if clean_text == "" do
       {:noreply, socket}
     else
-      # Use the focused worktree as context
       worktree_id = socket.assigns.adding_task_to || socket.assigns.selected_task_id
 
       project_id =
         if socket.assigns.current_project, do: socket.assigns.current_project.id, else: nil
 
-      attrs = %{
-        title: question_text,
-        kind: "question",
-        priority: 2,
-        project_id: project_id
-      }
-
-      attrs =
-        if worktree_id, do: Map.put(attrs, :parent_worktree_id, worktree_id), else: attrs
-
-      case Worktrees.create_worktree(attrs) do
-        {:ok, item} when not is_nil(item) ->
-          # Dispatch immediately with a one-off brewer
+      # If no worktree context, auto-create/find a "Questions" worktree
+      worktree_id =
+        if worktree_id do
+          worktree_id
+        else
           if project_id do
-            Dispatcher.dispatch_question(project_id, item.id)
+            case Worktrees.ensure_questions_worktree(project_id) do
+              {:ok, wt_id} -> wt_id
+              _ -> nil
+            end
           end
+        end
 
-          {:noreply, put_flash(socket, :info, "Question submitted")}
+      if is_nil(worktree_id) do
+        {:noreply, put_flash(socket, :error, "No worktree context for #{kind}")}
+      else
+        case Worktrees.create_task(%{
+               title: clean_text,
+               worktree_id: worktree_id,
+               kind: kind,
+               priority: 2
+             }) do
+          {:ok, item} when not is_nil(item) ->
+            if project_id do
+              Dispatcher.nudge_dispatch(project_id)
+            end
 
-        {:ok, nil} ->
-          {:noreply, put_flash(socket, :error, "Failed to submit question")}
+            {:noreply, put_flash(socket, :info, flash_msg)}
 
-        {:error, reason} ->
-          {:noreply, put_flash(socket, :error, "Failed: #{inspect(reason)}")}
+          _ ->
+            {:noreply, put_flash(socket, :error, "Failed to submit #{kind}")}
+        end
       end
     end
   end
@@ -4000,7 +3966,7 @@ defmodule ApothecaryWeb.DashboardLive do
     end
   end
 
-  defp build_card_ids(worktrees_by_status, collapsed_done, collapsed_discarded, questions \\ []) do
+  defp build_card_ids(worktrees_by_status, collapsed_done, collapsed_discarded) do
     sort_by_priority = fn entries ->
       entries
       |> Enum.sort_by(fn e -> e.worktree.priority || 99 end)
@@ -4033,12 +3999,7 @@ defmodule ApothecaryWeb.DashboardLive do
         |> Enum.map(fn e -> e.worktree.id end)
       end
 
-    question_ids =
-      questions
-      |> Enum.sort_by(fn q -> q.created_at || "" end, :desc)
-      |> Enum.map(& &1.id)
-
-    brewing ++ assaying ++ stockroom ++ done ++ discarded ++ question_ids
+    brewing ++ assaying ++ stockroom ++ done ++ discarded
   end
 
   defp rebuild_card_ids(socket, worktrees_by_status) do
@@ -4049,8 +4010,7 @@ defmodule ApothecaryWeb.DashboardLive do
       build_card_ids(
         worktrees_by_status,
         socket.assigns.collapsed_done,
-        socket.assigns[:collapsed_discarded] != false,
-        socket.assigns[:questions] || []
+        socket.assigns[:collapsed_discarded] != false
       )
 
     found_idx =
@@ -4275,7 +4235,6 @@ defmodule ApothecaryWeb.DashboardLive do
                       adding_task_to={@adding_task_to}
                       search_mode={@search_mode}
                       search_query={@search_query}
-                      questions={@questions}
                     />
 
                     <%!-- Open existing worktree button --%>
@@ -4319,13 +4278,6 @@ defmodule ApothecaryWeb.DashboardLive do
                         has_preview_config={@has_preview_config}
                         pending_action={@pending_action}
                         loading_action={@loading_action}
-                        worktree_questions={
-                          Enum.filter(@questions, fn q ->
-                            Map.get(q, :parent_worktree_id) == @selected_task_id or
-                              Map.get(q, :parent_question_id) == @selected_task_id
-                          end)
-                        }
-                        follow_up_question_id={@follow_up_question_id}
                         expanded_detail_items={@expanded_detail_items}
                         branch_diff_stat={@branch_diff_stat}
                       />
@@ -4403,7 +4355,6 @@ defmodule ApothecaryWeb.DashboardLive do
           active_tab={@active_tab}
           show_project_switcher={@show_project_switcher}
           project_count={length(@projects)}
-          questions={@questions}
           agents={@agents}
           input_focused={@input_focused}
           focused_pane={@focused_pane}

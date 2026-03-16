@@ -646,6 +646,7 @@ let Hooks = {
     mounted() {
       this.pendingImages = [] // [{path, dataUrl}]
       this.questionMode = false
+      this.planMode = false
       this.mentionActive = false
       this.mentionStart = -1
       this.selectedIndex = 0
@@ -683,15 +684,18 @@ let Hooks = {
           e.preventDefault()
           e.stopPropagation()
           let text = this.el.value.trim()
-          // Prepend ? back for server routing when in question mode
+          // Prepend ? or ! back for server routing when in question/plan mode
           if (this.questionMode && text) {
             text = "?" + text
+          } else if (this.planMode && text) {
+            text = "!" + text
           }
           const images = this.pendingImages.map(img => img.path)
           if (text || images.length > 0) {
             this.pushEvent("submit-input", { text, images })
             this.el.value = ""
             this.questionMode = false
+            this.planMode = false
             this.clearPendingImages()
             this.updateModeBadge("")
           }
@@ -702,17 +706,24 @@ let Hooks = {
           this.pushEvent("switch-to-task-mode", {})
         }
         // Pressing ? with empty input activates question mode (strip ? from input, just change pill)
-        if (e.key === "?" && this.el.value === "" && !this.questionMode) {
+        if (e.key === "?" && this.el.value === "" && !this.questionMode && !this.planMode) {
           e.preventDefault()
           this.questionMode = true
           this.updateModeBadge("?")
         }
+        // Pressing ! with empty input activates plan mode
+        if (e.key === "!" && this.el.value === "" && !this.planMode && !this.questionMode) {
+          e.preventDefault()
+          this.planMode = true
+          this.updateModeBadge("!")
+        }
       })
 
       this.el.addEventListener("input", () => {
-        // Reset question mode if input is cleared
-        if (this.questionMode && this.el.value === "") {
+        // Reset question/plan mode if input is cleared
+        if ((this.questionMode || this.planMode) && this.el.value === "") {
           this.questionMode = false
+          this.planMode = false
         }
         this.updateModeBadge(this.el.value)
         // Check for @ mention
@@ -915,6 +926,11 @@ let Hooks = {
         badge.textContent = "question"
         badge.style.color = qColor
         badge.style.background = `color-mix(in srgb, ${qColor} 20%, var(--surface))`
+      } else if (value.startsWith("!") || this.planMode) {
+        const pColor = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#818cf8"
+        badge.textContent = "plan"
+        badge.style.color = pColor
+        badge.style.background = `color-mix(in srgb, ${pColor} 20%, var(--surface))`
       } else {
         // Restore server mode
         const color = badge.dataset.serverColor
@@ -944,7 +960,6 @@ let Hooks = {
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
-  longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
   hooks: Hooks,
 })

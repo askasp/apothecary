@@ -51,6 +51,9 @@ defmodule Apothecary.Worktree do
     dependents: []
   ]
 
+  def is_readonly_kind?(kind) when kind in ["question", "plan"], do: true
+  def is_readonly_kind?(_), do: false
+
   @doc "Build a Worktree struct from a Mnesia record tuple."
   def from_record(
         {:apothecary_worktrees, id, project_id, status, title, priority, git_path, git_branch,

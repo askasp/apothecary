@@ -478,6 +478,8 @@ defmodule Apothecary.Worktrees do
        %{
          description: attrs[:description],
          notes: nil,
+         kind: attrs[:kind] || "task",
+         parent_question_id: attrs[:parent_question_id],
          created_at: now,
          updated_at: now,
          blockers: attrs[:blockers] || [],
@@ -1055,6 +1057,44 @@ defmodule Apothecary.Worktrees do
     Enum.filter(tasks, &task_ready?(&1, task_status_map))
   end
 
+  @doc "Return open question/plan tasks across all worktrees for a project."
+  def pending_question_tasks(project_id: project_id) do
+    worktree_ids =
+      list_worktrees(project_id: project_id)
+      |> MapSet.new(& &1.id)
+
+    list_all_tasks()
+    |> Enum.filter(fn t ->
+      Apothecary.Task.is_readonly_kind?(t.kind) and
+        t.status == "open" and
+        MapSet.member?(worktree_ids, t.worktree_id)
+    end)
+    |> Enum.sort_by(fn t -> {t.priority || 99, t.created_at || ""} end)
+  end
+
+  @doc "Find or create a 'Questions' worktree for standalone questions in a project."
+  def ensure_questions_worktree(project_id) do
+    existing =
+      list_worktrees(project_id: project_id)
+      |> Enum.find(fn wt -> wt.kind == "questions_inbox" end)
+
+    case existing do
+      %{id: id} ->
+        {:ok, id}
+
+      nil ->
+        case create_worktree(%{
+               title: "Questions",
+               kind: "questions_inbox",
+               project_id: project_id,
+               priority: 99
+             }) do
+          {:ok, wt} -> {:ok, wt.id}
+          error -> error
+        end
+    end
+  end
+
   # --- GenServer Callbacks ---
 
   @impl true
@@ -1130,36 +1170,50 @@ defmodule Apothecary.Worktrees do
     # Pre-fetch all worktrees into a status map for O(1) lookups
     wt_status_map = Map.new(worktrees, fn wt -> {wt.id, wt.status} end)
 
+    # Pre-fetch all tasks once and group by worktree_id (avoids N table scans)
+    all_tasks = list_all_tasks()
+
+    regular_by_wt =
+      all_tasks
+      |> Enum.reject(&Apothecary.Task.is_readonly_kind?(&1.kind))
+      |> Enum.group_by(& &1.worktree_id)
+
+    open_regular_by_wt =
+      all_tasks
+      |> Enum.filter(&(&1.status == "open" and not Apothecary.Task.is_readonly_kind?(&1.kind)))
+      |> Enum.group_by(& &1.worktree_id)
+
+    ctx = %{wt_status_map: wt_status_map, regular_by_wt: regular_by_wt, open_regular_by_wt: open_regular_by_wt}
+
     worktrees
-    |> Enum.filter(&worktree_ready?(&1, wt_status_map))
+    |> Enum.filter(&worktree_ready?(&1, ctx))
     |> Enum.sort_by(fn wt -> {wt.priority || 99, wt.created_at || ""} end)
   end
 
   defp worktree_ready?(
          %{status: status, assigned_brewer_id: nil, parent_worktree_id: nil, id: id},
-         _map
+         %{regular_by_wt: regular_by_wt}
        )
        when status in ["open", "revision_needed"] do
-    # Only dispatch if worktree has at least one task
-    list_tasks(worktree_id: id) != []
+    Map.get(regular_by_wt, id, []) != []
   end
 
   defp worktree_ready?(
          %{status: status, assigned_brewer_id: nil, parent_worktree_id: pid, id: id},
-         wt_status_map
+         %{wt_status_map: wt_status_map, regular_by_wt: regular_by_wt}
        )
        when status in ["open", "revision_needed"] and not is_nil(pid) do
     Map.get(wt_status_map, pid) in ["done", "merged"] and
-      list_tasks(worktree_id: id) != []
+      Map.get(regular_by_wt, id, []) != []
   end
 
   # PR is open or brew is done but new tasks were added — redispatch to work on them
-  defp worktree_ready?(%{status: status, assigned_brewer_id: nil, id: id}, _map)
+  defp worktree_ready?(%{status: status, assigned_brewer_id: nil, id: id}, %{open_regular_by_wt: open_regular_by_wt})
        when status in ["pr_open", "brew_done"] do
-    list_tasks(worktree_id: id, status: "open") |> Enum.any?()
+    Map.get(open_regular_by_wt, id, []) != []
   end
 
-  defp worktree_ready?(_, _map), do: false
+  defp worktree_ready?(_, _), do: false
 
   defp task_ready?(%{status: "open", blockers: []}, _task_status_map), do: true
 
