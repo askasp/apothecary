@@ -500,6 +500,23 @@ defmodule Apothecary.Brewer do
   # Private — Worktree finalization
 
   defp finalize_worktree(worktree_id, agent) do
+    # Check pipeline advancement BEFORE merge/push — if more stages remain,
+    # advance the pipeline and let a fresh brewer pick up the next stage
+    case Apothecary.Worktrees.advance_pipeline(worktree_id) do
+      {:advanced, %{name: name, stage: stage}} ->
+        Logger.info(
+          "Brewer #{agent.id}: pipeline advancing #{worktree_id} to stage #{stage + 1} (#{name}), " <>
+            "skipping push — fresh brewer will pick up"
+        )
+
+        :pipeline_continuing
+
+      :complete ->
+        do_finalize_worktree(worktree_id, agent)
+    end
+  end
+
+  defp do_finalize_worktree(worktree_id, agent) do
     project_dir = agent.project_dir
     worktree_path = agent.worktree_path
 
