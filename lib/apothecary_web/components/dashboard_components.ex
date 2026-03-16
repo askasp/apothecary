@@ -1336,6 +1336,13 @@ defmodule ApothecaryWeb.DashboardComponents do
               <span class="truncate" style={"color: #{@title_color}; font-weight: 500;"}>
                 {wt.git_branch || wt.title || wt.id}
               </span>
+              <%!-- Pipeline stage indicator --%>
+              <span
+                :if={pipeline_stage_label(wt)}
+                style="color: var(--dim); font-size: var(--font-size-xs); flex-shrink: 0;"
+              >
+                {pipeline_stage_label(wt)}
+              </span>
               <%!-- Right side: progress ratio + blocks + arrow --%>
               <span
                 class="ml-auto flex items-center gap-1.5 flex-shrink-0"
@@ -2136,35 +2143,37 @@ defmodule ApothecaryWeb.DashboardComponents do
       </div>
 
       <%!-- 7b. Pipeline --%>
-      <%= if @task.status in ["open", "brew_done"] and @project_pipelines != %{} do %>
+      <%= if is_list(@task.pipeline) or (@task.status in ["open", "brew_done"] and @project_pipelines != %{}) do %>
         <div class="mb-4">
           <div class="section-header mb-2">PIPELINE</div>
-          <div class="flex items-center gap-2 flex-wrap" style="font-size: var(--font-size-sm);">
-            <span
-              :for={{name, _stages} <- @project_pipelines}
-              phx-click="set-pipeline"
-              phx-value-name={name}
-              class={[
-                "action-pill cursor-pointer",
-                pipeline_active?(@task, name) && "pipeline-active"
-              ]}
-              style={
-                if pipeline_active?(@task, name),
-                  do: "color: var(--accent); border-color: var(--accent);",
-                  else: ""
-              }
-            >
-              {name}
-            </span>
-            <span
-              :if={is_list(@task.pipeline)}
-              phx-click="clear-pipeline"
-              class="action-pill cursor-pointer"
-              style="color: var(--muted);"
-            >
-              clear
-            </span>
-          </div>
+          <%= if @task.status in ["open", "brew_done"] and @project_pipelines != %{} do %>
+            <div class="flex items-center gap-2 flex-wrap" style="font-size: var(--font-size-sm);">
+              <span
+                :for={{name, _stages} <- @project_pipelines}
+                phx-click="set-pipeline"
+                phx-value-name={name}
+                class={[
+                  "action-pill cursor-pointer",
+                  pipeline_active?(@task, name) && "pipeline-active"
+                ]}
+                style={
+                  if pipeline_active?(@task, name),
+                    do: "color: var(--accent); border-color: var(--accent);",
+                    else: ""
+                }
+              >
+                {name}
+              </span>
+              <span
+                :if={is_list(@task.pipeline)}
+                phx-click="clear-pipeline"
+                class="action-pill cursor-pointer"
+                style="color: var(--muted);"
+              >
+                clear
+              </span>
+            </div>
+          <% end %>
           <%= if is_list(@task.pipeline) do %>
             <div
               class="mt-2 flex items-center gap-1"
@@ -3958,12 +3967,15 @@ defmodule ApothecaryWeb.DashboardComponents do
   defp pipeline_active?(_, _), do: false
 
   defp pipeline_stage_label(%{pipeline: stages, pipeline_stage: idx})
-       when is_list(stages) do
-    case Enum.at(stages, idx) do
-      %{name: name} -> name
-      %{"name" => name} -> name
-      _ -> "stage #{idx + 1}"
-    end
+       when is_list(stages) and length(stages) > 1 do
+    name =
+      case Enum.at(stages, idx) do
+        %{name: name} -> name
+        %{"name" => name} -> name
+        _ -> "stage #{idx + 1}"
+      end
+
+    "#{idx + 1}/#{length(stages)} #{name}"
   end
 
   defp pipeline_stage_label(_), do: nil
