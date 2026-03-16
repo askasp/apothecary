@@ -246,6 +246,8 @@ defmodule Apothecary.Worktrees do
                pr_url: nil,
                mcp_servers: nil,
                kind: "task",
+               pipeline: nil,
+               pipeline_stage: 0,
                created_at: now,
                updated_at: now,
                blockers: [],
@@ -281,6 +283,8 @@ defmodule Apothecary.Worktrees do
          mcp_servers: attrs[:mcp_servers],
          kind: Map.get(attrs, :kind, "task"),
          parent_question_id: attrs[:parent_question_id],
+         pipeline: resolve_pipeline(attrs[:pipeline], attrs[:project_id]),
+         pipeline_stage: Map.get(attrs, :pipeline_stage, 0),
          created_at: now,
          updated_at: now,
          blockers: [],
@@ -1271,6 +1275,8 @@ defmodule Apothecary.Worktrees do
       |> maybe_put(:mcp_servers, changes[:mcp_servers])
       |> maybe_put(:blockers, changes[:blockers])
       |> maybe_put(:dependents, changes[:dependents])
+      |> maybe_put(:pipeline, changes[:pipeline])
+      |> maybe_put(:pipeline_stage, changes[:pipeline_stage])
       |> Map.put(:updated_at, now)
 
     {table, id, project_id, status, title, priority, git_path, git_branch, parent_worktree_id,
@@ -1405,5 +1411,113 @@ defmodule Apothecary.Worktrees do
   defp maybe_filter(items, field, value) do
     value = to_string(value)
     Enum.filter(items, fn item -> to_string(Map.get(item, field)) == value end)
+  end
+
+  # --- Private: Pipeline Resolution ---
+
+  @doc false
+  # Resolve a pipeline value: can be a list of stages (pass-through),
+  # a string name (looked up from project settings), or nil (use project default).
+  defp resolve_pipeline(nil, nil), do: nil
+
+  defp resolve_pipeline(nil, project_id) do
+    # Inherit project default pipeline
+    case get_project_pipelines(project_id) do
+      {_pipelines, default_name} when is_binary(default_name) ->
+        resolve_pipeline(default_name, project_id)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp resolve_pipeline(stages, _project_id) when is_list(stages), do: stages
+
+  defp resolve_pipeline(name, project_id) when is_binary(name) do
+    case get_project_pipelines(project_id) do
+      {pipelines, _default} when is_map(pipelines) ->
+        case Map.get(pipelines, name) do
+          stages when is_list(stages) -> stages
+          _ -> nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp resolve_pipeline(_, _), do: nil
+
+  @doc "Get pipeline definitions and default from a project's settings."
+  def get_project_pipelines(nil), do: {%{}, nil}
+
+  def get_project_pipelines(project_id) do
+    case Apothecary.Projects.get(project_id) do
+      {:ok, project} ->
+        pipelines = project.settings[:pipelines] || project.settings["pipelines"] || %{}
+        default = project.settings[:default_pipeline] || project.settings["default_pipeline"]
+        {pipelines, default}
+
+      _ ->
+        {%{}, nil}
+    end
+  end
+
+  @doc "Check if a worktree has remaining pipeline stages."
+  def pipeline_has_next_stage?(%{pipeline: stages, pipeline_stage: current})
+      when is_list(stages) and length(stages) > current + 1,
+      do: true
+
+  def pipeline_has_next_stage?(_), do: false
+
+  @doc "Get the current pipeline stage definition for a worktree."
+  def current_pipeline_stage(%{pipeline: stages, pipeline_stage: idx})
+      when is_list(stages) do
+    Enum.at(stages, idx)
+  end
+
+  def current_pipeline_stage(_), do: nil
+
+  @doc "Advance a worktree to its next pipeline stage. Creates a task for the next stage and resets the worktree for redispatch."
+  def advance_pipeline(worktree_id) do
+    case get_worktree(worktree_id) do
+      {:ok, %{pipeline: stages, pipeline_stage: current}}
+      when is_list(stages) and length(stages) > current + 1 ->
+        next_idx = current + 1
+        next_stage = Enum.at(stages, next_idx)
+
+        stage_name = next_stage["name"] || next_stage[:name] || "Stage #{next_idx + 1}"
+        stage_prompt = next_stage["prompt"] || next_stage[:prompt]
+        stage_kind = next_stage["kind"] || next_stage[:kind] || "task"
+
+        # Create task for the next stage
+        create_task(%{
+          worktree_id: worktree_id,
+          title: "[pipeline] #{stage_name}",
+          description: stage_prompt || stage_name,
+          priority: 0
+        })
+
+        # Advance stage counter and reset for redispatch to a fresh brewer
+        update_worktree(worktree_id, %{
+          pipeline_stage: next_idx,
+          status: "open",
+          assigned_brewer_id: nil
+        })
+
+        add_note(
+          worktree_id,
+          "Pipeline advancing: stage #{current + 1}/#{length(stages)} (#{stage_name}) → dispatching fresh brewer"
+        )
+
+        Logger.info(
+          "Pipeline advanced for #{worktree_id}: stage #{next_idx + 1}/#{length(stages)} (#{stage_name}, kind: #{stage_kind})"
+        )
+
+        {:advanced, %{stage: next_idx, name: stage_name, kind: stage_kind}}
+
+      _ ->
+        :complete
+    end
   end
 end
