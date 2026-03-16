@@ -847,7 +847,17 @@ defmodule Apothecary.Brewer do
     unless claude_exe do
       {:error, "Claude Code executable not found: #{claude_path}"}
     else
-      prompt = build_prompt(worktree, tasks, agent.worktree_path)
+      prompt =
+        cond do
+          worktree.kind == "question" ->
+            build_question_prompt(worktree, agent.worktree_path)
+
+          pipeline_stage_kind(worktree) == "review" ->
+            build_review_prompt(worktree, tasks, agent.worktree_path, agent.project_dir)
+
+          true ->
+            build_prompt(worktree, tasks, agent.worktree_path)
+        end
 
       Logger.info(
         "Brewer #{agent.id} spawning claude (#{byte_size(prompt)} byte prompt) " <>
@@ -1231,6 +1241,161 @@ defmodule Apothecary.Brewer do
         #{Enum.join(entries, "\n\n")}
         """
     end
+  end
+
+  # --- Pipeline helpers ---
+
+  defp pipeline_stage_kind(%{pipeline: stages, pipeline_stage: idx})
+       when is_list(stages) do
+    case Enum.at(stages, idx) do
+      %{kind: kind} -> kind
+      %{"kind" => kind} -> kind
+      _ -> "task"
+    end
+  end
+
+  defp pipeline_stage_kind(_), do: "task"
+
+  defp pipeline_stage_prompt(%{pipeline: stages, pipeline_stage: idx})
+       when is_list(stages) do
+    case Enum.at(stages, idx) do
+      %{prompt: prompt} -> prompt
+      %{"prompt" => prompt} -> prompt
+      _ -> nil
+    end
+  end
+
+  defp pipeline_stage_prompt(_), do: nil
+
+  defp build_review_prompt(worktree, tasks, worktree_path, project_dir) do
+    custom_prompt = pipeline_stage_prompt(worktree) || default_review_prompt()
+
+    claude_md =
+      if project_dir do
+        case File.read(Path.join(project_dir, "CLAUDE.md")) do
+          {:ok, content} -> content
+          _ -> ""
+        end
+      else
+        ""
+      end
+
+    agents_md =
+      if project_dir do
+        case File.read(Path.join(project_dir, "AGENTS.md")) do
+          {:ok, content} -> content
+          _ -> ""
+        end
+      else
+        ""
+      end
+
+    # Get diff stat for context
+    diff_stat =
+      if project_dir do
+        case Apothecary.Git.worktree_diff_stat(project_dir, worktree_path) do
+          {:ok, stat} when stat != "" -> stat
+          _ -> "(no changes detected)"
+        end
+      else
+        "(project dir unknown)"
+      end
+
+    task_list = format_task_list(tasks)
+
+    notes_section =
+      if worktree.notes && worktree.notes != "" do
+        """
+        ## Previous Session Notes
+        #{worktree.notes}
+        """
+      else
+        ""
+      end
+
+    project_digest =
+      if project_dir, do: Apothecary.ProjectDigest.generate(project_dir), else: ""
+
+    """
+    You are an autonomous code reviewer examining changes on a feature branch.
+    Working directory: #{worktree_path}
+
+    ## Your Work
+    Worktree ID: #{worktree.id}
+    Title: #{worktree.title}
+    Pipeline Stage: REVIEW (stage #{worktree.pipeline_stage + 1}/#{length(worktree.pipeline)})
+
+    ## Changes Summary (branch vs main)
+    ```
+    #{diff_stat}
+    ```
+
+    ## Review Instructions
+    #{custom_prompt}
+
+    ## Project Structure
+    #{project_digest}
+
+    #{notes_section}
+
+    ## Task Management via MCP
+    You have MCP tools to manage tasks within this worktree:
+    - **worktree_status** — See your worktree overview and all tasks
+    - **list_tasks** — List tasks (with optional status filter)
+    - **create_task** — Create a sub-task for each fix you make
+    - **claim_task** — Claim a task before starting work
+    - **complete_task** — Mark a task as done
+    - **add_notes** — Log progress notes
+
+    #{if task_list != "" do
+      """
+      ## Pre-Created Tasks
+      #{task_list}
+
+      Work through each task in order. **Always call `claim_task` before starting a task**, then `complete_task` when done.
+      """
+    else
+      """
+      ## Instructions
+      1. Read the diff between this branch and main (use `git diff main...HEAD`)
+      2. Create a task for each issue found using `create_task`
+      3. Fix issues directly — you have full write access
+      4. If everything looks good, add a note: "Review passed — no issues found"
+      5. Commit all fixes
+      """
+    end}
+
+    **IMPORTANT:** Before starting work, call `worktree_status` to get the latest task list and notes.
+
+    ## Rules
+    - You are on a feature branch in a git worktree, NOT main
+    - NEVER push to main or merge into main
+    - Fix issues directly — commit your fixes
+    - The orchestrator handles pushing and PR creation
+    - Do NOT push — the orchestrator handles that
+
+    ## Context Survival
+    - **Log progress frequently** with `add_notes`
+    - **Commit early, commit often** — each commit is a recovery checkpoint
+
+    #{if claude_md != "", do: "## Project Guidelines (CLAUDE.md)\n#{claude_md}", else: ""}
+    #{if agents_md != "", do: "## Agent Guidelines (AGENTS.md)\n#{agents_md}", else: ""}
+    """
+  end
+
+  defp default_review_prompt do
+    """
+    Review all changes on this branch against main. For each file changed, check for:
+    - Unused variables, imports, or dead code
+    - Missing error handling at system boundaries
+    - Inconsistent naming or style
+    - Hardcoded values that should be configurable
+    - Security issues (injection, XSS, etc.)
+    - Overly complex code that could be simplified
+    - Missing or broken tests
+
+    Fix any issues you find directly. If everything looks good, add a note saying so.
+    """
   end
 
   defp build_git_context(nil, _worktree_path), do: ""
