@@ -1317,6 +1317,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :editing_child_id, :string, default: nil
   attr :expanded_detail_items, :any, default: nil
   attr :branch_diff_stat, :any, default: nil
+  attr :project_pipelines, :map, default: %{}
 
   def worktree_detail(assigns) do
     worktree_detail_inner(assigns)
@@ -1477,6 +1478,13 @@ defmodule ApothecaryWeb.DashboardComponents do
                 style="color: var(--error); font-weight: 500;"
               >
                 &middot; unsandboxed
+              </span>
+              <span
+                :if={is_list(@task.pipeline) && length(@task.pipeline) > 0}
+                style="color: var(--accent);"
+              >
+                &middot; stage {@task.pipeline_stage + 1}/{length(@task.pipeline)}
+                (<%= pipeline_stage_label(@task) %>)
               </span>
             </div>
           </div>
@@ -1866,6 +1874,61 @@ defmodule ApothecaryWeb.DashboardComponents do
           <% end %>
         <% end %>
       </div>
+
+      <%!-- 7b. Pipeline --%>
+      <%= if @task.status in ["open", "brew_done"] and @project_pipelines != %{} do %>
+        <div class="mb-4">
+          <div class="section-header mb-2">PIPELINE</div>
+          <div class="flex items-center gap-2 flex-wrap" style="font-size: var(--font-size-sm);">
+            <span
+              :for={{name, _stages} <- @project_pipelines}
+              phx-click="set-pipeline"
+              phx-value-name={name}
+              class={[
+                "action-pill cursor-pointer",
+                pipeline_active?(@task, name) && "pipeline-active"
+              ]}
+              style={
+                if pipeline_active?(@task, name),
+                  do: "color: var(--accent); border-color: var(--accent);",
+                  else: ""
+              }
+            >
+              {name}
+            </span>
+            <span
+              :if={is_list(@task.pipeline)}
+              phx-click="clear-pipeline"
+              class="action-pill cursor-pointer"
+              style="color: var(--muted);"
+            >
+              clear
+            </span>
+          </div>
+          <%= if is_list(@task.pipeline) do %>
+            <div
+              class="mt-2 flex items-center gap-1"
+              style="font-size: var(--font-size-xs); color: var(--dim);"
+            >
+              <span
+                :for={{stage, idx} <- Enum.with_index(@task.pipeline)}
+                class="flex items-center gap-1"
+              >
+                <span :if={idx > 0}>&rarr;</span>
+                <span style={
+                  cond do
+                    idx < @task.pipeline_stage -> "color: var(--bottled);"
+                    idx == @task.pipeline_stage -> "color: var(--accent); font-weight: 500;"
+                    true -> ""
+                  end
+                }>
+                  {stage["name"] || stage[:name] || "stage #{idx + 1}"}
+                </span>
+              </span>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
 
       <%!-- 8. PR link --%>
       <div :if={@pr_url} class="mb-5">
@@ -3294,6 +3357,20 @@ defmodule ApothecaryWeb.DashboardComponents do
   end
 
   defp task_duration(_), do: nil
+
+  defp pipeline_active?(%{pipeline_name: pn}, name) when is_binary(pn), do: pn == name
+  defp pipeline_active?(_, _), do: false
+
+  defp pipeline_stage_label(%{pipeline: stages, pipeline_stage: idx})
+       when is_list(stages) do
+    case Enum.at(stages, idx) do
+      %{name: name} -> name
+      %{"name" => name} -> name
+      _ -> "stage #{idx + 1}"
+    end
+  end
+
+  defp pipeline_stage_label(_), do: nil
 
   defp format_relative_time(nil), do: nil
 

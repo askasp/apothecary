@@ -247,6 +247,7 @@ defmodule Apothecary.Worktrees do
                mcp_servers: nil,
                kind: "task",
                pipeline: nil,
+               pipeline_name: nil,
                pipeline_stage: 0,
                created_at: now,
                updated_at: now,
@@ -271,6 +272,7 @@ defmodule Apothecary.Worktrees do
   def create_worktree(attrs) do
     id = generate_id("wt")
     now = DateTime.utc_now() |> DateTime.to_iso8601()
+    {pipeline_stages, pipeline_name} = resolve_pipeline(attrs[:pipeline], attrs[:project_id])
 
     record =
       {:apothecary_worktrees, id, attrs[:project_id], Map.get(attrs, :status, "open"),
@@ -283,7 +285,8 @@ defmodule Apothecary.Worktrees do
          mcp_servers: attrs[:mcp_servers],
          kind: Map.get(attrs, :kind, "task"),
          parent_question_id: attrs[:parent_question_id],
-         pipeline: resolve_pipeline(attrs[:pipeline], attrs[:project_id]),
+         pipeline: pipeline_stages,
+         pipeline_name: pipeline_name,
          pipeline_stage: Map.get(attrs, :pipeline_stage, 0),
          created_at: now,
          updated_at: now,
@@ -790,6 +793,7 @@ defmodule Apothecary.Worktrees do
           {:apothecary_recipes, id, attrs[:title], attrs[:description], schedule,
            Map.get(attrs, :enabled, true), Map.get(attrs, :priority, 3),
            %{
+             pipeline: attrs[:pipeline],
              last_run_at: nil,
              next_run_at: nil,
              created_at: now,
@@ -967,7 +971,10 @@ defmodule Apothecary.Worktrees do
     schedule =
       if Map.has_key?(changes, :schedule), do: changes.schedule, else: schedule
 
-    data = Map.put(data, :updated_at, now)
+    data =
+      data
+      |> maybe_put(:pipeline, changes[:pipeline])
+      |> Map.put(:updated_at, now)
 
     {table, id, title, description, schedule, enabled, priority, data}
   end
@@ -1276,6 +1283,7 @@ defmodule Apothecary.Worktrees do
       |> maybe_put(:blockers, changes[:blockers])
       |> maybe_put(:dependents, changes[:dependents])
       |> maybe_put(:pipeline, changes[:pipeline])
+      |> maybe_put(:pipeline_name, changes[:pipeline_name])
       |> maybe_put(:pipeline_stage, changes[:pipeline_stage])
       |> Map.put(:updated_at, now)
 
@@ -1418,7 +1426,8 @@ defmodule Apothecary.Worktrees do
   @doc false
   # Resolve a pipeline value: can be a list of stages (pass-through),
   # a string name (looked up from project settings), or nil (use project default).
-  defp resolve_pipeline(nil, nil), do: nil
+  # Returns {stages, name} where name is the pipeline name if resolved from a named pipeline.
+  defp resolve_pipeline(nil, nil), do: {nil, nil}
 
   defp resolve_pipeline(nil, project_id) do
     # Inherit project default pipeline
@@ -1427,26 +1436,26 @@ defmodule Apothecary.Worktrees do
         resolve_pipeline(default_name, project_id)
 
       _ ->
-        nil
+        {nil, nil}
     end
   end
 
-  defp resolve_pipeline(stages, _project_id) when is_list(stages), do: stages
+  defp resolve_pipeline(stages, _project_id) when is_list(stages), do: {stages, nil}
 
   defp resolve_pipeline(name, project_id) when is_binary(name) do
     case get_project_pipelines(project_id) do
       {pipelines, _default} when is_map(pipelines) ->
         case Map.get(pipelines, name) do
-          stages when is_list(stages) -> stages
-          _ -> nil
+          stages when is_list(stages) -> {stages, name}
+          _ -> {nil, nil}
         end
 
       _ ->
-        nil
+        {nil, nil}
     end
   end
 
-  defp resolve_pipeline(_, _), do: nil
+  defp resolve_pipeline(_, _), do: {nil, nil}
 
   @doc "Get pipeline definitions and default from a project's settings."
   def get_project_pipelines(nil), do: {%{}, nil}

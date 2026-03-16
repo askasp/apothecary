@@ -8,6 +8,7 @@ defmodule Apothecary.Recipe do
           schedule: String.t() | nil,
           enabled: boolean(),
           priority: integer() | nil,
+          pipeline: String.t() | nil,
           last_run_at: String.t() | nil,
           next_run_at: String.t() | nil,
           created_at: String.t() | nil,
@@ -22,6 +23,7 @@ defmodule Apothecary.Recipe do
     :description,
     :schedule,
     :priority,
+    :pipeline,
     :last_run_at,
     :next_run_at,
     :created_at,
@@ -42,6 +44,7 @@ defmodule Apothecary.Recipe do
       schedule: schedule,
       enabled: enabled,
       priority: priority,
+      pipeline: data[:pipeline],
       last_run_at: data[:last_run_at],
       next_run_at: data[:next_run_at],
       created_at: data[:created_at],
@@ -54,6 +57,7 @@ defmodule Apothecary.Recipe do
   def to_record(%__MODULE__{} = r) do
     {:apothecary_recipes, r.id, r.title, r.description, r.schedule, r.enabled, r.priority,
      %{
+       pipeline: r.pipeline,
        last_run_at: r.last_run_at,
        next_run_at: r.next_run_at,
        created_at: r.created_at,

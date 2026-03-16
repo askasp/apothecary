@@ -157,7 +157,8 @@ defmodule Apothecary.BrewScheduler do
           worktree_attrs = %{
             title: recipe.title,
             description: recipe.description,
-            priority: recipe.priority || 3
+            priority: recipe.priority || 3,
+            pipeline: recipe.pipeline
           }
 
           case Apothecary.Worktrees.create_worktree(worktree_attrs) do

@@ -244,7 +244,16 @@ defmodule ApothecaryWeb.DashboardLive do
     )
     |> assign(:known_task_ids, extract_task_ids(task_state.tasks))
     |> assign(:project_files, load_project_files(project))
+    |> assign(:questions, questions)
+    |> assign(:project_pipelines, load_project_pipelines(project))
     |> load_deployments(project)
+  end
+
+  defp load_project_pipelines(nil), do: %{}
+
+  defp load_project_pipelines(project) do
+    {pipelines, _default} = Worktrees.get_project_pipelines(project.id)
+    pipelines
   end
 
   defp load_deployments(socket, project) do
@@ -1296,6 +1305,49 @@ defmodule ApothecaryWeb.DashboardLive do
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed to close: #{inspect(reason)}")}
+    end
+  end
+
+  @impl true
+  def handle_event("set-pipeline", %{"name" => name}, socket) do
+    wt_id = socket.assigns.selected_task_id
+    project_id = if socket.assigns.current_project, do: socket.assigns.current_project.id
+
+    if wt_id && project_id do
+      {pipelines, _default} = Worktrees.get_project_pipelines(project_id)
+
+      case Map.get(pipelines, name) do
+        stages when is_list(stages) ->
+          Worktrees.update_worktree(wt_id, %{
+            pipeline: stages,
+            pipeline_name: name,
+            pipeline_stage: 0
+          })
+
+          {:noreply, put_flash(socket, :info, "Pipeline set: #{name}")}
+
+        _ ->
+          {:noreply, put_flash(socket, :error, "Pipeline '#{name}' not found")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("clear-pipeline", _params, socket) do
+    wt_id = socket.assigns.selected_task_id
+
+    if wt_id do
+      Worktrees.update_worktree(wt_id, %{
+        pipeline: nil,
+        pipeline_name: nil,
+        pipeline_stage: 0
+      })
+
+      {:noreply, put_flash(socket, :info, "Pipeline cleared")}
+    else
+      {:noreply, socket}
     end
   end
 
@@ -4280,6 +4332,7 @@ defmodule ApothecaryWeb.DashboardLive do
                         loading_action={@loading_action}
                         expanded_detail_items={@expanded_detail_items}
                         branch_diff_stat={@branch_diff_stat}
+                        project_pipelines={@project_pipelines}
                       />
                     <% else %>
                       <div
