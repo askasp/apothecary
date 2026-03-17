@@ -1048,41 +1048,6 @@ defmodule ApothecaryWeb.DashboardComponents do
         {brewing, assaying, queued, bottled, discarded}
       end
 
-    # Build question entries in tree_group format
-    filtered_questions =
-      assigns.questions
-      |> Enum.sort_by(fn q -> q.created_at || "" end, :desc)
-      |> then(fn qs ->
-        if query != "" do
-          Enum.filter(qs, fn q ->
-            title = (q.title || q.id) |> String.downcase()
-            String.contains?(title, query)
-          end)
-        else
-          qs
-        end
-      end)
-
-    # Only show standalone root questions in the tree (not follow-ups or worktree-attached)
-    root_questions =
-      Enum.filter(filtered_questions, fn q ->
-        is_nil(q.parent_question_id) and is_nil(Map.get(q, :parent_worktree_id))
-      end)
-
-    {pending_questions, answered_questions} =
-      Enum.split_with(root_questions, fn q -> q.status in ["open", "in_progress"] end)
-
-    pending_q_entries =
-      Enum.map(pending_questions, fn q ->
-        %{worktree: q, tasks: [], agent: nil, dev_server: nil}
-      end)
-
-    answered_q_entries =
-      Enum.map(answered_questions, fn q ->
-        %{worktree: q, tasks: [], agent: nil, dev_server: nil}
-      end)
-
-
     assigns =
       assigns
       |> assign(:brewing, brewing)
@@ -1232,8 +1197,7 @@ defmodule ApothecaryWeb.DashboardComponents do
       <%!-- Empty state --%>
       <div
         :if={
-          @brewing == [] && @assaying == [] && @queued == [] && @bottled == [] && @discarded == [] &&
-            @pending_q_entries == [] && @answered_q_entries == []
+          @brewing == [] && @assaying == [] && @queued == [] && @bottled == [] && @discarded == []
         }
         class="py-6"
         style="color: var(--muted); font-size: var(--font-size-sm);"
@@ -1744,8 +1708,6 @@ defmodule ApothecaryWeb.DashboardComponents do
         <%= for q <- @question_tasks_done do %>
           <% answer = question_answer(q) %>
           <% is_plan = Map.get(q, :kind) == "plan" %>
-          <% follow_ups =
-            Enum.count(@worktree_questions, fn fq -> Map.get(fq, :parent_question_id) == q.id end) %>
           <div
             class="flex items-center gap-2 py-0.5 cursor-pointer group"
             phx-click="toggle-detail-expand"
