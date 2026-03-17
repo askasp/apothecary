@@ -1211,7 +1211,13 @@ defmodule ApothecaryWeb.DashboardLive do
   @impl true
   def handle_event("stop-dev", %{"id" => wt_id}, socket) do
     DevServer.stop_server(wt_id)
-    {:noreply, put_flash(socket, :info, "Preview stopped for #{wt_id}")}
+
+    {:noreply,
+     socket
+     |> assign(:show_preview, false)
+     |> assign(:preview_port, nil)
+     |> assign(:show_preview_logs, false)
+     |> put_flash(:info, "Preview stopped")}
   end
 
   @impl true

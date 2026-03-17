@@ -2342,8 +2342,26 @@ defmodule ApothecaryWeb.DashboardComponents do
           <% end %>
         </div>
         <div class="flex items-center gap-3">
-          <%= if @port do %>
-            <%= if @server_status == :error and @active_source do %>
+          <%= if @port && @active_source do %>
+            <%= if @server_status in [:running, :starting] do %>
+              <button
+                phx-click="restart-preview"
+                phx-value-id={@active_source.id}
+                class="cursor-pointer"
+                style="color: var(--muted);"
+              >
+                restart
+              </button>
+              <button
+                phx-click="stop-dev"
+                phx-value-id={@active_source.id}
+                class="cursor-pointer"
+                style="color: var(--muted);"
+              >
+                stop
+              </button>
+            <% end %>
+            <%= if @server_status == :error do %>
               <button
                 phx-click="restart-preview"
                 phx-value-id={@active_source.id}
