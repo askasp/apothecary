@@ -1698,6 +1698,15 @@ defmodule ApothecaryWeb.DashboardComponents do
               >
                 view diff
               </span>
+              <span>&middot;</span>
+              <button
+                phx-click="delete-child"
+                phx-value-id={task.id}
+                class="cursor-pointer hover:underline"
+                style="color: var(--error);"
+              >
+                delete
+              </button>
             </div>
           </div>
         </div>
@@ -1780,7 +1789,7 @@ defmodule ApothecaryWeb.DashboardComponents do
 
       <%!-- 5. Active task (highlighted) --%>
       <div :if={@active_task} class="detail-active-task mb-1">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 group">
           <span style="color: var(--concocting);">
             <.braille_spinner id="detail-active-task-spin" offset={2} />
           </span>
@@ -1794,6 +1803,15 @@ defmodule ApothecaryWeb.DashboardComponents do
           >
             {@brewer_label}
           </span>
+          <button
+            phx-click="delete-child"
+            phx-value-id={@active_task.id}
+            class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex-shrink-0"
+            style="color: var(--error); font-size: var(--font-size-xs);"
+            title="Delete task"
+          >
+            &#x2715;
+          </button>
         </div>
       </div>
 
@@ -1819,12 +1837,21 @@ defmodule ApothecaryWeb.DashboardComponents do
       <div :if={@pending_tasks != []} class="mb-2" style="font-size: var(--font-size-sm);">
         <%= for {child, idx} <- Enum.with_index(@pending_tasks) do %>
           <% is_last = idx == length(@pending_tasks) - 1 %>
-          <div class="flex items-center gap-2 py-0.5">
+          <div class="flex items-center gap-2 py-0.5 group">
             <span style="color: var(--border); font-family: monospace; font-size: var(--font-size-xs); width: 16px; text-align: center; flex-shrink: 0;">
               {if is_last, do: "└─", else: "├─"}
             </span>
             <span style="color: var(--muted);">○</span>
             <span style="color: var(--muted);">{child.title}</span>
+            <button
+              phx-click="delete-child"
+              phx-value-id={child.id}
+              class="ml-auto opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex-shrink-0"
+              style="color: var(--error); font-size: var(--font-size-xs);"
+              title="Delete task"
+            >
+              &#x2715;
+            </button>
           </div>
         <% end %>
       </div>
