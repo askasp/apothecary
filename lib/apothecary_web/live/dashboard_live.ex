@@ -119,12 +119,13 @@ defmodule ApothecaryWeb.DashboardLive do
       |> assign(:search_query, "")
       # Preview help
       |> assign(:show_preview_help, false)
-      # Pipeline management
-      |> assign(:show_pipeline_form, false)
-      |> assign(:pipeline_form_name, "")
-      |> assign(:pipeline_form_stages, [])
-      |> assign(:editing_pipeline_name, nil)
-      |> assign(:default_pipeline, nil)
+      # Formula management
+      |> assign(:show_formula_form, false)
+      |> assign(:formula_form_name, "")
+      |> assign(:formula_form_description, "")
+      |> assign(:formula_form_tasks, [])
+      |> assign(:editing_formula_name, nil)
+      |> assign(:available_agents, [])
       # Theme (actual value set from client via ThemePersist hook)
       |> assign(:theme, "studio")
       # Platform mode (deployments)
@@ -250,21 +251,20 @@ defmodule ApothecaryWeb.DashboardLive do
     )
     |> assign(:known_task_ids, extract_task_ids(task_state.tasks))
     |> assign(:project_files, load_project_files(project))
-    |> assign(:questions, questions)
+    |> assign(:questions, [])
     |> then(fn socket ->
-      {pipelines, default} = load_project_pipelines(project)
+      formulas = load_project_formulas(project)
 
       socket
-      |> assign(:project_pipelines, pipelines)
-      |> assign(:default_pipeline, default)
+      |> assign(:project_formulas, formulas)
     end)
     |> load_deployments(project)
   end
 
-  defp load_project_pipelines(nil), do: {%{}, nil}
+  defp load_project_formulas(nil), do: %{}
 
-  defp load_project_pipelines(project) do
-    Worktrees.get_project_pipelines(project.id)
+  defp load_project_formulas(project) do
+    Worktrees.get_project_formulas(project.id)
   end
 
   defp load_deployments(socket, project) do
@@ -1320,43 +1320,21 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
-  def handle_event("set-pipeline", %{"name" => name}, socket) do
+  def handle_event("inject-formula", %{"name" => name}, socket) do
     wt_id = socket.assigns.selected_task_id
     project_id = if socket.assigns.current_project, do: socket.assigns.current_project.id
 
     if wt_id && project_id do
-      {pipelines, _default} = Worktrees.get_project_pipelines(project_id)
+      case Worktrees.inject_formula(wt_id, name, project_id) do
+        {:ok, tasks} ->
+          {:noreply, put_flash(socket, :info, "Formula '#{name}' injected: #{length(tasks)} tasks")}
 
-      case Map.get(pipelines, name) do
-        stages when is_list(stages) ->
-          Worktrees.update_worktree(wt_id, %{
-            pipeline: stages,
-            pipeline_name: name,
-            pipeline_stage: 0
-          })
+        {:error, :formula_not_found} ->
+          {:noreply, put_flash(socket, :error, "Formula '#{name}' not found")}
 
-          {:noreply, put_flash(socket, :info, "Pipeline set: #{name}")}
-
-        _ ->
-          {:noreply, put_flash(socket, :error, "Pipeline '#{name}' not found")}
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Failed to inject formula")}
       end
-    else
-      {:noreply, socket}
-    end
-  end
-
-  @impl true
-  def handle_event("clear-pipeline", _params, socket) do
-    wt_id = socket.assigns.selected_task_id
-
-    if wt_id do
-      Worktrees.update_worktree(wt_id, %{
-        pipeline: nil,
-        pipeline_name: nil,
-        pipeline_stage: 0
-      })
-
-      {:noreply, put_flash(socket, :info, "Pipeline cleared")}
     else
       {:noreply, socket}
     end
@@ -2360,64 +2338,70 @@ defmodule ApothecaryWeb.DashboardLive do
     {:noreply, assign(socket, :recipes, Worktrees.list_recipes())}
   end
 
-  # --- Pipeline definition event handlers ---
+  # --- Formula definition event handlers ---
 
   @impl true
-  def handle_event("show-pipeline-form", _params, socket) do
+  def handle_event("show-formula-form", _params, socket) do
+    agents = Apothecary.Formula.available_agents()
     {:noreply,
      socket
-     |> assign(:show_pipeline_form, true)
-     |> assign(:pipeline_form_name, "")
-     |> assign(:pipeline_form_stages, [%{"name" => "implement", "kind" => "task", "prompt" => ""}])
-     |> assign(:editing_pipeline_name, nil)}
+     |> assign(:show_formula_form, true)
+     |> assign(:formula_form_name, "")
+     |> assign(:formula_form_description, "")
+     |> assign(:formula_form_tasks, [%{"title" => "", "agent_md" => ""}])
+     |> assign(:editing_formula_name, nil)
+     |> assign(:available_agents, agents)}
   end
 
   @impl true
-  def handle_event("cancel-pipeline-form", _params, socket) do
+  def handle_event("cancel-formula-form", _params, socket) do
     {:noreply,
      socket
-     |> assign(:show_pipeline_form, false)
-     |> assign(:editing_pipeline_name, nil)}
+     |> assign(:show_formula_form, false)
+     |> assign(:editing_formula_name, nil)}
   end
 
   @impl true
-  def handle_event("edit-pipeline", %{"name" => name}, socket) do
-    stages = Map.get(socket.assigns.project_pipelines, name, [])
+  def handle_event("edit-formula", %{"name" => name}, socket) do
+    formula = Map.get(socket.assigns.project_formulas, name, %{})
+    tasks = formula["tasks"] || []
+    agents = Apothecary.Formula.available_agents()
 
     normalized =
-      Enum.map(stages, fn stage ->
+      Enum.map(tasks, fn task ->
         %{
-          "name" => stage["name"] || stage[:name] || "",
-          "kind" => stage["kind"] || stage[:kind] || "task",
-          "prompt" => stage["prompt"] || stage[:prompt] || ""
+          "title" => task["title"] || task[:title] || "",
+          "agent_md" => task["agent_md"] || task[:agent_md] || ""
         }
       end)
 
     {:noreply,
      socket
-     |> assign(:show_pipeline_form, true)
-     |> assign(:pipeline_form_name, name)
-     |> assign(:pipeline_form_stages, normalized)
-     |> assign(:editing_pipeline_name, name)}
+     |> assign(:show_formula_form, true)
+     |> assign(:formula_form_name, name)
+     |> assign(:formula_form_description, formula["description"] || "")
+     |> assign(:formula_form_tasks, normalized)
+     |> assign(:editing_formula_name, name)
+     |> assign(:available_agents, agents)}
   end
 
   @impl true
-  def handle_event("add-pipeline-stage", _params, socket) do
-    stages =
-      socket.assigns.pipeline_form_stages ++ [%{"name" => "", "kind" => "task", "prompt" => ""}]
+  def handle_event("add-formula-task", _params, socket) do
+    tasks =
+      socket.assigns.formula_form_tasks ++ [%{"title" => "", "agent_md" => ""}]
 
-    {:noreply, assign(socket, :pipeline_form_stages, stages)}
+    {:noreply, assign(socket, :formula_form_tasks, tasks)}
   end
 
   @impl true
-  def handle_event("remove-pipeline-stage", %{"index" => idx_str}, socket) do
+  def handle_event("remove-formula-task", %{"index" => idx_str}, socket) do
     idx = String.to_integer(idx_str)
-    stages = List.delete_at(socket.assigns.pipeline_form_stages, idx)
-    {:noreply, assign(socket, :pipeline_form_stages, stages)}
+    tasks = List.delete_at(socket.assigns.formula_form_tasks, idx)
+    {:noreply, assign(socket, :formula_form_tasks, tasks)}
   end
 
   @impl true
-  def handle_event("save-pipeline-def", %{"pipeline" => params}, socket) do
+  def handle_event("save-formula-def", %{"formula" => params}, socket) do
     project_id = if socket.assigns.current_project, do: socket.assigns.current_project.id
 
     if is_nil(project_id) do
@@ -2425,42 +2409,44 @@ defmodule ApothecaryWeb.DashboardLive do
     else
       name = String.trim(params["name"] || "")
       original_name = params["original_name"]
+      description = String.trim(params["description"] || "")
 
-      stages =
-        (params["stages"] || %{})
+      tasks =
+        (params["tasks"] || %{})
         |> Enum.sort_by(fn {k, _v} -> String.to_integer(k) end)
-        |> Enum.map(fn {_idx, stage} ->
-          stage_map = %{"name" => stage["name"], "kind" => stage["kind"]}
+        |> Enum.map(fn {_idx, task} ->
+          task_map = %{"title" => task["title"]}
 
-          if stage["prompt"] && String.trim(stage["prompt"]) != "" do
-            Map.put(stage_map, "prompt", String.trim(stage["prompt"]))
+          if task["agent_md"] && String.trim(task["agent_md"]) != "" do
+            Map.put(task_map, "agent_md", String.trim(task["agent_md"]))
           else
-            stage_map
+            task_map
           end
         end)
-        |> Enum.reject(fn s -> s["name"] == "" or is_nil(s["name"]) end)
+        |> Enum.reject(fn t -> t["title"] == "" or is_nil(t["title"]) end)
 
       if name == "" do
-        {:noreply, put_flash(socket, :error, "Pipeline name is required")}
+        {:noreply, put_flash(socket, :error, "Formula name is required")}
       else
         # Delete old name if renaming
         if original_name && original_name != name do
-          Projects.delete_pipeline(project_id, original_name)
+          Projects.delete_formula(project_id, original_name)
         end
 
-        case Projects.put_pipeline(project_id, name, stages) do
+        formula = %{"description" => description, "tasks" => tasks}
+
+        case Projects.put_formula(project_id, name, formula) do
           {:ok, _} ->
-            {pipelines, default} = load_project_pipelines(socket.assigns.current_project)
+            formulas = load_project_formulas(socket.assigns.current_project)
 
             {:noreply,
              socket
-             |> assign(:show_pipeline_form, false)
-             |> assign(:editing_pipeline_name, nil)
-             |> assign(:project_pipelines, pipelines)
-             |> assign(:default_pipeline, default)
+             |> assign(:show_formula_form, false)
+             |> assign(:editing_formula_name, nil)
+             |> assign(:project_formulas, formulas)
              |> put_flash(
                :info,
-               if(original_name, do: "Pipeline updated", else: "Pipeline created")
+               if(original_name, do: "Formula updated", else: "Formula created")
              )}
 
           {:error, reason} ->
@@ -2471,42 +2457,17 @@ defmodule ApothecaryWeb.DashboardLive do
   end
 
   @impl true
-  def handle_event("delete-pipeline-def", %{"name" => name}, socket) do
+  def handle_event("delete-formula-def", %{"name" => name}, socket) do
     project_id = if socket.assigns.current_project, do: socket.assigns.current_project.id
 
     if project_id do
-      Projects.delete_pipeline(project_id, name)
-      {pipelines, default} = load_project_pipelines(socket.assigns.current_project)
+      Projects.delete_formula(project_id, name)
+      formulas = load_project_formulas(socket.assigns.current_project)
 
       {:noreply,
        socket
-       |> assign(:project_pipelines, pipelines)
-       |> assign(:default_pipeline, default)
-       |> put_flash(:info, "Pipeline '#{name}' deleted")}
-    else
-      {:noreply, socket}
-    end
-  end
-
-  @impl true
-  def handle_event("set-default-pipeline", %{"name" => name}, socket) do
-    project_id = if socket.assigns.current_project, do: socket.assigns.current_project.id
-
-    if project_id do
-      Projects.set_default_pipeline(project_id, name)
-      {:noreply, assign(socket, :default_pipeline, name)}
-    else
-      {:noreply, socket}
-    end
-  end
-
-  @impl true
-  def handle_event("clear-default-pipeline", _params, socket) do
-    project_id = if socket.assigns.current_project, do: socket.assigns.current_project.id
-
-    if project_id do
-      Projects.set_default_pipeline(project_id, nil)
-      {:noreply, assign(socket, :default_pipeline, nil)}
+       |> assign(:project_formulas, formulas)
+       |> put_flash(:info, "Formula '#{name}' deleted")}
     else
       {:noreply, socket}
     end
@@ -4435,16 +4396,17 @@ defmodule ApothecaryWeb.DashboardLive do
                   />
                 </div>
               </div>
-            <% @active_tab == :pipelines -> %>
+            <% @active_tab == :formulas -> %>
               <div class="h-full overflow-y-auto scroll-main">
                 <div class="max-w-[540px] mx-auto">
-                  <.pipeline_list
-                    project_pipelines={@project_pipelines}
-                    default_pipeline={@default_pipeline}
-                    show_pipeline_form={@show_pipeline_form}
-                    pipeline_form_name={@pipeline_form_name}
-                    pipeline_form_stages={@pipeline_form_stages}
-                    editing_pipeline_name={@editing_pipeline_name}
+                  <.formula_list
+                    project_formulas={@project_formulas}
+                    show_formula_form={@show_formula_form}
+                    formula_form_name={@formula_form_name}
+                    formula_form_description={@formula_form_description}
+                    formula_form_tasks={@formula_form_tasks}
+                    editing_formula_name={@editing_formula_name}
+                    available_agents={@available_agents}
                   />
                 </div>
               </div>
@@ -4546,7 +4508,7 @@ defmodule ApothecaryWeb.DashboardLive do
                         loading_action={@loading_action}
                         expanded_detail_items={@expanded_detail_items}
                         branch_diff_stat={@branch_diff_stat}
-                        project_pipelines={@project_pipelines}
+                        project_formulas={@project_formulas}
                       />
                     <% else %>
                       <div

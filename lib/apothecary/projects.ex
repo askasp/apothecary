@@ -68,7 +68,7 @@ defmodule Apothecary.Projects do
     now = DateTime.utc_now() |> DateTime.to_iso8601()
     name = Keyword.get(opts, :name, Path.basename(path))
     type = Keyword.get_lazy(opts, :type, fn -> Project.detect_type(path) end)
-    settings = Keyword.get(opts, :settings, %{}) |> seed_pipeline_defaults()
+    settings = Keyword.get(opts, :settings, %{}) |> seed_formula_defaults()
 
     record =
       {:apothecary_projects, id, name, path, :active,
@@ -206,28 +206,27 @@ defmodule Apothecary.Projects do
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
-  # --- Pipeline Management ---
+  # --- Formula Management ---
 
-  @doc "Get pipeline definitions for a project."
-  def get_pipelines(project_id) do
+  @doc "Get formula definitions for a project."
+  def get_formulas(project_id) do
     case get(project_id) do
       {:ok, project} ->
-        pipelines = project.settings[:pipelines] || project.settings["pipelines"] || %{}
-        default = project.settings[:default_pipeline] || project.settings["default_pipeline"]
-        {:ok, %{pipelines: pipelines, default: default}}
+        formulas = project.settings[:formulas] || project.settings["formulas"] || %{}
+        {:ok, formulas}
 
       error ->
         error
     end
   end
 
-  @doc "Save a pipeline definition for a project."
-  def put_pipeline(project_id, name, stages) when is_binary(name) and is_list(stages) do
+  @doc "Save a formula definition for a project."
+  def put_formula(project_id, name, formula) when is_binary(name) and is_map(formula) do
     case get(project_id) do
       {:ok, project} ->
-        pipelines = project.settings[:pipelines] || project.settings["pipelines"] || %{}
-        pipelines = Map.put(pipelines, name, stages)
-        settings = Map.put(project.settings, :pipelines, pipelines)
+        formulas = project.settings[:formulas] || project.settings["formulas"] || %{}
+        formulas = Map.put(formulas, name, formula)
+        settings = Map.put(project.settings, :formulas, formulas)
         update(project_id, %{settings: settings})
 
       error ->
@@ -235,18 +234,13 @@ defmodule Apothecary.Projects do
     end
   end
 
-  @doc "Delete a pipeline definition from a project."
-  def delete_pipeline(project_id, name) do
+  @doc "Delete a formula definition from a project."
+  def delete_formula(project_id, name) do
     case get(project_id) do
       {:ok, project} ->
-        pipelines = project.settings[:pipelines] || project.settings["pipelines"] || %{}
-        pipelines = Map.delete(pipelines, name)
-
-        settings =
-          project.settings
-          |> Map.put(:pipelines, pipelines)
-          |> maybe_clear_default(name)
-
+        formulas = project.settings[:formulas] || project.settings["formulas"] || %{}
+        formulas = Map.delete(formulas, name)
+        settings = Map.put(project.settings, :formulas, formulas)
         update(project_id, %{settings: settings})
 
       error ->
@@ -254,70 +248,13 @@ defmodule Apothecary.Projects do
     end
   end
 
-  @doc "Set the default pipeline for a project."
-  def set_default_pipeline(project_id, name) do
-    case get(project_id) do
-      {:ok, project} ->
-        settings = Map.put(project.settings, :default_pipeline, name)
-        update(project_id, %{settings: settings})
-
-      error ->
-        error
-    end
-  end
-
-  @doc "Get the default pipeline stages for a project. Returns a list or nil."
-  def default_pipeline_stages(project_id) do
-    case get_pipelines(project_id) do
-      {:ok, %{pipelines: pipelines, default: name}} when is_binary(name) ->
-        Map.get(pipelines, name)
-
-      _ ->
-        nil
-    end
-  end
-
-  @doc "Default pipeline definitions seeded on new projects."
-  def default_pipelines do
-    %{
-      "standard" => [
-        %{name: "implement", kind: "task"},
-        %{name: "self-review", kind: "review",
-          prompt: "Review all changes on this branch against main. Check for:\n" <>
-            "- Unused variables, imports, or dead code\n" <>
-            "- Missing error handling at system boundaries\n" <>
-            "- Inconsistent naming or style\n" <>
-            "- Hardcoded values that should be configurable\n" <>
-            "- Security issues (injection, XSS, etc.)\n" <>
-            "- Overly complex code that could be simplified\n\n" <>
-            "Fix any issues you find directly. If everything looks good, add a note saying so."}
-      ],
-      "thorough" => [
-        %{name: "implement", kind: "task"},
-        %{name: "self-review", kind: "review",
-          prompt: "Review all changes on this branch against main. Fix any code quality issues, " <>
-            "unused code, naming inconsistencies, or missing error handling."},
-        %{name: "test", kind: "task",
-          prompt: "Run the full test suite. Fix any failures. If tests are missing for new " <>
-            "functionality, add them."}
-      ]
-    }
-  end
-
-  # Seed pipeline defaults into settings if not already present
-  defp seed_pipeline_defaults(settings) do
-    if Map.has_key?(settings, :pipelines) || Map.has_key?(settings, "pipelines") do
+  # Seed formula defaults into settings if not already present
+  defp seed_formula_defaults(settings) do
+    if Map.has_key?(settings, :formulas) || Map.has_key?(settings, "formulas") do
       settings
     else
-      settings
-      |> Map.put(:pipelines, default_pipelines())
-      |> Map.put(:default_pipeline, nil)
+      Map.put(settings, :formulas, Apothecary.Formula.defaults())
     end
-  end
-
-  defp maybe_clear_default(settings, deleted_name) do
-    current = settings[:default_pipeline] || settings["default_pipeline"]
-    if current == deleted_name, do: Map.put(settings, :default_pipeline, nil), else: settings
   end
 
   defp generate_id do

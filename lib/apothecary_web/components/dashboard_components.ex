@@ -1306,13 +1306,6 @@ defmodule ApothecaryWeb.DashboardComponents do
               <span class="truncate" style={"color: #{@title_color}; font-weight: 500;"}>
                 {wt.git_branch || wt.title || wt.id}
               </span>
-              <%!-- Pipeline stage indicator --%>
-              <span
-                :if={pipeline_stage_label(wt)}
-                style="color: var(--dim); font-size: var(--font-size-xs); flex-shrink: 0;"
-              >
-                {pipeline_stage_label(wt)}
-              </span>
               <%!-- Right side: progress ratio + blocks + arrow --%>
               <span
                 class="ml-auto flex items-center gap-1.5 flex-shrink-0"
@@ -1364,7 +1357,7 @@ defmodule ApothecaryWeb.DashboardComponents do
   attr :editing_child_id, :string, default: nil
   attr :expanded_detail_items, :any, default: nil
   attr :branch_diff_stat, :any, default: nil
-  attr :project_pipelines, :map, default: %{}
+  attr :project_formulas, :map, default: %{}
 
   def worktree_detail(assigns) do
     # Render question-specific view when kind is "question"
@@ -1483,22 +1476,9 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       <% end %>
 
-      <%!-- Follow-up questions thread --%>
-      <% grouped = group_questions_threaded(@worktree_questions) %>
-      <div :if={grouped != []} class="mt-6">
-        <div style="border-top: 1px solid var(--border); padding-top: 16px; margin-bottom: 8px;" />
-        <div :for={thread <- grouped} class="mb-4">
-          <.question_thread_item
-            :for={q <- thread}
-            q={q}
-            depth={q.__depth__ || 0}
-            follow_up_id={@follow_up_question_id}
-          />
-        </div>
-      </div>
+      <%!-- Follow-up questions --%>
     </div>
     """
->>>>>>> 1ea1ea5 (Add pipeline management UI tab for creating/editing/deleting pipelines)
   end
 
   defp worktree_detail_inner(assigns) do
@@ -1657,14 +1637,6 @@ defmodule ApothecaryWeb.DashboardComponents do
                 style="color: var(--error); font-weight: 500;"
               >
                 &middot; unsandboxed
-              </span>
-              <span
-                :if={is_list(@task.pipeline) && length(@task.pipeline) > 0}
-                style="color: var(--accent);"
-              >
-                &middot; stage {@task.pipeline_stage + 1}/{length(@task.pipeline)} ({pipeline_stage_label(
-                  @task
-                )})
               </span>
             </div>
           </div>
@@ -2100,60 +2072,21 @@ defmodule ApothecaryWeb.DashboardComponents do
         <% end %>
       </div>
 
-      <%!-- 7b. Pipeline --%>
-      <%= if is_list(@task.pipeline) or (@task.status in ["open", "brew_done"] and @project_pipelines != %{}) do %>
+      <%!-- 7b. Formula injection --%>
+      <%= if @task.status in ["open", "brew_done"] and @project_formulas != %{} do %>
         <div class="mb-4">
-          <div class="section-header mb-2">PIPELINE</div>
-          <%= if @task.status in ["open", "brew_done"] and @project_pipelines != %{} do %>
-            <div class="flex items-center gap-2 flex-wrap" style="font-size: var(--font-size-sm);">
-              <span
-                :for={{name, _stages} <- @project_pipelines}
-                phx-click="set-pipeline"
-                phx-value-name={name}
-                class={[
-                  "action-pill cursor-pointer",
-                  pipeline_active?(@task, name) && "pipeline-active"
-                ]}
-                style={
-                  if pipeline_active?(@task, name),
-                    do: "color: var(--accent); border-color: var(--accent);",
-                    else: ""
-                }
-              >
-                {name}
-              </span>
-              <span
-                :if={is_list(@task.pipeline)}
-                phx-click="clear-pipeline"
-                class="action-pill cursor-pointer"
-                style="color: var(--muted);"
-              >
-                clear
-              </span>
-            </div>
-          <% end %>
-          <%= if is_list(@task.pipeline) do %>
-            <div
-              class="mt-2 flex items-center gap-1"
-              style="font-size: var(--font-size-xs); color: var(--dim);"
+          <div class="section-header mb-2">FORMULAS</div>
+          <div class="flex items-center gap-2 flex-wrap" style="font-size: var(--font-size-sm);">
+            <span
+              :for={{name, formula} <- @project_formulas}
+              phx-click="inject-formula"
+              phx-value-name={name}
+              class="action-pill cursor-pointer"
+              title={formula["description"] || name}
             >
-              <span
-                :for={{stage, idx} <- Enum.with_index(@task.pipeline)}
-                class="flex items-center gap-1"
-              >
-                <span :if={idx > 0}>&rarr;</span>
-                <span style={
-                  cond do
-                    idx < @task.pipeline_stage -> "color: var(--bottled);"
-                    idx == @task.pipeline_stage -> "color: var(--accent); font-weight: 500;"
-                    true -> ""
-                  end
-                }>
-                  {stage["name"] || stage[:name] || "stage #{idx + 1}"}
-                </span>
-              </span>
-            </div>
-          <% end %>
+              {name}
+            </span>
+          </div>
         </div>
       <% end %>
 
@@ -3448,96 +3381,83 @@ defmodule ApothecaryWeb.DashboardComponents do
     """
   end
 
-  # ── Pipeline Management ──────────────────────────────────
+  # ── Formula Management ──────────────────────────────────
 
-  attr :project_pipelines, :map, required: true
-  attr :default_pipeline, :string, default: nil
-  attr :show_pipeline_form, :boolean, default: false
-  attr :pipeline_form_name, :string, default: ""
-  attr :pipeline_form_stages, :list, default: []
-  attr :editing_pipeline_name, :string, default: nil
+  attr :project_formulas, :map, required: true
+  attr :show_formula_form, :boolean, default: false
+  attr :formula_form_name, :string, default: ""
+  attr :formula_form_description, :string, default: ""
+  attr :formula_form_tasks, :list, default: []
+  attr :editing_formula_name, :string, default: nil
+  attr :available_agents, :list, default: []
 
-  def pipeline_list(assigns) do
+  def formula_list(assigns) do
     ~H"""
     <div class="px-3 py-3">
       <div class="mb-3" style="font-size: var(--font-size-xs);">
-        <span style="color: var(--dim);">definitions:</span>
-        <span style="color: var(--text);">&nbsp;{map_size(@project_pipelines)}</span>
-        <span :if={@default_pipeline} style="color: var(--border);">&nbsp;&middot;&nbsp;</span>
-        <span :if={@default_pipeline} style="color: var(--dim);">
-          default: <span style="color: var(--accent);">{@default_pipeline}</span>
-        </span>
+        <span style="color: var(--dim);">formulas:</span>
+        <span style="color: var(--text);">&nbsp;{map_size(@project_formulas)}</span>
       </div>
 
-      <.pipeline_form_panel
-        :if={@show_pipeline_form}
-        name={@pipeline_form_name}
-        stages={@pipeline_form_stages}
-        editing_name={@editing_pipeline_name}
+      <.formula_form_panel
+        :if={@show_formula_form}
+        name={@formula_form_name}
+        description={@formula_form_description}
+        tasks={@formula_form_tasks}
+        editing_name={@editing_formula_name}
+        available_agents={@available_agents}
       />
 
-      <%= if @project_pipelines == %{} and !@show_pipeline_form do %>
+      <%= if @project_formulas == %{} and !@show_formula_form do %>
         <div style="color: var(--muted); font-size: var(--font-size-sm);" class="py-6">
-          no pipelines defined yet
+          no formulas defined yet
         </div>
       <% else %>
-        <div :if={!@show_pipeline_form} style="font-size: var(--font-size-sm);">
-          <%= for {name, stages} <- Enum.sort(@project_pipelines) do %>
+        <div :if={!@show_formula_form} style="font-size: var(--font-size-sm);">
+          <%= for {name, formula} <- Enum.sort(@project_formulas) do %>
+            <% tasks = formula["tasks"] || formula[:tasks] || [] %>
             <div
               class="mb-3 p-2 cursor-pointer"
               style="border: 1px solid var(--border); border-radius: 4px;"
-              phx-click="edit-pipeline"
+              phx-click="edit-formula"
               phx-value-name={name}
             >
               <div class="flex items-center justify-between mb-1">
                 <div class="flex items-center gap-2">
                   <span style="color: var(--text); font-weight: 500;">{name}</span>
-                  <span
-                    :if={@default_pipeline == name}
-                    style="color: var(--accent); font-size: var(--font-size-xs);"
-                  >
-                    default
+                  <span style="color: var(--dim); font-size: var(--font-size-xs);">
+                    {length(tasks)} tasks
                   </span>
                 </div>
                 <div class="flex items-center gap-2" style="font-size: var(--font-size-xs);">
                   <button
-                    :if={@default_pipeline != name}
-                    phx-click="set-default-pipeline"
+                    phx-click="delete-formula-def"
                     phx-value-name={name}
                     class="action-text"
-                  >
-                    set default
-                  </button>
-                  <button
-                    :if={@default_pipeline == name}
-                    phx-click="clear-default-pipeline"
-                    class="action-text"
-                    style="color: var(--muted);"
-                  >
-                    unset default
-                  </button>
-                  <button
-                    phx-click="delete-pipeline-def"
-                    phx-value-name={name}
-                    class="action-text"
-                    data-confirm={"Delete pipeline '#{name}'?"}
+                    data-confirm={"Delete formula '#{name}'?"}
                   >
                     delete
                   </button>
                 </div>
               </div>
               <div
+                :if={formula["description"] || formula[:description]}
+                style="font-size: var(--font-size-xs); color: var(--muted); margin-bottom: 4px;"
+              >
+                {formula["description"] || formula[:description]}
+              </div>
+              <div
                 class="flex items-center gap-1 flex-wrap"
                 style="font-size: var(--font-size-xs); color: var(--dim);"
               >
-                <span :for={{stage, idx} <- Enum.with_index(stages)} class="flex items-center gap-1">
-                  <span :if={idx > 0}>&rarr;</span>
+                <span :for={{task, idx} <- Enum.with_index(tasks)} class="flex items-center gap-1">
+                  <span :if={idx > 0}>&middot;</span>
                   <span style={
-                    if (stage["kind"] || stage[:kind]) == "review",
+                    if task["agent_md"] || task[:agent_md],
                       do: "color: var(--assaying);",
                       else: ""
                   }>
-                    {stage["name"] || stage[:name] || "stage #{idx + 1}"}
+                    {task["title"] || task[:title] || "task #{idx + 1}"}
                   </span>
                 </span>
               </div>
@@ -3546,12 +3466,12 @@ defmodule ApothecaryWeb.DashboardComponents do
         </div>
       <% end %>
 
-      <div :if={!@show_pipeline_form} class="mt-3">
+      <div :if={!@show_formula_form} class="mt-3">
         <button
-          phx-click="show-pipeline-form"
+          phx-click="show-formula-form"
           style="color: var(--muted); font-size: var(--font-size-sm); cursor: pointer;"
         >
-          + new pipeline
+          + new formula
         </button>
       </div>
     </div>
@@ -3559,46 +3479,61 @@ defmodule ApothecaryWeb.DashboardComponents do
   end
 
   attr :name, :string, required: true
-  attr :stages, :list, required: true
+  attr :description, :string, default: ""
+  attr :tasks, :list, required: true
   attr :editing_name, :string, default: nil
+  attr :available_agents, :list, default: []
 
-  defp pipeline_form_panel(assigns) do
+  defp formula_form_panel(assigns) do
     ~H"""
     <div class="mb-4 p-3" style="border: 1px solid var(--border);">
       <div class="flex items-center justify-between mb-2">
         <span class="section-header">
-          {if(@editing_name, do: "EDIT PIPELINE", else: "NEW PIPELINE")}
+          {if(@editing_name, do: "EDIT FORMULA", else: "NEW FORMULA")}
         </span>
-        <button phx-click="cancel-pipeline-form" class="action-text">cancel</button>
+        <button phx-click="cancel-formula-form" class="action-text">cancel</button>
       </div>
-      <.form for={%{}} id="pipeline-form" phx-submit="save-pipeline-def">
-        <input :if={@editing_name} type="hidden" name="pipeline[original_name]" value={@editing_name} />
+      <.form for={%{}} id="formula-form" phx-submit="save-formula-def">
+        <input :if={@editing_name} type="hidden" name="formula[original_name]" value={@editing_name} />
         <div class="mb-3">
           <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">name</div>
           <input
             type="text"
-            name="pipeline[name]"
+            name="formula[name]"
             value={@name}
-            placeholder="e.g. thorough-review"
+            placeholder="e.g. quality-gate"
             class="moonlight-input w-full"
             required
           />
         </div>
 
+        <div class="mb-3">
+          <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">
+            description
+          </div>
+          <input
+            type="text"
+            name="formula[description]"
+            value={@description}
+            placeholder="e.g. standard QA — test, lint, review"
+            class="moonlight-input w-full"
+          />
+        </div>
+
         <div class="mb-2">
-          <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">stages</div>
-          <%= for {stage, idx} <- Enum.with_index(@stages) do %>
+          <div class="mb-1" style="color: var(--dim); font-size: var(--font-size-xs);">tasks</div>
+          <%= for {task, idx} <- Enum.with_index(@tasks) do %>
             <div
               class="mb-2 p-2"
               style="border: 1px solid var(--border); border-radius: 4px;"
             >
               <div class="flex items-center justify-between mb-1">
                 <span style="color: var(--muted); font-size: var(--font-size-xs);">
-                  stage {idx + 1}
+                  task {idx + 1}
                 </span>
                 <button
                   type="button"
-                  phx-click="remove-pipeline-stage"
+                  phx-click="remove-formula-task"
                   phx-value-index={idx}
                   class="action-text"
                   style="font-size: var(--font-size-xs);"
@@ -3606,55 +3541,44 @@ defmodule ApothecaryWeb.DashboardComponents do
                   remove
                 </button>
               </div>
-              <div class="grid grid-cols-2 gap-2 mb-1">
+              <div class="grid grid-cols-2 gap-2">
                 <div>
                   <input
                     type="text"
-                    name={"pipeline[stages][#{idx}][name]"}
-                    value={stage["name"] || stage[:name] || ""}
-                    placeholder="stage name"
+                    name={"formula[tasks][#{idx}][title]"}
+                    value={task["title"] || task[:title] || ""}
+                    placeholder="task title"
                     class="moonlight-input w-full"
                     required
                   />
                 </div>
                 <div>
                   <select
-                    name={"pipeline[stages][#{idx}][kind]"}
+                    name={"formula[tasks][#{idx}][agent_md]"}
                     class="moonlight-input w-full"
                   >
-                    <option
-                      value="task"
-                      selected={(stage["kind"] || stage[:kind] || "task") == "task"}
-                    >
-                      task (implement)
+                    <option value="" selected={(task["agent_md"] || task[:agent_md] || "") == ""}>
+                      default agent
                     </option>
                     <option
-                      value="review"
-                      selected={(stage["kind"] || stage[:kind]) == "review"}
+                      :for={agent <- @available_agents}
+                      value={agent.name}
+                      selected={(task["agent_md"] || task[:agent_md]) == agent.name}
                     >
-                      review (diff-based)
+                      {agent.name} ({agent.source})
                     </option>
                   </select>
                 </div>
-              </div>
-              <div>
-                <textarea
-                  name={"pipeline[stages][#{idx}][prompt]"}
-                  rows="2"
-                  placeholder="optional: custom instructions for this stage"
-                  class="moonlight-input w-full resize-none"
-                  style="font-size: var(--font-size-xs);"
-                >{stage["prompt"] || stage[:prompt] || ""}</textarea>
               </div>
             </div>
           <% end %>
           <button
             type="button"
-            phx-click="add-pipeline-stage"
+            phx-click="add-formula-task"
             class="action-text"
             style="font-size: var(--font-size-sm);"
           >
-            + add stage
+            + add task
           </button>
         </div>
 
@@ -3676,7 +3600,7 @@ defmodule ApothecaryWeb.DashboardComponents do
     ~H"""
     <div class="flex items-center gap-3">
       <button
-        :for={{tab, label} <- [workbench: "workbench", recipes: "recurring", pipelines: "pipelines"]}
+        :for={{tab, label} <- [workbench: "workbench", recipes: "recurring", formulas: "formulas"]}
         phx-click="switch-tab"
         phx-value-tab={tab}
         class="cursor-pointer"
@@ -3813,22 +3737,6 @@ defmodule ApothecaryWeb.DashboardComponents do
 
   defp task_duration(_), do: nil
 
-  defp pipeline_active?(%{pipeline_name: pn}, name) when is_binary(pn), do: pn == name
-  defp pipeline_active?(_, _), do: false
-
-  defp pipeline_stage_label(%{pipeline: stages, pipeline_stage: idx})
-       when is_list(stages) and length(stages) > 1 do
-    name =
-      case Enum.at(stages, idx) do
-        %{name: name} -> name
-        %{"name" => name} -> name
-        _ -> "stage #{idx + 1}"
-      end
-
-    "#{idx + 1}/#{length(stages)} #{name}"
-  end
-
-  defp pipeline_stage_label(_), do: nil
 
   defp format_relative_time(nil), do: nil
 

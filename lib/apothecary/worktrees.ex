@@ -246,9 +246,6 @@ defmodule Apothecary.Worktrees do
                pr_url: nil,
                mcp_servers: nil,
                kind: "task",
-               pipeline: nil,
-               pipeline_name: nil,
-               pipeline_stage: 0,
                created_at: now,
                updated_at: now,
                blockers: [],
@@ -272,7 +269,6 @@ defmodule Apothecary.Worktrees do
   def create_worktree(attrs) do
     id = generate_id("wt")
     now = DateTime.utc_now() |> DateTime.to_iso8601()
-    {pipeline_stages, pipeline_name} = resolve_pipeline(attrs[:pipeline], attrs[:project_id])
 
     record =
       {:apothecary_worktrees, id, attrs[:project_id], Map.get(attrs, :status, "open"),
@@ -285,9 +281,6 @@ defmodule Apothecary.Worktrees do
          mcp_servers: attrs[:mcp_servers],
          kind: Map.get(attrs, :kind, "task"),
          parent_question_id: attrs[:parent_question_id],
-         pipeline: pipeline_stages,
-         pipeline_name: pipeline_name,
-         pipeline_stage: Map.get(attrs, :pipeline_stage, 0),
          created_at: now,
          updated_at: now,
          blockers: [],
@@ -296,8 +289,15 @@ defmodule Apothecary.Worktrees do
 
     case :mnesia.transaction(fn -> :mnesia.write(record) end) do
       {:atomic, :ok} ->
+        wt = Apothecary.Worktree.from_record(record)
+
+        # Auto-inject formula if specified
+        if attrs[:formula] do
+          inject_formula(id, attrs[:formula], attrs[:project_id])
+        end
+
         schedule_broadcast()
-        {:ok, Apothecary.Worktree.from_record(record)}
+        {:ok, wt}
 
       {:aborted, reason} ->
         {:error, reason}
@@ -487,6 +487,7 @@ defmodule Apothecary.Worktrees do
          notes: nil,
          kind: attrs[:kind] || "task",
          parent_question_id: attrs[:parent_question_id],
+         agent_md: attrs[:agent_md],
          created_at: now,
          updated_at: now,
          blockers: attrs[:blockers] || [],
@@ -793,7 +794,7 @@ defmodule Apothecary.Worktrees do
           {:apothecary_recipes, id, attrs[:title], attrs[:description], schedule,
            Map.get(attrs, :enabled, true), Map.get(attrs, :priority, 3),
            %{
-             pipeline: attrs[:pipeline],
+             formula: attrs[:formula],
              last_run_at: nil,
              next_run_at: nil,
              created_at: now,
@@ -973,7 +974,7 @@ defmodule Apothecary.Worktrees do
 
     data =
       data
-      |> maybe_put(:pipeline, changes[:pipeline])
+      |> maybe_put(:formula, changes[:formula])
       |> Map.put(:updated_at, now)
 
     {table, id, title, description, schedule, enabled, priority, data}
@@ -1282,9 +1283,6 @@ defmodule Apothecary.Worktrees do
       |> maybe_put(:mcp_servers, changes[:mcp_servers])
       |> maybe_put(:blockers, changes[:blockers])
       |> maybe_put(:dependents, changes[:dependents])
-      |> maybe_put(:pipeline, changes[:pipeline])
-      |> maybe_put(:pipeline_name, changes[:pipeline_name])
-      |> maybe_put(:pipeline_stage, changes[:pipeline_stage])
       |> Map.put(:updated_at, now)
 
     {table, id, project_id, status, title, priority, git_path, git_branch, parent_worktree_id,
@@ -1304,6 +1302,7 @@ defmodule Apothecary.Worktrees do
       data
       |> maybe_put(:description, changes[:description])
       |> maybe_put(:notes, changes[:notes])
+      |> maybe_put(:agent_md, changes[:agent_md])
       |> maybe_put(:blockers, changes[:blockers])
       |> maybe_put(:dependents, changes[:dependents])
       |> Map.put(:updated_at, now)
@@ -1421,112 +1420,57 @@ defmodule Apothecary.Worktrees do
     Enum.filter(items, fn item -> to_string(Map.get(item, field)) == value end)
   end
 
-  # --- Private: Pipeline Resolution ---
+  # --- Formula Injection ---
 
-  @doc false
-  # Resolve a pipeline value: can be a list of stages (pass-through),
-  # a string name (looked up from project settings), or nil (use project default).
-  # Returns {stages, name} where name is the pipeline name if resolved from a named pipeline.
-  defp resolve_pipeline(nil, nil), do: {nil, nil}
+  @doc "Get formula definitions from a project's settings."
+  def get_project_formulas(nil), do: %{}
 
-  defp resolve_pipeline(nil, project_id) do
-    # Inherit project default pipeline
-    case get_project_pipelines(project_id) do
-      {_pipelines, default_name} when is_binary(default_name) ->
-        resolve_pipeline(default_name, project_id)
-
-      _ ->
-        {nil, nil}
-    end
-  end
-
-  defp resolve_pipeline(stages, _project_id) when is_list(stages), do: {stages, nil}
-
-  defp resolve_pipeline(name, project_id) when is_binary(name) do
-    case get_project_pipelines(project_id) do
-      {pipelines, _default} when is_map(pipelines) ->
-        case Map.get(pipelines, name) do
-          stages when is_list(stages) -> {stages, name}
-          _ -> {nil, nil}
-        end
-
-      _ ->
-        {nil, nil}
-    end
-  end
-
-  defp resolve_pipeline(_, _), do: {nil, nil}
-
-  @doc "Get pipeline definitions and default from a project's settings."
-  def get_project_pipelines(nil), do: {%{}, nil}
-
-  def get_project_pipelines(project_id) do
+  def get_project_formulas(project_id) do
     case Apothecary.Projects.get(project_id) do
       {:ok, project} ->
-        pipelines = project.settings[:pipelines] || project.settings["pipelines"] || %{}
-        default = project.settings[:default_pipeline] || project.settings["default_pipeline"]
-        {pipelines, default}
+        project.settings[:formulas] || project.settings["formulas"] || %{}
 
       _ ->
-        {%{}, nil}
+        %{}
     end
   end
 
-  @doc "Check if a worktree has remaining pipeline stages."
-  def pipeline_has_next_stage?(%{pipeline: stages, pipeline_stage: current})
-      when is_list(stages) and length(stages) > current + 1,
-      do: true
+  @doc """
+  Inject a formula into a worktree.
+  Creates tasks from the formula template. Each task becomes a normal worktree task.
+  The formula_name is looked up from the project's formula definitions.
+  """
+  def inject_formula(worktree_id, formula_name, project_id) when is_binary(formula_name) do
+    formulas = get_project_formulas(project_id)
 
-  def pipeline_has_next_stage?(_), do: false
+    case Map.get(formulas, formula_name) do
+      %{"tasks" => tasks} when is_list(tasks) ->
+        created =
+          Enum.map(tasks, fn task_def ->
+            {:ok, task} =
+              create_task(%{
+                worktree_id: worktree_id,
+                title: task_def["title"] || task_def[:title],
+                description: task_def["description"] || task_def[:description],
+                agent_md: task_def["agent_md"] || task_def[:agent_md],
+                priority: task_def["priority"] || task_def[:priority] || 3
+              })
 
-  @doc "Get the current pipeline stage definition for a worktree."
-  def current_pipeline_stage(%{pipeline: stages, pipeline_stage: idx})
-      when is_list(stages) do
-    Enum.at(stages, idx)
-  end
-
-  def current_pipeline_stage(_), do: nil
-
-  @doc "Advance a worktree to its next pipeline stage. Creates a task for the next stage and resets the worktree for redispatch."
-  def advance_pipeline(worktree_id) do
-    case get_worktree(worktree_id) do
-      {:ok, %{pipeline: stages, pipeline_stage: current}}
-      when is_list(stages) and length(stages) > current + 1 ->
-        next_idx = current + 1
-        next_stage = Enum.at(stages, next_idx)
-
-        stage_name = next_stage["name"] || next_stage[:name] || "Stage #{next_idx + 1}"
-        stage_prompt = next_stage["prompt"] || next_stage[:prompt]
-        stage_kind = next_stage["kind"] || next_stage[:kind] || "task"
-
-        # Create task for the next stage
-        create_task(%{
-          worktree_id: worktree_id,
-          title: "[pipeline] #{stage_name}",
-          description: stage_prompt || stage_name,
-          priority: 0
-        })
-
-        # Advance stage counter and reset for redispatch to a fresh brewer
-        update_worktree(worktree_id, %{
-          pipeline_stage: next_idx,
-          status: "open",
-          assigned_brewer_id: nil
-        })
+            task
+          end)
 
         add_note(
           worktree_id,
-          "Pipeline advancing: stage #{current + 1}/#{length(stages)} (#{stage_name}) → dispatching fresh brewer"
+          "Formula '#{formula_name}' injected: #{length(created)} tasks added"
         )
 
-        Logger.info(
-          "Pipeline advanced for #{worktree_id}: stage #{next_idx + 1}/#{length(stages)} (#{stage_name}, kind: #{stage_kind})"
-        )
-
-        {:advanced, %{stage: next_idx, name: stage_name, kind: stage_kind}}
+        {:ok, created}
 
       _ ->
-        :complete
+        {:error, :formula_not_found}
     end
   end
+
+  def inject_formula(_worktree_id, nil, _project_id), do: {:ok, []}
+  def inject_formula(_worktree_id, _formula_name, _project_id), do: {:error, :invalid_formula}
 end

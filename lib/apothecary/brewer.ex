@@ -557,20 +557,7 @@ defmodule Apothecary.Brewer do
   # Private — Worktree finalization
 
   defp finalize_worktree(worktree_id, agent) do
-    # Check pipeline advancement BEFORE merge/push — if more stages remain,
-    # advance the pipeline and let a fresh brewer pick up the next stage
-    case Apothecary.Worktrees.advance_pipeline(worktree_id) do
-      {:advanced, %{name: name, stage: stage}} ->
-        Logger.info(
-          "Brewer #{agent.id}: pipeline advancing #{worktree_id} to stage #{stage + 1} (#{name}), " <>
-            "skipping push — fresh brewer will pick up"
-        )
-
-        :pipeline_continuing
-
-      :complete ->
-        do_finalize_worktree(worktree_id, agent)
-    end
+    do_finalize_worktree(worktree_id, agent)
   end
 
   defp do_finalize_worktree(worktree_id, agent) do
@@ -848,15 +835,10 @@ defmodule Apothecary.Brewer do
       {:error, "Claude Code executable not found: #{claude_path}"}
     else
       prompt =
-        cond do
-          worktree.kind == "question" ->
-            build_question_prompt(worktree, agent.worktree_path)
-
-          pipeline_stage_kind(worktree) == "review" ->
-            build_review_prompt(worktree, tasks, agent.worktree_path, agent.project_dir)
-
-          true ->
-            build_prompt(worktree, tasks, agent.worktree_path)
+        if worktree.kind == "question" do
+          build_question_task_prompt(worktree, agent.worktree_path)
+        else
+          build_prompt(worktree, tasks, agent.worktree_path)
         end
 
       Logger.info(
@@ -1216,6 +1198,7 @@ defmodule Apothecary.Brewer do
     - **Commit early, commit often**: Each commit is a recovery checkpoint — uncommitted work may be lost
     - Notes and git history are the primary way the next brewer rebuilds context if you crash
 
+    #{build_agent_md_section(tasks, project_dir)}
     #{if claude_md != "", do: "## Project Guidelines (CLAUDE.md)\n#{claude_md}", else: ""}
     #{if agents_md != "", do: "## Agent Guidelines (AGENTS.md)\n#{agents_md}", else: ""}
     """
@@ -1243,159 +1226,43 @@ defmodule Apothecary.Brewer do
     end
   end
 
-  # --- Pipeline helpers ---
+  # --- Agent config helpers ---
 
-  defp pipeline_stage_kind(%{pipeline: stages, pipeline_stage: idx})
-       when is_list(stages) do
-    case Enum.at(stages, idx) do
-      %{kind: kind} -> kind
-      %{"kind" => kind} -> kind
-      _ -> "task"
-    end
-  end
+  @doc false
+  defp build_agent_md_section(tasks, project_dir) do
+    # Collect unique agent_md references from tasks
+    agent_names =
+      tasks
+      |> Enum.map(& &1.agent_md)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
 
-  defp pipeline_stage_kind(_), do: "task"
-
-  defp pipeline_stage_prompt(%{pipeline: stages, pipeline_stage: idx})
-       when is_list(stages) do
-    case Enum.at(stages, idx) do
-      %{prompt: prompt} -> prompt
-      %{"prompt" => prompt} -> prompt
-      _ -> nil
-    end
-  end
-
-  defp pipeline_stage_prompt(_), do: nil
-
-  defp build_review_prompt(worktree, tasks, worktree_path, project_dir) do
-    custom_prompt = pipeline_stage_prompt(worktree) || default_review_prompt()
-
-    claude_md =
-      if project_dir do
-        case File.read(Path.join(project_dir, "CLAUDE.md")) do
-          {:ok, content} -> content
-          _ -> ""
-        end
-      else
-        ""
-      end
-
-    agents_md =
-      if project_dir do
-        case File.read(Path.join(project_dir, "AGENTS.md")) do
-          {:ok, content} -> content
-          _ -> ""
-        end
-      else
-        ""
-      end
-
-    # Get diff stat for context
-    diff_stat =
-      if project_dir do
-        case Apothecary.Git.worktree_diff_stat(project_dir, worktree_path) do
-          {:ok, stat} when stat != "" -> stat
-          _ -> "(no changes detected)"
-        end
-      else
-        "(project dir unknown)"
-      end
-
-    task_list = format_task_list(tasks)
-
-    notes_section =
-      if worktree.notes && worktree.notes != "" do
-        """
-        ## Previous Session Notes
-        #{worktree.notes}
-        """
-      else
-        ""
-      end
-
-    project_digest =
-      if project_dir, do: Apothecary.ProjectDigest.generate(project_dir), else: ""
-
-    """
-    You are an autonomous code reviewer examining changes on a feature branch.
-    Working directory: #{worktree_path}
-
-    ## Your Work
-    Worktree ID: #{worktree.id}
-    Title: #{worktree.title}
-    Pipeline Stage: REVIEW (stage #{worktree.pipeline_stage + 1}/#{length(worktree.pipeline)})
-
-    ## Changes Summary (branch vs main)
-    ```
-    #{diff_stat}
-    ```
-
-    ## Review Instructions
-    #{custom_prompt}
-
-    ## Project Structure
-    #{project_digest}
-
-    #{notes_section}
-
-    ## Task Management via MCP
-    You have MCP tools to manage tasks within this worktree:
-    - **worktree_status** — See your worktree overview and all tasks
-    - **list_tasks** — List tasks (with optional status filter)
-    - **create_task** — Create a sub-task for each fix you make
-    - **claim_task** — Claim a task before starting work
-    - **complete_task** — Mark a task as done
-    - **add_notes** — Log progress notes
-
-    #{if task_list != "" do
-      """
-      ## Pre-Created Tasks
-      #{task_list}
-
-      Work through each task in order. **Always call `claim_task` before starting a task**, then `complete_task` when done.
-      """
+    if agent_names == [] do
+      ""
     else
-      """
-      ## Instructions
-      1. Read the diff between this branch and main (use `git diff main...HEAD`)
-      2. Create a task for each issue found using `create_task`
-      3. Fix issues directly — you have full write access
-      4. If everything looks good, add a note: "Review passed — no issues found"
-      5. Commit all fixes
-      """
-    end}
+      sections =
+        Enum.map(agent_names, fn name ->
+          case Apothecary.Formula.agent_content(name, project_dir) do
+            {:ok, content} ->
+              "### Agent: #{name}\n#{content}"
 
-    **IMPORTANT:** Before starting work, call `worktree_status` to get the latest task list and notes.
+            _ ->
+              nil
+          end
+        end)
+        |> Enum.reject(&is_nil/1)
 
-    ## Rules
-    - You are on a feature branch in a git worktree, NOT main
-    - NEVER push to main or merge into main
-    - Fix issues directly — commit your fixes
-    - The orchestrator handles pushing and PR creation
-    - Do NOT push — the orchestrator handles that
+      if sections == [] do
+        ""
+      else
+        """
+        ## Agent Instructions
+        Some tasks have specialized agent instructions. Follow the agent instructions for the task you're currently working on.
 
-    ## Context Survival
-    - **Log progress frequently** with `add_notes`
-    - **Commit early, commit often** — each commit is a recovery checkpoint
-
-    #{if claude_md != "", do: "## Project Guidelines (CLAUDE.md)\n#{claude_md}", else: ""}
-    #{if agents_md != "", do: "## Agent Guidelines (AGENTS.md)\n#{agents_md}", else: ""}
-    """
-  end
-
-  defp default_review_prompt do
-    """
-    Review all changes on this branch against main. For each file changed, check for:
-    - Unused variables, imports, or dead code
-    - Missing error handling at system boundaries
-    - Inconsistent naming or style
-    - Hardcoded values that should be configurable
-    - Security issues (injection, XSS, etc.)
-    - Overly complex code that could be simplified
-    - Missing or broken tests
-
-    Fix any issues you find directly. If everything looks good, add a note saying so.
-    """
+        #{Enum.join(sections, "\n\n")}
+        """
+      end
+    end
   end
 
   defp build_git_context(nil, _worktree_path), do: ""
@@ -1457,7 +1324,8 @@ defmodule Apothecary.Brewer do
       blockers =
         if t.blockers != [], do: " (blocked by: #{Enum.join(t.blockers, ", ")})", else: ""
 
-      line = "- [#{status}] #{t.id}: #{t.title}#{blockers}"
+      agent_label = if t.agent_md, do: " [agent: #{t.agent_md}]", else: ""
+      line = "- [#{status}] #{t.id}: #{t.title}#{blockers}#{agent_label}"
 
       desc = Map.get(t, :description)
 
